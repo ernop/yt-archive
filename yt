@@ -1,6 +1,10 @@
 #!/bin/sh
-# Run the archive CLI with the framesheet venv (torch / open_clip / TransNetV2).
+# Run the archive CLI with this repo's ML venv (torch / open_clip / TransNetV2).
 ROOT="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
-PY="${YT_ARCHIVE_PYTHON:-/home/ef/proj/mybrowser/framesheets/.venv/bin/python}"
+PY="$ROOT/.venv/bin/python"
+if [ ! -x "$PY" ]; then
+    echo "missing $PY — create it: docs/setup.md" >&2
+    exit 1
+fi
 exec "$PY" -m yt_archive "$@"

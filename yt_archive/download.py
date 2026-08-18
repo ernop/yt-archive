@@ -1,4 +1,4 @@
-"""yt-dlp download. Flags come from mybrowser's 2026-08 settled recipe."""
+"""yt-dlp download. Flags: docs/download.md (settled 2026-08)."""
 from __future__ import annotations
 
 import json

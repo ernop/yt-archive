@@ -1,13 +1,12 @@
-"""Shot images + contact sheet. Port of mybrowser/framesheets/make_sheet.py.
+"""Shot images + contact sheet. Method: docs/framesheets.md (do not reinvent).
 
-Method (do not reinvent — earlier approaches failed; see framesheet-guide.md):
   1. TransNetV2 segments shots (hard cuts and dissolves). No fixed fps.
   2. One keyframe at each shot's temporal midpoint (never a crossfade blend).
-  3. OpenCLIP ViT-B-32 drops a keyframe when cosine sim to the previous
-     kept frame is >= sim_threshold (default 0.90).
+  3. OpenCLIP ViT-B-32 drops a keyframe when cosine sim to any already-kept
+     frame is >= sim_threshold (default 0.90).
   4. Survivors shrink to <=800px long axis and tile into a near-square grid.
 
-This copy also keeps the individual shot PNGs (make_sheet.py discarded them).
+Also writes the individual shot PNGs under _condensed/shots/.
 """
 from __future__ import annotations
 
@@ -62,8 +61,8 @@ def make_shots(
         files = _extract_keyframes(video, shots, Path(tmp))
         embs = _embed_all(files, torch, open_clip, Image)
         # Compare each candidate to every already-kept frame, not just the
-        # predecessor. Consecutive-only (mybrowser make_sheet.py) misses
-        # slideshows that cycle the same photos.
+        # predecessor. Consecutive-only misses slideshows that cycle the
+        # same photos.
         keep_idx = [0]
         max_sim_to_kept: list[float | None] = [None]
         for i in range(1, len(files)):
