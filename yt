@@ -1,5 +1,5 @@
 #!/bin/sh
-# Run the archive CLI with this repo's ML venv (torch / open_clip / TransNetV2).
+# Run the archive CLI with this repo's ML venv (torch / open_clip).
 ROOT="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
 PY="$ROOT/.venv/bin/python"

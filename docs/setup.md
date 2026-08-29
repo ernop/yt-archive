@@ -19,16 +19,16 @@ file is missing, it exits and names this page.
 cd <this-repo>
 python3 -m venv .venv
 .venv/bin/pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
-.venv/bin/pip install open_clip_torch transnetv2-pytorch
+.venv/bin/pip install open_clip_torch
 ```
 
-CPU torch is the intended install: shot detection is the slow step and is
-already fast enough for typical clips (a 5–6 min 1080p video is about a
-minute; peak RAM ~1.7 GB). CUDA torch is the upgrade if hour-long videos
-become routine.
+CPU torch is the intended install: 2 fps CLIP sampling is the slow step
+and is already fast enough for typical clips (a 5–6 min video is a few
+hundred samples). CUDA torch is the upgrade if hour-long videos become
+routine.
 
 `.venv/` is gitignored. A symlink at `.venv` to an already-built equivalent
-venv (torch, OpenCLIP, TransNetV2) also satisfies `./yt`.
+venv (torch, OpenCLIP) also satisfies `./yt`.
 
 ## Live service
 

@@ -59,6 +59,25 @@ def framesheet_path(data_dir: Path, video_id: str) -> Path:
     return condensed_dir(data_dir, video_id) / "framesheet.png"
 
 
+def framesheet_paths(data_dir: Path, video_id: str) -> list[Path]:
+    """Existing sheets, in order. Single framesheet.png, or the
+    framesheet-N.png parts written when >MAX_SHEET_TILES shots split."""
+    cond = condensed_dir(data_dir, video_id)
+    sheets = []
+    single = cond / "framesheet.png"
+    if single.is_file():
+        sheets.append((0, single))
+    for p in cond.glob("framesheet-*.png"):
+        num = p.stem.removeprefix("framesheet-")
+        if num.isdigit():
+            sheets.append((int(num), p))
+    return [p for _, p in sorted(sheets)]
+
+
+def all_labeled_path(data_dir: Path, video_id: str) -> Path:
+    return condensed_dir(data_dir, video_id) / "shots_all_labeled.png"
+
+
 def soundtrack_path(data_dir: Path, video_id: str) -> Path:
     return condensed_dir(data_dir, video_id) / "soundtrack.mp3"
 
@@ -121,7 +140,7 @@ def load_archive_info(data_dir: Path, video_id: str) -> dict:
         stamp = datetime.fromtimestamp(folder.stat().st_mtime, timezone.utc).isoformat()
     info["downloaded_at"] = stamp or ""
     info["has_video"] = find_video_file(data_dir, video_id) is not None
-    info["has_framesheet"] = framesheet_path(data_dir, video_id).is_file()
+    info["has_framesheet"] = bool(framesheet_paths(data_dir, video_id))
     info["has_soundtrack"] = soundtrack_path(data_dir, video_id).is_file()
     info["shot_files"] = sorted(p.name for p in shots_dir(data_dir, video_id).glob("*.png"))
     return info

@@ -19,12 +19,17 @@ def main(argv: list[str] | None = None) -> int:
 
     get_p = sub.add_parser("get", help="download a video, extract shot images, dump soundtrack")
     get_p.add_argument("target", help="YouTube URL or 11-char id")
-    get_p.add_argument("--sim", type=float, default=0.90, help="CLIP drop threshold (default 0.90)")
+    get_p.add_argument("--sim", type=float, default=0.85, help="CLIP last-kept change threshold (default 0.85)")
     get_p.add_argument("--skip-shots", action="store_true", help="download only")
 
     shots_p = sub.add_parser("shots", help="extract shot images from an already-downloaded video")
     shots_p.add_argument("target", help="YouTube URL or 11-char id")
-    shots_p.add_argument("--sim", type=float, default=0.90)
+    shots_p.add_argument("--sim", type=float, default=0.85, help="CLIP last-kept change threshold (default 0.85)")
+    shots_p.add_argument(
+        "--all-sheet",
+        action="store_true",
+        help="also write shots_all_labeled.png (every detection, numbered + timestamp)",
+    )
 
     audio_p = sub.add_parser("audio", help="dump soundtrack mp3 from an already-downloaded video")
     audio_p.add_argument("target", help="YouTube URL or 11-char id")
@@ -43,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "get":
         return _get(data_dir, args.target, args.sim, args.skip_shots)
     if args.cmd == "shots":
-        return _shots(data_dir, args.target, args.sim)
+        return _shots(data_dir, args.target, args.sim, args.all_sheet)
     if args.cmd == "audio":
         return _audio(data_dir, args.target)
     if args.cmd == "list":
@@ -78,13 +83,16 @@ def _get(data_dir: Path, target: str, sim: float, skip_shots: bool) -> int:
     return 0
 
 
-def _shots(data_dir: Path, target: str, sim: float) -> int:
+def _shots(data_dir: Path, target: str, sim: float, all_sheet: bool = False) -> int:
     video_id = parse_video_id(target)
     video = find_video_file(data_dir, video_id)
     if not video:
         raise SystemExit(f"no downloaded video for {video_id} in {data_dir}")
-    summary = make_shots(video, data_dir, video_id, sim_threshold=sim, layout="squash")
-    print(json.dumps({k: summary[k] for k in ("video_id", "shots_detected", "shots_kept")}, indent=2))
+    summary = make_shots(
+        video, data_dir, video_id, sim_threshold=sim, layout="squash", write_all_sheet=all_sheet
+    )
+    keys = ["video_id", "shots_detected", "shots_kept", "compare", "sample"]
+    print(json.dumps({k: summary[k] for k in keys if k in summary}, indent=2))
     return 0
 
 

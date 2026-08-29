@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .paths import (
     archive_json_path,
-    framesheet_path,
+    framesheet_paths,
     list_archived_ids,
     shots_dir,
     shots_json_path,
@@ -103,16 +103,17 @@ def write_video_index(data_dir: Path, video_id: str) -> Path:
             f'<p><audio controls preload="metadata" src="_condensed/{_esc(mp3.name)}" '
             f'style="width:100%"></audio></p>'
         )
-    sheet = framesheet_path(data_dir, video_id)
-    if sheet.exists():
-        parts.append(f'<p><img class="sheet" src="_condensed/framesheet.png" alt="framesheet"></p>')
+    for sheet in framesheet_paths(data_dir, video_id):
+        parts.append(
+            f'<p><img class="sheet" src="_condensed/{_esc(sheet.name)}" alt="framesheet"></p>'
+        )
     shot_files = sorted(shots_dir(data_dir, video_id).glob("*.png"))
     times = {}
     sj = shots_json_path(data_dir, video_id)
     if sj.exists():
         for rec in json.loads(sj.read_text(encoding="utf-8")).get("shots", []):
             if rec.get("file"):
-                times[rec["file"]] = rec.get("mid")
+                times[rec["file"]] = rec.get("sample", rec.get("t0", rec.get("mid")))
     if shot_files:
         figs = []
         for shot in shot_files:

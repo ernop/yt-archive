@@ -1,12 +1,18 @@
 """Shot images + contact sheet. Method: docs/framesheets.md (do not reinvent).
 
-  1. TransNetV2 segments shots (hard cuts and dissolves). No fixed fps.
-  2. One keyframe at each shot's temporal midpoint (never a crossfade blend).
-  3. OpenCLIP ViT-B-32 drops a keyframe when cosine sim to any already-kept
-     frame is >= sim_threshold (default 0.90).
-  4. Survivors shrink to <=800px long axis and tile into a near-square grid.
+  1. Sample the video at SAMPLE_FPS (2), long edge MAX_LONG.
+  2. OpenCLIP ViT-B-32 embeds every sample. A new shot starts when cosine
+     sim to the last kept sample is < sim_threshold (default 0.85).
+     Last-kept, not previous-0.5s: a slow push-in that changes the look
+     still fires. No lookback into earlier history.
+  3. The kept sample IS the tile (the frame where the look changed).
+  4. Survivors tile into a near-square squash grid, at most
+     MAX_SHEET_TILES (100) per sheet. More shots split into
+     framesheet-1.png, framesheet-2.png, …; a single sheet stays
+     framesheet.png.
 
 Also writes the individual shot PNGs under _condensed/shots/.
+Optional --all-sheet writes shots_all_labeled.png (numbered + timestamp).
 """
 from __future__ import annotations
 
@@ -18,8 +24,8 @@ import tempfile
 from pathlib import Path
 
 from .paths import (
+    all_labeled_path,
     condensed_dir,
-    framesheet_path,
     shots_dir,
     shots_json_path,
 )
@@ -28,7 +34,11 @@ from .download import write_archive_json
 MAX_LONG = 800
 GAP = 4
 BATCH = 32
-DEFAULT_SIM = 0.90
+SAMPLE_FPS = 2
+DEFAULT_SIM = 0.85
+LABEL_H = 36
+ALL_TILE = 360
+MAX_SHEET_TILES = 100
 
 
 def make_shots(
@@ -37,18 +47,12 @@ def make_shots(
     video_id: str,
     sim_threshold: float = DEFAULT_SIM,
     layout: str = "squash",
+    write_all_sheet: bool = False,
     log=print,
 ) -> dict:
     import torch
     import open_clip
     from PIL import Image
-    from transnetv2_pytorch import TransNetV2
-
-    log(f"detecting shots in {video.name}…")
-    shots = _detect_shots(video, TransNetV2)
-    log(f"{len(shots)} shots detected")
-    if not shots:
-        raise RuntimeError(f"no shots detected in {video}")
 
     cond = condensed_dir(data_dir, video_id)
     dest_shots = shots_dir(data_dir, video_id)
@@ -56,71 +60,69 @@ def make_shots(
     for old in dest_shots.glob("*.png"):
         old.unlink()
 
-    tmp = tempfile.mkdtemp(prefix="yt_archive_keys_")
+    all_imgs = []
+    kept_imgs = []
+    records = []
+    # Sample frames can total >10GB; /tmp is tmpfs (RAM-backed), and dumping
+    # them there evicts the rest of the system to swap. Keep them on disk.
+    tmp = tempfile.mkdtemp(prefix="yt_archive_keys_", dir=str(data_dir))
     try:
-        files = _extract_keyframes(video, shots, Path(tmp))
-        embs = _embed_all(files, torch, open_clip, Image)
-        # Compare each candidate to every already-kept frame, not just the
-        # predecessor. Consecutive-only misses slideshows that cycle the
-        # same photos.
-        keep_idx = [0]
-        max_sim_to_kept: list[float | None] = [None]
-        for i in range(1, len(files)):
-            sims = (embs[i] * embs[keep_idx]).sum(dim=-1)
-            best = float(sims.max())
-            max_sim_to_kept.append(best)
-            if best < sim_threshold:
-                keep_idx.append(i)
-        log(f"{len(keep_idx)} keyframes kept at sim<{sim_threshold}")
+        log(f"sampling {video.name} at {SAMPLE_FPS} fps…")
+        thumbs = _sample_thumbs(video, Path(tmp))
+        if not thumbs:
+            raise RuntimeError(f"no frames sampled from {video}")
+        embs = _embed_all(thumbs, torch, open_clip, Image)
+        keep_idx, sim_at = _keep_last(embs, sim_threshold)
+        duration = len(thumbs) / SAMPLE_FPS
+        log(f"{len(thumbs)} samples, {len(keep_idx)} shots at sim<{sim_threshold} vs last kept")
 
-        kept_imgs = []
-        records = []
-        keep_set = set(keep_idx)
-        for i, (t0, t1) in enumerate(shots):
-            mid = (t0 + t1) / 2
-            sim_kept = max_sim_to_kept[i]
-            kept = i in keep_set
+        for j, i in enumerate(keep_idx):
+            t0 = i / SAMPLE_FPS
+            t1 = keep_idx[j + 1] / SAMPLE_FPS if j + 1 < len(keep_idx) else duration
             rec = {
-                "index": i,
+                "index": j,
                 "t0": round(t0, 3),
                 "t1": round(t1, 3),
-                "mid": round(mid, 3),
-                "kept": kept,
-                "sim_to_kept": None if sim_kept is None else round(sim_kept, 4),
+                "sample": round(t0, 3),
+                "mid": round((t0 + t1) / 2, 3),
+                "kept": True,
+                "sim_to_prev": None if sim_at[j] is None else round(sim_at[j], 4),
                 "file": None,
             }
-            if kept:
-                im = Image.open(files[i]).convert("RGB")
-                w, h = im.size
-                if max(w, h) > MAX_LONG:
-                    scale = MAX_LONG / max(w, h)
-                    im = im.resize((round(w * scale), round(h * scale)), Image.LANCZOS)
-                name = f"{len(kept_imgs):04d}.png"
-                im.save(dest_shots / name)
-                rec["file"] = name
-                kept_imgs.append(im)
+            im = Image.open(thumbs[i]).convert("RGB")
+            name = f"{len(kept_imgs):04d}.png"
+            im.save(dest_shots / name)
+            rec["file"] = name
+            kept_imgs.append(im)
+            if write_all_sheet:
+                all_imgs.append(im)
             records.append(rec)
     finally:
         shutil.rmtree(tmp)
 
-    if layout == "grid":
-        sheet, desc = _layout_grid(kept_imgs)
-    else:
-        sheet, desc = _layout_squash(kept_imgs)
-    out_sheet = framesheet_path(data_dir, video_id)
     cond.mkdir(parents=True, exist_ok=True)
-    sheet.save(out_sheet)
-    log(f"framesheet {desc} {sheet.width}x{sheet.height} → {out_sheet}")
+    sheet_names, sheet_sizes, descs = _write_sheets(kept_imgs, cond, layout, log)
+
+    if write_all_sheet and all_imgs:
+        labeled, ldesc = _layout_labeled(all_imgs, records)
+        out_all = all_labeled_path(data_dir, video_id)
+        labeled.save(out_all)
+        log(f"all-shots {ldesc} {labeled.width}x{labeled.height} → {out_all}")
 
     summary = {
         "video_id": video_id,
         "video": str(video),
         "sim_threshold": sim_threshold,
-        "shots_detected": len(shots),
+        "compare": "last-kept",
+        "sample": "change",
+        "sample_fps": SAMPLE_FPS,
+        "shots_detected": len(records),
         "shots_kept": len(kept_imgs),
-        "framesheet": out_sheet.name,
-        "layout": desc,
-        "sheet_size": [sheet.width, sheet.height],
+        "framesheet": sheet_names[0],
+        "framesheets": sheet_names,
+        "layout": "; ".join(descs),
+        "sheet_size": sheet_sizes[0],
+        "sheet_sizes": sheet_sizes,
         "shots": records,
     }
     shots_json_path(data_dir, video_id).write_text(
@@ -131,35 +133,63 @@ def make_shots(
         video_id,
         video,
         extra={
-            "shots_detected": len(shots),
+            "shots_detected": len(records),
             "shots_kept": len(kept_imgs),
-            "framesheet": str(out_sheet.relative_to(video.parent)),
+            "framesheet": str((cond / sheet_names[0]).relative_to(video.parent)),
+            "framesheets": [
+                str((cond / name).relative_to(video.parent)) for name in sheet_names
+            ],
         },
     )
     return summary
 
 
-def _detect_shots(video: Path, TransNetV2) -> list[tuple[float, float]]:
-    model = TransNetV2()
-    model.eval()
-    scenes = model.detect_scenes(str(video))
-    return [(float(s["start_time"]), float(s["end_time"])) for s in scenes]
+def _write_sheets(imgs, cond: Path, layout: str, log=print):
+    """Tile imgs into sheets of at most MAX_SHEET_TILES each.
+
+    A single chunk saves as framesheet.png; more become framesheet-1.png,
+    framesheet-2.png, … Stale framesheet*.png from an earlier run are
+    removed either way, so a re-run never mixes old and new parts.
+    """
+    tile = _layout_grid if layout == "grid" else _layout_squash
+    for old in cond.glob("framesheet*.png"):
+        old.unlink()
+    chunks = [imgs[i:i + MAX_SHEET_TILES] for i in range(0, len(imgs), MAX_SHEET_TILES)]
+    names, sizes, descs = [], [], []
+    for n, chunk in enumerate(chunks, start=1):
+        sheet, desc = tile(chunk)
+        name = "framesheet.png" if len(chunks) == 1 else f"framesheet-{n}.png"
+        sheet.save(cond / name)
+        names.append(name)
+        sizes.append([sheet.width, sheet.height])
+        descs.append(desc)
+        log(f"framesheet {desc} {sheet.width}x{sheet.height} → {cond / name}")
+    return names, sizes, descs
 
 
-def _extract_keyframes(video: Path, shots: list[tuple[float, float]], out_dir: Path) -> list[Path]:
-    files = []
-    for i, (t0, t1) in enumerate(shots):
-        mid = (t0 + t1) / 2
-        dest = out_dir / f"{i:04d}.png"
-        subprocess.run(
-            [
-                "ffmpeg", "-hide_banner", "-loglevel", "error",
-                "-ss", f"{mid:.3f}", "-i", str(video), "-frames:v", "1", str(dest),
-            ],
-            check=True,
-        )
-        files.append(dest)
-    return files
+def _sample_thumbs(video: Path, out_dir: Path) -> list[Path]:
+    dest = out_dir / "%05d.png"
+    subprocess.run(
+        [
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+            "-i", str(video),
+            "-vf", f"fps={SAMPLE_FPS},scale={MAX_LONG}:{MAX_LONG}:force_original_aspect_ratio=decrease",
+            str(dest),
+        ],
+        check=True,
+    )
+    return sorted(out_dir.glob("*.png"))
+
+
+def _keep_last(embs, threshold: float) -> tuple[list[int], list[float | None]]:
+    keep = [0]
+    sims: list[float | None] = [None]
+    for i in range(1, len(embs)):
+        sim = float((embs[i] * embs[keep[-1]]).sum())
+        if sim < threshold:
+            keep.append(i)
+            sims.append(sim)
+    return keep, sims
 
 
 def _embed_all(files: list[Path], torch, open_clip, Image):
@@ -237,3 +267,50 @@ def _layout_squash(imgs):
             x += im.width
         y += max(im.height for im in row)
     return sheet, f"squash {len(rows)} rows"
+
+
+def _label_font(size: int):
+    from PIL import ImageFont
+
+    for path in (
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    ):
+        if Path(path).is_file():
+            return ImageFont.truetype(path, size)
+    return ImageFont.load_default()
+
+
+def _layout_labeled(imgs, records):
+    from PIL import Image, ImageDraw
+
+    font = _label_font(18)
+    tiles = []
+    for im, rec in zip(imgs, records):
+        w, h = im.size
+        scale = ALL_TILE / max(w, h)
+        tile = im.resize((max(1, round(w * scale)), max(1, round(h * scale))), Image.LANCZOS)
+        canvas = Image.new("RGB", (tile.width, tile.height + LABEL_H), (16, 16, 16))
+        canvas.paste(tile, (0, 0))
+        draw = ImageDraw.Draw(canvas)
+        kept = rec.get("kept", True)
+        bar = (120, 28, 28) if not kept else (28, 28, 28)
+        draw.rectangle((0, tile.height, tile.width, tile.height + LABEL_H), fill=bar)
+        t = rec.get("sample", rec.get("t0")) or 0
+        tag = "" if kept else " DROP"
+        text = f"{rec['index']}  {t:.1f}s{tag}"
+        draw.text((8, tile.height + 8), text, fill=(255, 220, 220) if not kept else (235, 235, 235), font=font)
+        tiles.append(canvas)
+    tw = max(t.width for t in tiles)
+    th = max(t.height for t in tiles)
+    normed = []
+    for tile in tiles:
+        if tile.size != (tw, th):
+            pad = Image.new("RGB", (tw, th), (16, 16, 16))
+            pad.paste(tile, (0, 0))
+            normed.append(pad)
+        else:
+            normed.append(tile)
+    sheet, desc = _layout_grid(normed)
+    return sheet, f"labeled {desc}"

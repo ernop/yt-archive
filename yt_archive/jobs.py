@@ -8,7 +8,7 @@ from . import db
 from .audio import dump_soundtrack
 from .download import download
 from .framesheet import make_shots
-from .paths import find_video_file, framesheet_path, parse_video_id, soundtrack_path, watch_url
+from .paths import find_video_file, framesheet_paths, parse_video_id, soundtrack_path, watch_url
 
 
 class JobQueue:
@@ -82,8 +82,11 @@ class JobQueue:
                 log(f"already have {video.name}")
                 did_download = False
 
-            sheet = framesheet_path(self.data_dir, video_id)
-            need_shots = job["force_shots"] or did_download or not sheet.is_file()
+            need_shots = (
+                job["force_shots"]
+                or did_download
+                or not framesheet_paths(self.data_dir, video_id)
+            )
             if need_shots:
                 db.update_job(self.data_dir, job_id, shots="running")
                 log("making squash framesheet" + (" (reget png)" if job["force_shots"] else ""))

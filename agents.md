@@ -10,7 +10,7 @@ distinct shots, browse and play the result. Public GitHub intro:
 
 Sibling of [matthoom](https://github.com/ernop/matthoom). Matthoom owns watch
 history and `to_archive` marks. This process owns the files and the ML venv
-(torch / OpenCLIP / TransNetV2 stay out of Django).
+(torch / OpenCLIP stay out of Django).
 
 ## Docs
 

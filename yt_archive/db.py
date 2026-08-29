@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .paths import framesheet_path, list_archived_ids, load_archive_info, media_url
+from .paths import framesheet_paths, list_archived_ids, load_archive_info, media_url
 
 DB_NAME = "ytarchive.sqlite"
 
@@ -195,9 +195,9 @@ def list_videos(data_dir: Path, query: str = "") -> list[dict]:
         items = [_public(r) for r in rows]
         for it in items:
             if it["has_framesheet"]:
-                sheet = framesheet_path(data_dir, it["video_id"])
-                if sheet.is_file():
-                    it["thumb_url"] = media_url(data_dir, sheet)
+                sheets = framesheet_paths(data_dir, it["video_id"])
+                if sheets:
+                    it["thumb_url"] = media_url(data_dir, sheets[0])
         return items
     finally:
         conn.close()

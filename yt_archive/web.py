@@ -10,11 +10,12 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from .jobs import JobQueue
 from .paths import (
+    all_labeled_path,
     condensed_dir,
     default_data_dir,
     file_cache_key,
     find_video_file,
-    framesheet_path,
+    framesheet_paths,
     list_archived_ids,
     list_items,
     load_archive_info,
@@ -143,10 +144,10 @@ def home_html(items: list[dict], query: str = "", data_dir: Path | None = None) 
         title = it.get("title") or vid
         when = (it.get("downloaded_at") or "")[:10]
         shots = it.get("shots_kept") or len(it.get("shot_files") or [])
-        sheet = framesheet_path(data_dir, vid) if data_dir else None
+        sheets = framesheet_paths(data_dir, vid) if data_dir else []
         thumb = (
-            f'<img src="{_esc(media_url(data_dir, sheet))}" alt="">'
-            if data_dir and it.get("has_framesheet") and sheet.is_file()
+            f'<img src="{_esc(media_url(data_dir, sheets[0]))}" alt="">'
+            if data_dir and it.get("has_framesheet") and sheets
             else '<div class="ph">no sheet yet</div>'
         )
         cards.append(
@@ -305,7 +306,7 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
     duration = info.get("duration")
     dur = f"{int(duration) // 60}:{int(duration) % 60:02d}" if duration else ""
     video = find_video_file(data_dir, vid)
-    sheet = framesheet_path(data_dir, vid)
+    sheets = framesheet_paths(data_dir, vid)
     shot_recs = []
     sj = shots_json_path(data_dir, vid)
     if sj.exists():
@@ -394,20 +395,32 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
     soundtrack_bits.extend(row)
     soundtrack_bits.append("</div>")
     parts.append("".join(soundtrack_bits))
-    if sheet.is_file():
+    for n, sheet in enumerate(sheets, start=1):
+        label = (
+            f"Squished framesheet {n}/{len(sheets)}"
+            if len(sheets) > 1
+            else "Squished framesheet"
+        )
         parts.append(
-            f'<p class="meta">Squished framesheet</p>'
+            f'<p class="meta">{_esc(label)}</p>'
             f'<a href="{_esc(media_url(data_dir, sheet))}">'
-            f'<img class="sheet" src="{_esc(media_url(data_dir, sheet))}" alt="framesheet"></a>'
+            f'<img class="sheet" src="{_esc(media_url(data_dir, sheet))}" alt="{_esc(label)}"></a>'
+        )
+    labeled = all_labeled_path(data_dir, vid)
+    if labeled.is_file():
+        parts.append(
+            f'<p class="meta">All detections (kept + dropped)</p>'
+            f'<a href="{_esc(media_url(data_dir, labeled))}">'
+            f'<img class="sheet" src="{_esc(media_url(data_dir, labeled))}" alt="all shots labeled"></a>'
         )
     times = {r["file"]: r for r in kept}
     figs = []
     for shot in sorted(shots_dir(data_dir, vid).glob("*.png")):
         rec = times.get(shot.name) or {}
-        mid = rec.get("mid")
         t0 = rec.get("t0")
-        cap = shot.stem + (f" @ {mid:.1f}s" if mid is not None else "")
-        data_t = f'data-t="{mid}"' if mid is not None else ""
+        sample = rec.get("sample", t0)
+        cap = shot.stem + (f" @ {sample:.1f}s" if sample is not None else "")
+        data_t = f'data-t="{sample}"' if sample is not None else ""
         data_start = f' data-start="{t0}"' if t0 is not None else ""
         figs.append(
             f'<figure {data_t}{data_start}>'
