@@ -17,14 +17,16 @@ data/<id>/
   *.info.json  *.webp  archive.json
   _condensed/
     framesheet.png
+    soundtrack.mp3
     shots.json
     shots/0000.png …
 ```
 
 ```sh
-./yt get <url-or-id>           # download + shots
+./yt get <url-or-id>           # download + shots + soundtrack mp3
 ./yt get <url-or-id> --skip-shots
 ./yt shots <id>                # shots only (video already on disk)
+./yt audio <id>                # soundtrack mp3 only (video already on disk)
 ./yt list
 ./yt reindex
 ./yt serve [--port 8765]

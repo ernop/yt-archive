@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS videos (
   shots_detected INTEGER,
   shots_kept INTEGER,
   has_video INTEGER NOT NULL DEFAULT 0,
-  has_framesheet INTEGER NOT NULL DEFAULT 0
+  has_framesheet INTEGER NOT NULL DEFAULT 0,
+  has_soundtrack INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS videos_by_time ON videos(downloaded_at DESC);
 
@@ -37,6 +38,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   status TEXT NOT NULL DEFAULT 'queued',
   download TEXT NOT NULL DEFAULT 'pending',
   shots TEXT NOT NULL DEFAULT 'pending',
+  audio TEXT NOT NULL DEFAULT 'pending',
   force_video INTEGER NOT NULL DEFAULT 0,
   force_shots INTEGER NOT NULL DEFAULT 0,
   error TEXT NOT NULL DEFAULT '',
@@ -59,7 +61,22 @@ def connect(data_dir: Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    vcols = {row[1] for row in conn.execute("PRAGMA table_info(videos)")}
+    if "has_soundtrack" not in vcols:
+        conn.execute(
+            "ALTER TABLE videos ADD COLUMN has_soundtrack INTEGER NOT NULL DEFAULT 0"
+        )
+    jcols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
+    if "audio" not in jcols:
+        conn.execute(
+            "ALTER TABLE jobs ADD COLUMN audio TEXT NOT NULL DEFAULT 'pending'"
+        )
+    conn.commit()
 
 
 def _row_from_info(info: dict) -> dict:
@@ -81,6 +98,7 @@ def _row_from_info(info: dict) -> dict:
         "shots_kept": shots or 0,
         "has_video": 1 if info.get("has_video") else 0,
         "has_framesheet": 1 if info.get("has_framesheet") else 0,
+        "has_soundtrack": 1 if info.get("has_soundtrack") else 0,
     }
 
 
@@ -97,11 +115,12 @@ def upsert(data_dir: Path, video_id: str | None = None, info: dict | None = None
             INSERT INTO videos (
               video_id, title, channel, channel_id, duration, upload_date,
               description, video_file, file_size, downloaded_at,
-              shots_detected, shots_kept, has_video, has_framesheet
+              shots_detected, shots_kept, has_video, has_framesheet, has_soundtrack
             ) VALUES (
               :video_id, :title, :channel, :channel_id, :duration, :upload_date,
               :description, :video_file, :file_size, :downloaded_at,
-              :shots_detected, :shots_kept, :has_video, :has_framesheet
+              :shots_detected, :shots_kept, :has_video, :has_framesheet,
+              :has_soundtrack
             )
             ON CONFLICT(video_id) DO UPDATE SET
               title=excluded.title,
@@ -116,7 +135,8 @@ def upsert(data_dir: Path, video_id: str | None = None, info: dict | None = None
               shots_detected=excluded.shots_detected,
               shots_kept=excluded.shots_kept,
               has_video=excluded.has_video,
-              has_framesheet=excluded.has_framesheet
+              has_framesheet=excluded.has_framesheet,
+              has_soundtrack=excluded.has_soundtrack
             """,
             row,
         )
@@ -137,11 +157,12 @@ def rebuild(data_dir: Path) -> int:
                 INSERT INTO videos (
                   video_id, title, channel, channel_id, duration, upload_date,
                   description, video_file, file_size, downloaded_at,
-                  shots_detected, shots_kept, has_video, has_framesheet
+                  shots_detected, shots_kept, has_video, has_framesheet, has_soundtrack
                 ) VALUES (
                   :video_id, :title, :channel, :channel_id, :duration, :upload_date,
                   :description, :video_file, :file_size, :downloaded_at,
-                  :shots_detected, :shots_kept, :has_video, :has_framesheet
+                  :shots_detected, :shots_kept, :has_video, :has_framesheet,
+                  :has_soundtrack
                 )
                 """,
                 row,
@@ -198,6 +219,7 @@ def _public(row: sqlite3.Row) -> dict:
         "shots_kept": row["shots_kept"],
         "has_video": bool(row["has_video"]),
         "has_framesheet": bool(row["has_framesheet"]),
+        "has_soundtrack": bool(row["has_soundtrack"]),
     }
 
 
@@ -212,6 +234,7 @@ def _job_public(row: sqlite3.Row) -> dict:
         log = [row["log"]] if row["log"] else []
     download = row["download"]
     shots = row["shots"]
+    audio = row["audio"]
     status = row["status"]
     if status == "done":
         phase = "done"
@@ -221,6 +244,8 @@ def _job_public(row: sqlite3.Row) -> dict:
         phase = "download"
     elif shots == "running":
         phase = "shots"
+    elif audio == "running":
+        phase = "audio"
     elif status == "error":
         phase = "error"
     else:
@@ -233,6 +258,7 @@ def _job_public(row: sqlite3.Row) -> dict:
         "phase": phase,
         "download": download,
         "shots": shots,
+        "audio": audio,
         "force_video": bool(row["force_video"]),
         "force_shots": bool(row["force_shots"]),
         "error": row["error"] or "",
@@ -280,7 +306,7 @@ def get_job(data_dir: Path, job_id: str) -> dict | None:
 
 def update_job(data_dir: Path, job_id: str, **fields) -> dict | None:
     allowed = {
-        "status", "download", "shots", "force_video", "force_shots", "error",
+        "status", "download", "shots", "audio", "force_video", "force_shots", "error",
     }
     sets = []
     params: list = []
@@ -411,6 +437,7 @@ def recover_jobs(data_dir: Path) -> int:
                   force_shots=CASE WHEN shots='running' THEN 1 ELSE force_shots END,
                   download=CASE WHEN download='running' THEN 'pending' ELSE download END,
                   shots=CASE WHEN shots='running' THEN 'pending' ELSE shots END,
+                  audio=CASE WHEN audio='running' THEN 'pending' ELSE audio END,
                   updated_at=?
                 WHERE id=?
                 """,

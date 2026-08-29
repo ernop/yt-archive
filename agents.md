@@ -24,25 +24,47 @@ history and `to_archive` marks. This process owns the files and the ML venv
 Every durable note in this repo is in that list or linked from one of those
 files. Do not leave decisions only in chat.
 
-## Commands
+## How you use it
+
+The main path is the live service, not the CLI.
+
+`yt-archive.service` (user unit) owns `127.0.0.1:8765`. Open
+`http://127.0.0.1:8765/` — or `http://ytarchive.localhost` on boxes with
+the Caddy `*.localhost` proxy. Paste one URL or a pile of them; each
+becomes a queued job. Jobs run one at a time: download, then shots, then
+soundtrack. The same page lists and searches the archive; each item has a
+player, framesheet, and soundtrack.
 
 ```sh
-./yt get <url-or-id>           # download + shots
-./yt get <url-or-id> --skip-shots
-./yt shots <id>
-./yt list
-./yt reindex                   # rebuild sqlite catalog from data/
-./yt serve [--host 127.0.0.1] [--port 8765]
+systemctl --user status yt-archive.service
+systemctl --user restart yt-archive.service
 ```
 
-`./yt` is the only entry point. It runs `-m yt_archive` with this repo's
-`.venv` (see [docs/setup.md](docs/setup.md)). Do not invent a second launcher.
+Do not start a second `./yt serve` while that unit is up. If the unit is
+not installed, stop and ask. Install notes: [docs/setup.md](docs/setup.md).
 
-From matthoom:
+Matthoom can also enqueue work:
 
 ```sh
 uv run python manage.py archive_youtube <id>
 uv run python manage.py archive_youtube --pending
+```
+
+## CLI
+
+`./yt` is the only command-line entry point. It runs `-m yt_archive` with
+this repo's `.venv` (see [docs/setup.md](docs/setup.md)). Do not invent a
+second launcher. Use it for one-off get/shots/audio/reindex, or to run the
+server when the unit is not in play.
+
+```sh
+./yt get <url-or-id>           # download + shots + soundtrack mp3
+./yt get <url-or-id> --skip-shots
+./yt shots <id>
+./yt audio <id>                # dump soundtrack mp3 (video already on disk)
+./yt list
+./yt reindex                   # rebuild sqlite catalog from data/
+./yt serve [--host 127.0.0.1] [--port 8765]
 ```
 
 ## Layout
@@ -53,6 +75,7 @@ data/<id>/
   *.info.json  *.webp  archive.json  index.html
   _condensed/
     framesheet.png
+    soundtrack.mp3
     shots.json
     shots/0000.png …
 ```
@@ -71,9 +94,6 @@ list/search does not re-read every `archive.json`. `./yt reindex` rebuilds it.
   `systemctl --user restart yt-archive.service`.
   If that unit is not installed, **stop and ask**. Do not guess another host
   or start a second copy on a new port.
-
-On boxes with the Caddy `*.localhost` proxy, the UI is also
-`http://ytarchive.localhost` → `:8765`.
 
 ## Rules
 

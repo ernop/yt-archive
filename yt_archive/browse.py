@@ -10,6 +10,7 @@ from .paths import (
     list_archived_ids,
     shots_dir,
     shots_json_path,
+    soundtrack_path,
     video_dir,
     watch_url,
 )
@@ -94,6 +95,13 @@ def write_video_index(data_dir: Path, video_id: str) -> Path:
         parts.append(
             f'<p><video controls preload="metadata" src="{_esc(video)}" '
             f'style="width:100%;max-height:70vh;background:#000"></video></p>'
+        )
+    mp3 = soundtrack_path(data_dir, video_id)
+    if mp3.is_file():
+        parts.append(
+            f'<p class="meta">Soundtrack</p>'
+            f'<p><audio controls preload="metadata" src="_condensed/{_esc(mp3.name)}" '
+            f'style="width:100%"></audio></p>'
         )
     sheet = framesheet_path(data_dir, video_id)
     if sheet.exists():

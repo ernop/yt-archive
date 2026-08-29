@@ -5,9 +5,10 @@ import threading
 import traceback
 
 from . import db
+from .audio import dump_soundtrack
 from .download import download
 from .framesheet import make_shots
-from .paths import find_video_file, framesheet_path, parse_video_id, watch_url
+from .paths import find_video_file, framesheet_path, parse_video_id, soundtrack_path, watch_url
 
 
 class JobQueue:
@@ -91,6 +92,22 @@ class JobQueue:
             else:
                 db.update_job(self.data_dir, job_id, shots="skipped")
                 log("framesheet already exists")
+
+            mp3 = soundtrack_path(self.data_dir, video_id)
+            if job["force_video"] and mp3.is_file():
+                mp3.unlink()
+                log("removed old soundtrack for reget")
+            need_audio = not mp3.is_file()
+            if need_audio:
+                db.update_job(self.data_dir, job_id, audio="running")
+                log("dumping soundtrack")
+                dumped = dump_soundtrack(video, self.data_dir, video_id, log=log)
+                db.update_job(
+                    self.data_dir, job_id, audio="done" if dumped else "skipped"
+                )
+            else:
+                db.update_job(self.data_dir, job_id, audio="skipped")
+                log("soundtrack already exists")
 
             db.update_job(self.data_dir, job_id, status="done")
             log("done")

@@ -3,22 +3,26 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .jobs import JobQueue
 from .paths import (
+    condensed_dir,
     default_data_dir,
     file_cache_key,
     find_video_file,
     framesheet_path,
+    list_archived_ids,
     list_items,
     load_archive_info,
     media_url,
     parse_video_id,
     shots_dir,
     shots_json_path,
+    soundtrack_path,
     video_dir,
     watch_url,
 )
@@ -87,6 +91,17 @@ h2 { font-size: 1.1rem; color: var(--muted); font-weight: 600; margin: 2rem 0 .7
 #reget-status { margin-top: .6rem; font-family: ui-monospace, monospace; white-space: pre-wrap; }
 #reget-status.error { color: #f88; }
 #reget-status.done { color: #8d8; }
+.soundtrack { margin: 0 0 1.5rem; }
+.soundtrack audio { width: 100%; margin: .4rem 0 .6rem; }
+.soundtrack .row { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.soundtrack button, .backfill button { background: #161616; border: 1px solid var(--line); color: var(--muted);
+  padding: .35rem .7rem; border-radius: 4px; cursor: pointer; font-size: .82rem; }
+.soundtrack button:hover, .backfill button:hover { color: var(--fg); border-color: #666; }
+.soundtrack button:disabled, .backfill button:disabled { opacity: .5; cursor: wait; }
+.backfill { margin: 0 0 1rem; }
+#backfill-status, #audio-status { margin-top: .4rem; font-family: ui-monospace, monospace; font-size: .85rem; white-space: pre-wrap; color: var(--muted); }
+#backfill-status.error, #audio-status.error { color: #f88; }
+#backfill-status.done, #audio-status.done { color: #8d8; }
 """
 
 
@@ -162,6 +177,10 @@ def home_html(items: list[dict], query: str = "", data_dir: Path | None = None) 
 </header>
 <main>
   <h2>Archive</h2>
+  <div class="backfill">
+    <button type="button" id="backfill-audio">backfill soundtracks</button>
+    <div id="backfill-status"></div>
+  </div>
   <form class="find" method="get" action="/">
     <input name="q" value="{q_val}" placeholder="search title, channel, id…" autocomplete="off">
     <button type="submit">Search</button>
@@ -251,6 +270,27 @@ async function refreshList() {
 function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+document.getElementById('backfill-audio').onclick = async () => {
+  const btn = document.getElementById('backfill-audio');
+  const box = document.getElementById('backfill-status');
+  btn.disabled = true;
+  box.className = '';
+  box.textContent = 'queueing…';
+  try {
+    const res = await fetch('/api/backfill-audio', {method: 'POST'});
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    box.className = data.queued ? '' : 'done';
+    box.textContent = data.queued
+      ? 'queued ' + data.queued + ' soundtrack job(s)'
+      : 'every archived video already has a soundtrack';
+    paintQueue();
+  } catch (err) {
+    box.className = 'error';
+    box.textContent = err.message;
+  }
+  btn.disabled = false;
+};
 (async function loop() {
   const n = await paintQueue().catch(() => 0);
   setTimeout(loop, n ? 800 : 2500);
@@ -333,6 +373,27 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
 </div>
 <p class="meta">click a shot to seek · shift-click opens the PNG · resume and speed are remembered</p>
 """)
+    mp3 = soundtrack_path(data_dir, vid)
+    soundtrack_bits = ['<div class="soundtrack">']
+    if mp3.is_file():
+        soundtrack_bits.append(
+            f'<p class="meta">Soundtrack — <a href="{_esc(media_url(data_dir, mp3))}">soundtrack.mp3</a></p>'
+            f'<audio controls preload="metadata" src="{_esc(media_url(data_dir, mp3))}"></audio>'
+        )
+    else:
+        soundtrack_bits.append('<p class="meta">Soundtrack</p>')
+    row = ['<div class="row">']
+    if video and not mp3.is_file():
+        row.append('<button type="button" id="dump-audio">dump soundtrack</button>')
+    row.append(
+        '<button type="button" id="open-mp3-folder">open folder which has the mp3 in it</button>'
+    )
+    row.append("</div>")
+    if video and not mp3.is_file():
+        row.append('<div id="audio-status"></div>')
+    soundtrack_bits.extend(row)
+    soundtrack_bits.append("</div>")
+    parts.append("".join(soundtrack_bits))
     if sheet.is_file():
         parts.append(
             f'<p class="meta">Squished framesheet</p>'
@@ -421,6 +482,61 @@ async function reget(kind) {
 }
 document.getElementById('reget-png').onclick = () => reget('png');
 document.getElementById('reget-video').onclick = () => reget('video');
+const dumpBtn = document.getElementById('dump-audio');
+if (dumpBtn) dumpBtn.onclick = async () => {
+  dumpBtn.disabled = true;
+  const status = document.getElementById('audio-status');
+  status.className = '';
+  status.textContent = 'starting…';
+  try {
+    const res = await fetch('/api/get', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({url: vid}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    for (;;) {
+      const jres = await fetch('/api/job/' + data.job_id);
+      const j = await jres.json();
+      const tail = (j.log || []).slice(-4).join('\n');
+      status.textContent = (j.phase || j.status) + (tail ? '\n' + tail : '');
+      if (j.status === 'done') {
+        status.className = 'done';
+        status.textContent = 'done — reloading';
+        location.reload();
+        return;
+      }
+      if (j.status === 'error') {
+        status.className = 'error';
+        status.textContent = j.error || 'failed';
+        dumpBtn.disabled = false;
+        return;
+      }
+      await new Promise(r => setTimeout(r, 800));
+    }
+  } catch (err) {
+    status.className = 'error';
+    status.textContent = err.message;
+    dumpBtn.disabled = false;
+  }
+};
+const openBtn = document.getElementById('open-mp3-folder');
+if (openBtn) openBtn.onclick = async () => {
+  openBtn.disabled = true;
+  try {
+    const res = await fetch('/api/open-folder', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({video_id: vid}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+  } catch (err) {
+    alert(err.message);
+  }
+  openBtn.disabled = false;
+};
 """
     return _page(
         title,
@@ -472,6 +588,10 @@ def make_handler(data_dir: Path, queue: JobQueue):
 
         def do_POST(self):
             parsed = urlparse(self.path)
+            if parsed.path == "/api/backfill-audio":
+                return self._backfill_audio()
+            if parsed.path == "/api/open-folder":
+                return self._open_folder()
             if parsed.path != "/api/get":
                 return self.send_error(404)
             length = int(self.headers.get("Content-Length") or 0)
@@ -489,6 +609,44 @@ def make_handler(data_dir: Path, queue: JobQueue):
             except ValueError as exc:
                 return self._json({"error": str(exc)}, 400)
             return self._json(queue.snapshot(job), 202)
+
+        def _backfill_audio(self):
+            queued = []
+            for video_id in list_archived_ids(data_dir):
+                if not find_video_file(data_dir, video_id):
+                    continue
+                if soundtrack_path(data_dir, video_id).is_file():
+                    continue
+                job = queue.submit(video_id)
+                queued.append(job["video_id"])
+            return self._json({"queued": len(queued), "video_ids": queued}, 202 if queued else 200)
+
+        def _open_folder(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(length) if length else b"{}"
+            try:
+                payload = json.loads(raw.decode("utf-8") or "{}")
+            except json.JSONDecodeError:
+                return self._json({"error": "bad json"}, 400)
+            try:
+                video_id = parse_video_id((payload.get("video_id") or payload.get("url") or "").strip())
+            except ValueError as exc:
+                return self._json({"error": str(exc)}, 400)
+            folder = condensed_dir(data_dir, video_id)
+            if not folder.is_dir():
+                folder = video_dir(data_dir, video_id)
+            if not folder.is_dir():
+                return self._json({"error": "no archive folder"}, 404)
+            try:
+                subprocess.Popen(
+                    ["xdg-open", str(folder)],
+                    start_new_session=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except OSError as exc:
+                return self._json({"error": f"could not open folder: {exc}", "path": str(folder)}, 500)
+            return self._json({"ok": True, "path": str(folder)})
 
         def _static(self, rel: str):
             root = STATIC_DIR.resolve()

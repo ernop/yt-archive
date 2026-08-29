@@ -1,10 +1,11 @@
-"""CLI: get / shots / serve / list."""
+"""CLI: get / shots / audio / serve / list."""
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
 
+from .audio import dump_soundtrack
 from .download import download
 from .framesheet import make_shots
 from .paths import default_data_dir, find_video_file, parse_video_id
@@ -16,7 +17,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data", type=Path, default=default_data_dir(), help="archive root (default: ./data)")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    get_p = sub.add_parser("get", help="download a video and extract shot images")
+    get_p = sub.add_parser("get", help="download a video, extract shot images, dump soundtrack")
     get_p.add_argument("target", help="YouTube URL or 11-char id")
     get_p.add_argument("--sim", type=float, default=0.90, help="CLIP drop threshold (default 0.90)")
     get_p.add_argument("--skip-shots", action="store_true", help="download only")
@@ -24,6 +25,9 @@ def main(argv: list[str] | None = None) -> int:
     shots_p = sub.add_parser("shots", help="extract shot images from an already-downloaded video")
     shots_p.add_argument("target", help="YouTube URL or 11-char id")
     shots_p.add_argument("--sim", type=float, default=0.90)
+
+    audio_p = sub.add_parser("audio", help="dump soundtrack mp3 from an already-downloaded video")
+    audio_p.add_argument("target", help="YouTube URL or 11-char id")
 
     sub.add_parser("list", help="list archived videos")
     sub.add_parser("reindex", help="rebuild the sqlite catalog from data/")
@@ -40,6 +44,8 @@ def main(argv: list[str] | None = None) -> int:
         return _get(data_dir, args.target, args.sim, args.skip_shots)
     if args.cmd == "shots":
         return _shots(data_dir, args.target, args.sim)
+    if args.cmd == "audio":
+        return _audio(data_dir, args.target)
     if args.cmd == "list":
         from .db import list_videos
 
@@ -65,6 +71,9 @@ def _get(data_dir: Path, target: str, sim: float, skip_shots: bool) -> int:
     if not skip_shots:
         summary = make_shots(video, data_dir, video_id, sim_threshold=sim, layout="squash")
         print(json.dumps({k: summary[k] for k in ("video_id", "shots_detected", "shots_kept")}, indent=2))
+    mp3 = dump_soundtrack(video, data_dir, video_id)
+    if mp3:
+        print(f"soundtrack: {mp3} ({mp3.stat().st_size / 1e6:.1f} MB)")
     print(f"browse: /v/{video_id}")
     return 0
 
@@ -76,4 +85,17 @@ def _shots(data_dir: Path, target: str, sim: float) -> int:
         raise SystemExit(f"no downloaded video for {video_id} in {data_dir}")
     summary = make_shots(video, data_dir, video_id, sim_threshold=sim, layout="squash")
     print(json.dumps({k: summary[k] for k in ("video_id", "shots_detected", "shots_kept")}, indent=2))
+    return 0
+
+
+def _audio(data_dir: Path, target: str) -> int:
+    video_id = parse_video_id(target)
+    video = find_video_file(data_dir, video_id)
+    if not video:
+        raise SystemExit(f"no downloaded video for {video_id} in {data_dir}")
+    mp3 = dump_soundtrack(video, data_dir, video_id)
+    if not mp3:
+        print("no audio stream")
+        return 0
+    print(f"soundtrack: {mp3} ({mp3.stat().st_size / 1e6:.1f} MB)")
     return 0

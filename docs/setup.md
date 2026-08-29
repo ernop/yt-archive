@@ -6,7 +6,7 @@ Parent: [agents.md](../agents.md).
 
 - `yt-dlp` — official standalone binary (`yt-dlp -U` to self-update). Distro
   copies are usually stale.
-- `ffmpeg`
+- `ffmpeg` — shot keyframes and `_condensed/soundtrack.mp3` (libmp3lame, VBR `-q:a 0`)
 - A JS runtime yt-dlp can use (Deno is the default; Node also works)
 - Firefox — cookie source for YouTube downloads
 

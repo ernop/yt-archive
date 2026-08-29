@@ -59,6 +59,10 @@ def framesheet_path(data_dir: Path, video_id: str) -> Path:
     return condensed_dir(data_dir, video_id) / "framesheet.png"
 
 
+def soundtrack_path(data_dir: Path, video_id: str) -> Path:
+    return condensed_dir(data_dir, video_id) / "soundtrack.mp3"
+
+
 def file_cache_key(path: Path) -> str:
     """URL cache key: changes iff the file's bytes could have changed."""
     st = path.stat()
@@ -118,6 +122,7 @@ def load_archive_info(data_dir: Path, video_id: str) -> dict:
     info["downloaded_at"] = stamp or ""
     info["has_video"] = find_video_file(data_dir, video_id) is not None
     info["has_framesheet"] = framesheet_path(data_dir, video_id).is_file()
+    info["has_soundtrack"] = soundtrack_path(data_dir, video_id).is_file()
     info["shot_files"] = sorted(p.name for p in shots_dir(data_dir, video_id).glob("*.png"))
     return info
 
