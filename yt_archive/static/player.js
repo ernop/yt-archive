@@ -179,6 +179,30 @@
   root.querySelector("[data-act=fwd]").onclick = () => skip(10);
   root.querySelector("[data-act=slower]").onclick = () => bumpSpeed(-1);
   root.querySelector("[data-act=faster]").onclick = () => bumpSpeed(1);
+  async function grabFrame() {
+    if (!video.videoWidth) { flash("no frame"); return; }
+    const t = video.currentTime;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) { flash("grab failed"); return; }
+    ctx.drawImage(video, 0, 0);
+    try {
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("empty");
+      const res = await fetch(
+        "/api/grab?video_id=" + encodeURIComponent(id) + "&t=" + encodeURIComponent(String(t)),
+        { method: "POST", headers: { "Content-Type": "image/png" }, body: blob },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      flash("saved " + data.name);
+    } catch (err) {
+      flash("grab failed");
+    }
+  }
+  root.querySelector("[data-act=grab]").onclick = grabFrame;
   root.querySelector("[data-act=mute]").onclick = () => { video.muted = !video.muted; flash(video.muted ? "muted" : "sound"); };
   root.querySelector("[data-act=pip]").onclick = async () => {
     if (document.pictureInPictureElement) await document.exitPictureInPicture();
@@ -219,6 +243,7 @@
   document.addEventListener("keydown", (ev) => {
     const tag = (ev.target && ev.target.tagName) || "";
     if (tag === "INPUT" || tag === "TEXTAREA") return;
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
     const k = ev.key;
     if (k === "Escape") { helpEl.classList.remove("on"); return; }
     if (k === "?" || (k === "/" && ev.shiftKey)) { helpEl.classList.toggle("on"); ev.preventDefault(); return; }
@@ -231,6 +256,7 @@
       ArrowDown: () => { video.volume = Math.max(0, video.volume - 0.05); flash(Math.round(video.volume * 100) + "%"); },
       Home: () => seek(0, "start"),
       End: () => seek(dur(), "end"),
+      s: () => { if (!ev.repeat) grabFrame(); },
       m: () => { video.muted = !video.muted; flash(video.muted ? "muted" : "sound"); },
       f: () => root.querySelector("[data-act=fs]").click(),
       t: () => root.querySelector("[data-act=theater]").click(),

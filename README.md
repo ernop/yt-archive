@@ -18,6 +18,7 @@ data/<id>/
   _condensed/
     framesheet.png
     soundtrack.mp3
+    grab-Some_Title-00h01m23s450.png   # optional, player `s` / grab
     shots.json
     shots/0000.png …
 ```

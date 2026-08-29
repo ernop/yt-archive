@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -55,10 +57,6 @@ def shots_dir(data_dir: Path, video_id: str) -> Path:
     return condensed_dir(data_dir, video_id) / "shots"
 
 
-def framesheet_path(data_dir: Path, video_id: str) -> Path:
-    return condensed_dir(data_dir, video_id) / "framesheet.png"
-
-
 def framesheet_paths(data_dir: Path, video_id: str) -> list[Path]:
     """Existing sheets, in order. Single framesheet.png, or the
     framesheet-N.png parts written when >MAX_SHEET_TILES shots split."""
@@ -80,6 +78,78 @@ def all_labeled_path(data_dir: Path, video_id: str) -> Path:
 
 def soundtrack_path(data_dir: Path, video_id: str) -> Path:
     return condensed_dir(data_dir, video_id) / "soundtrack.mp3"
+
+
+def restrict_filename(text: str, *, fallback: str = "untitled", max_len: int = 80) -> str:
+    """Keep a title fragment in [A-Za-z0-9._-], same charset as --restrict-filenames."""
+    text = unicodedata.normalize("NFKD", text or "")
+    text = text.encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^A-Za-z0-9._-]+", "_", text)
+    text = re.sub(r"_+", "_", text).strip("._")
+    if not text:
+        text = fallback
+    if len(text) > max_len:
+        text = text[:max_len].rstrip("._-") or fallback
+    return text
+
+
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def is_complete_png(raw: bytes) -> bool:
+    return len(raw) >= 20 and raw.startswith(PNG_MAGIC) and raw[-8:-4] == b"IEND"
+
+
+def grab_filename(t: float, title: str = "") -> str:
+    ms = max(0, int(round(float(t) * 1000)))
+    hours, rem = divmod(ms, 3_600_000)
+    minutes, rem = divmod(rem, 60_000)
+    seconds, millis = divmod(rem, 1000)
+    # No extra dots: `39.953s.png` makes `.953s` look like the extension.
+    stamp = f"{hours:02d}h{minutes:02d}m{seconds:02d}s{millis:03d}"
+    label = restrict_filename(title).replace(".", "_")
+    return f"grab-{label}-{stamp}.png"
+
+
+def unique_grab_path(folder: Path, t: float, title: str = "") -> Path:
+    dest = folder / grab_filename(t, title)
+    if not dest.exists():
+        return dest
+    stem = dest.stem
+    n = 2
+    while True:
+        cand = folder / f"{stem}-{n}.png"
+        if not cand.exists():
+            return cand
+        n += 1
+
+
+def write_grab_png(folder: Path, t: float, title: str, raw: bytes) -> Path:
+    """Write a complete PNG under an exclusive name. Temp + link, never a half file."""
+    if not is_complete_png(raw):
+        raise ValueError("not a complete png")
+    folder.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".grab-", suffix=".part", dir=folder)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(raw)
+            fh.flush()
+            os.fsync(fh.fileno())
+        stem = grab_filename(t, title).removesuffix(".png")
+        n = 1
+        while True:
+            dest = folder / f"{stem}.png" if n == 1 else folder / f"{stem}-{n}.png"
+            try:
+                os.link(tmp, dest)
+            except FileExistsError:
+                n += 1
+                continue
+            return dest
+    finally:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
 
 
 def file_cache_key(path: Path) -> str:

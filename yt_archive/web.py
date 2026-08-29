@@ -16,7 +16,9 @@ from .paths import (
     file_cache_key,
     find_video_file,
     framesheet_paths,
+    is_complete_png,
     list_archived_ids,
+    write_grab_png,
     list_items,
     load_archive_info,
     media_url,
@@ -340,6 +342,7 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
     j / l  −10s / +10s<br>
     ← →  −5s / +5s · shift = 1s<br>
     , .  frame step<br>
+    s  save this frame<br>
     0–9  jump to %<br>
     &lt; &gt;  speed · m mute · f full<br>
     t theater · i / p pip<br>
@@ -364,6 +367,7 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
       <span class="ytp-speed">1×</span>
       <button type="button" data-act="faster">+</button>
       <span class="ytp-grow"></span>
+      <button type="button" data-act="grab">grab</button>
       <button type="button" data-act="mute">mute</button>
       <button type="button" data-act="pip">pip</button>
       <button type="button" data-act="theater">wide</button>
@@ -372,7 +376,7 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
     </div>
   </div>
 </div>
-<p class="meta">click a shot to seek · shift-click opens the PNG · resume and speed are remembered</p>
+<p class="meta">click a shot to seek · s saves this frame next to the mp3 · shift-click opens the PNG · resume and speed are remembered</p>
 """)
     mp3 = soundtrack_path(data_dir, vid)
     soundtrack_bits = ['<div class="soundtrack">']
@@ -605,6 +609,8 @@ def make_handler(data_dir: Path, queue: JobQueue):
                 return self._backfill_audio()
             if parsed.path == "/api/open-folder":
                 return self._open_folder()
+            if parsed.path == "/api/grab":
+                return self._grab(parsed)
             if parsed.path != "/api/get":
                 return self.send_error(404)
             length = int(self.headers.get("Content-Length") or 0)
@@ -660,6 +666,27 @@ def make_handler(data_dir: Path, queue: JobQueue):
             except OSError as exc:
                 return self._json({"error": f"could not open folder: {exc}", "path": str(folder)}, 500)
             return self._json({"ok": True, "path": str(folder)})
+
+        def _grab(self, parsed):
+            qs = parse_qs(parsed.query)
+            try:
+                video_id = parse_video_id((qs.get("video_id") or [""])[0].strip())
+                t = float((qs.get("t") or ["0"])[0])
+            except (ValueError, TypeError) as exc:
+                return self._json({"error": str(exc)}, 400)
+            if not video_dir(data_dir, video_id).is_dir():
+                return self._json({"error": "no archive"}, 404)
+            length = int(self.headers.get("Content-Length") or 0)
+            if length <= 8 or length > 25 * 1024 * 1024:
+                return self._json({"error": "bad frame size"}, 400)
+            raw = self.rfile.read(length)
+            if not is_complete_png(raw):
+                return self._json({"error": "not a complete png"}, 400)
+            folder = condensed_dir(data_dir, video_id)
+            folder.mkdir(parents=True, exist_ok=True)
+            title = load_archive_info(data_dir, video_id).get("title") or video_id
+            dest = write_grab_png(folder, t, title, raw)
+            return self._json({"ok": True, "name": dest.name})
 
         def _static(self, rel: str):
             root = STATIC_DIR.resolve()
