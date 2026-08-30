@@ -28,15 +28,26 @@ Clicking a shot seeks to that sample (`t0`).
 Raise `--sim` toward 0.90 to split more (near-repeats stay); lower toward
 0.80 to keep only harder look changes.
 
-## At most 100 tiles per sheet (settled 2026-08-29)
+## Balanced sheet sizes (settled 2026-08-30)
 
-Long videos (a 3-hour game ≈ thousands of kept shots) made one giant
-PNG. Sheets now cap at `MAX_SHEET_TILES = 100` tiles: ≤100 kept shots
-stay a single `framesheet.png`; more split into `framesheet-1.png`,
-`framesheet-2.png`, … in shot order, each laid out independently.
-`paths.framesheet_paths()` lists whichever form exists (legacy single
-sheet first), and every consumer — detail page, card thumbnail (part 1),
-static export, job skip-check — goes through it. A re-run deletes all
+Long videos (a 3-hour game ≈ thousands of kept shots) must not make one
+unbounded PNG, but modest videos should not be split unnecessarily:
+
+- up to 250 kept shots stay in one `framesheet.png`;
+- above 250, there are always at least two sheets;
+- multi-sheet output uses `MAX_SHEET_TILES = 200`;
+- frames are divided as evenly as possible, with sheet counts differing by at
+  most one. For example, 251 becomes 126 + 125 instead of 200 + 51, and 401
+  becomes 134 + 134 + 133.
+
+Balanced chunks prevent a tiny, awkward final sheet. Each chunk is then laid
+out independently using the existing near-square geometry search, so the
+resulting sheets remain compact rectangles. Multi-sheet files are
+`framesheet-1.png`, `framesheet-2.png`, … in shot order.
+
+`paths.framesheet_paths()` lists whichever form exists (legacy single sheet
+first), and every consumer — detail page, card thumbnail (part 1), static
+export, job skip-check — goes through it. A re-run deletes all
 `framesheet*.png` first so old and new parts never mix.
 
 ## Sample dir is on disk, not /tmp (settled 2026-08-29)

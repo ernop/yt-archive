@@ -5,10 +5,11 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from yt_archive import db
 from yt_archive.paths import transcript_json_path, transcript_vtt_path
-from yt_archive.transcribe import _spoken_text, normalize_config
+from yt_archive.transcribe import _spoken_text, _timed_spoken_words, normalize_config
 from yt_archive.web import detail_html
 
 
@@ -113,6 +114,31 @@ class TranscriptionTests(unittest.TestCase):
         self.assertEqual(recovered["status"], "done")
         self.assertEqual(recovered["progress"], 1)
 
+    def test_recovery_retries_mixed_generation_files(self):
+        job = db.enqueue_work(
+            self.data,
+            work_key="replacement-work",
+            video_id=VIDEO_ID,
+            kind="transcribe",
+            config=normalize_config(),
+        )
+        db.claim_next_work(self.data)
+        artifact = {
+            "video_id": VIDEO_ID,
+            "work_key": "replacement-work",
+            "generation_id": f"{job['job_id']}:1",
+            "vtt_sha256": hashlib.sha256(b"old captions").hexdigest(),
+            "segments": [],
+        }
+        transcript_json_path(self.data, VIDEO_ID).write_text(
+            json.dumps(artifact), encoding="utf-8"
+        )
+        transcript_vtt_path(self.data, VIDEO_ID).write_text(
+            "new partial captions", encoding="utf-8"
+        )
+        db.recover_work_jobs(self.data)
+        self.assertEqual(db.get_work_job(self.data, job["job_id"])["status"], "queued")
+
     def test_transcript_is_stored_and_global_search_finds_spoken_words(self):
         artifact = {
             "video_id": VIDEO_ID,
@@ -150,9 +176,11 @@ class TranscriptionTests(unittest.TestCase):
         )
 
     def test_rebuild_restores_database_from_transcript_file(self):
+        vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nrestorable words\n"
         artifact = {
             "video_id": VIDEO_ID,
             "model": "large-v3",
+            "vtt_sha256": hashlib.sha256(vtt.encode()).hexdigest(),
             "full_text": "restorable words",
             "segments": [
                 {
@@ -169,7 +197,7 @@ class TranscriptionTests(unittest.TestCase):
             json.dumps(artifact), encoding="utf-8"
         )
         transcript_vtt_path(self.data, VIDEO_ID).write_text(
-            "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nrestorable words\n",
+            vtt,
             encoding="utf-8",
         )
         db.rebuild(self.data)
@@ -196,6 +224,17 @@ class TranscriptionTests(unittest.TestCase):
     def test_non_speech_labels_are_not_mixed_with_words(self):
         self.assertEqual(_spoken_text("[Music] Hello (birds chirping)"), "Hello")
         self.assertEqual(_spoken_text("[Applause]"), "")
+        words = [
+            SimpleNamespace(word=" [Music]", start=0, end=1, probability=1),
+            SimpleNamespace(word=" Hello", start=1, end=2, probability=1),
+            SimpleNamespace(word=" (birds", start=2, end=3, probability=1),
+            SimpleNamespace(word=" chirping)", start=3, end=4, probability=1),
+            SimpleNamespace(word=" again", start=4, end=5, probability=1),
+        ]
+        cleaned = _timed_spoken_words(
+            words, "[Music] Hello (birds chirping) again"
+        )
+        self.assertEqual([word["word"] for word in cleaned], ["Hello", "again"])
 
 
 if __name__ == "__main__":

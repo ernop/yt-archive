@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 
 from yt_archive import db
-from yt_archive.web import home_html
+from yt_archive.browse import PAGE
+from yt_archive.web import CSS, home_html
 
 
 class BrowsingTests(unittest.TestCase):
@@ -90,6 +91,29 @@ class BrowsingTests(unittest.TestCase):
         self.assertIn('class="got-label">got</span><time', html)
         self.assertIn("2026-08-30 12:00 UTC", html)
         self.assertIn("new URLSearchParams(window.location.search)", html)
+
+    def test_neutral_ui_text_is_pure_white(self):
+        player_css = (
+            Path(__file__).parents[1] / "yt_archive" / "static" / "player.css"
+        ).read_text(encoding="utf-8")
+        combined = (CSS + PAGE + player_css).lower()
+        for forbidden in ("color: #999", "color: #aaa", "color: #bbb",
+                          "color: #ccc", "color: #ddd", "color: #eee"):
+            self.assertNotIn(forbidden, combined)
+        self.assertIn("--fg:#fff", CSS)
+        self.assertIn("--muted:#fff", CSS)
+        self.assertIn("background: #000; color: #fff", PAGE)
+        self.assertIn("input::placeholder { color: #fff; opacity: 1; }", CSS)
+
+    def test_home_and_end_only_seek_when_video_has_focus(self):
+        player_js = (
+            Path(__file__).parents[1] / "yt_archive" / "static" / "player.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("video.tabIndex = 0", player_js)
+        self.assertIn('if (k === "Home" || k === "End")', player_js)
+        self.assertIn("if (document.activeElement !== video) return", player_js)
+        self.assertNotIn('Home: () => seek(', player_js)
+        self.assertNotIn('End: () => seek(', player_js)
 
 
 if __name__ == "__main__":

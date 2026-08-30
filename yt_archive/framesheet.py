@@ -6,10 +6,9 @@
      Last-kept, not previous-0.5s: a slow push-in that changes the look
      still fires. No lookback into earlier history.
   3. The kept sample IS the tile (the frame where the look changed).
-  4. Survivors tile into a near-square squash grid, at most
-     MAX_SHEET_TILES (100) per sheet. More shots split into
-     framesheet-1.png, framesheet-2.png, …; a single sheet stays
-     framesheet.png.
+  4. Survivors tile into near-square squash grids. Up to 250 shots stay
+     together. Above 250, balanced sheets cap at MAX_SHEET_TILES (200)
+     so there is no tiny final sheet.
 
 Also writes the individual shot PNGs under _condensed/shots/.
 Optional --all-sheet writes shots_all_labeled.png (numbered + timestamp).
@@ -38,7 +37,8 @@ SAMPLE_FPS = 2
 DEFAULT_SIM = 0.85
 LABEL_H = 36
 ALL_TILE = 360
-MAX_SHEET_TILES = 100
+MAX_SHEET_TILES = 200
+SINGLE_SHEET_TILES = 250
 
 
 def make_shots(
@@ -145,7 +145,7 @@ def make_shots(
 
 
 def _write_sheets(imgs, cond: Path, layout: str, log=print):
-    """Tile imgs into sheets of at most MAX_SHEET_TILES each.
+    """Tile imgs into one sheet through 250, then balanced sheets of <=200.
 
     A single chunk saves as framesheet.png; more become framesheet-1.png,
     framesheet-2.png, … Stale framesheet*.png from an earlier run are
@@ -154,7 +154,11 @@ def _write_sheets(imgs, cond: Path, layout: str, log=print):
     tile = _layout_grid if layout == "grid" else _layout_squash
     for old in cond.glob("framesheet*.png"):
         old.unlink()
-    chunks = [imgs[i:i + MAX_SHEET_TILES] for i in range(0, len(imgs), MAX_SHEET_TILES)]
+    chunks = []
+    offset = 0
+    for size in _sheet_chunk_sizes(len(imgs)):
+        chunks.append(imgs[offset:offset + size])
+        offset += size
     names, sizes, descs = [], [], []
     for n, chunk in enumerate(chunks, start=1):
         sheet, desc = tile(chunk)
@@ -165,6 +169,17 @@ def _write_sheets(imgs, cond: Path, layout: str, log=print):
         descs.append(desc)
         log(f"framesheet {desc} {sheet.width}x{sheet.height} → {cond / name}")
     return names, sizes, descs
+
+
+def _sheet_chunk_sizes(total: int) -> list[int]:
+    """Keep modest videos whole; otherwise avoid a small, awkward last sheet."""
+    if total <= 0:
+        return []
+    if total <= SINGLE_SHEET_TILES:
+        return [total]
+    sheet_count = max(2, math.ceil(total / MAX_SHEET_TILES))
+    base, extra = divmod(total, sheet_count)
+    return [base + 1] * extra + [base] * (sheet_count - extra)
 
 
 def _sample_thumbs(video: Path, out_dir: Path) -> list[Path]:

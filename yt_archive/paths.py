@@ -1,6 +1,7 @@
 """Archive layout. One directory per YouTube id; originals stay untouched."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -86,6 +87,20 @@ def transcript_json_path(data_dir: Path, video_id: str) -> Path:
 
 def transcript_vtt_path(data_dir: Path, video_id: str) -> Path:
     return condensed_dir(data_dir, video_id) / "transcript.vtt"
+
+
+def transcript_is_complete(data_dir: Path, video_id: str) -> bool:
+    json_path = transcript_json_path(data_dir, video_id)
+    vtt_path = transcript_vtt_path(data_dir, video_id)
+    if not json_path.is_file() or not vtt_path.is_file():
+        return False
+    try:
+        artifact = json.loads(json_path.read_text(encoding="utf-8"))
+        expected = artifact.get("vtt_sha256") or ""
+        actual = hashlib.sha256(vtt_path.read_bytes()).hexdigest()
+        return bool(expected) and actual == expected
+    except (OSError, json.JSONDecodeError):
+        return False
 
 
 def restrict_filename(text: str, *, fallback: str = "untitled", max_len: int = 80) -> str:
@@ -220,10 +235,7 @@ def load_archive_info(data_dir: Path, video_id: str) -> dict:
     info["has_video"] = find_video_file(data_dir, video_id) is not None
     info["has_framesheet"] = bool(framesheet_paths(data_dir, video_id))
     info["has_soundtrack"] = soundtrack_path(data_dir, video_id).is_file()
-    info["has_transcript"] = (
-        transcript_json_path(data_dir, video_id).is_file()
-        and transcript_vtt_path(data_dir, video_id).is_file()
-    )
+    info["has_transcript"] = transcript_is_complete(data_dir, video_id)
     info["shot_files"] = sorted(p.name for p in shots_dir(data_dir, video_id).glob("*.png"))
     return info
 

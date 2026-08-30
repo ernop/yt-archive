@@ -147,7 +147,11 @@
   video.addEventListener("progress", paint);
   video.addEventListener("play", () => { resumeEl.classList.remove("on"); paint(); });
   video.addEventListener("pause", () => { savePos(); paint(); });
-  video.addEventListener("click", togglePlay);
+  video.tabIndex = 0;
+  video.addEventListener("click", () => {
+    video.focus({ preventScroll: true });
+    togglePlay();
+  });
   video.addEventListener("volumechange", () => localStorage.setItem(LS_VOL, String(video.volume)));
   setInterval(savePos, 4000);
   window.addEventListener("pagehide", savePos);
@@ -257,8 +261,14 @@
   document.addEventListener("keydown", (ev) => {
     const tag = (ev.target && ev.target.tagName) || "";
     if (tag === "INPUT" || tag === "TEXTAREA") return;
-    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
     const k = ev.key;
+    if (k === "Home" || k === "End") {
+      if (document.activeElement !== video) return;
+      seek(k === "Home" ? 0 : dur(), k === "Home" ? "start" : "end");
+      ev.preventDefault();
+      return;
+    }
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
     if (k === "Escape") { helpEl.classList.remove("on"); return; }
     if (k === "?" || (k === "/" && ev.shiftKey)) { helpEl.classList.toggle("on"); ev.preventDefault(); return; }
     const map = {
@@ -268,8 +278,6 @@
       ArrowRight: () => skip(ev.shiftKey ? 1 : 5),
       ArrowUp: () => { video.volume = Math.min(1, video.volume + 0.05); flash(Math.round(video.volume * 100) + "%"); },
       ArrowDown: () => { video.volume = Math.max(0, video.volume - 0.05); flash(Math.round(video.volume * 100) + "%"); },
-      Home: () => seek(0, "start"),
-      End: () => seek(dur(), "end"),
       s: () => { if (!ev.repeat) grabFrame(); },
       m: () => { video.muted = !video.muted; flash(video.muted ? "muted" : "sound"); },
       f: () => root.querySelector("[data-act=fs]").click(),

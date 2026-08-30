@@ -23,3 +23,25 @@ card, with the browser converting them to local time.
 
 This keeps the default focused on newly added archive material while retaining
 predictable, low-friction ways to find older or alphabetically grouped items.
+
+## Text contrast
+
+All neutral UI text is pure white (`#fff`) on the black/dark interface. Gray
+text, muted-gray labels, gray placeholders, and opacity that turns disabled
+text gray are prohibited. Secondary labels use smaller type, spacing, and
+weight—not reduced contrast. Semantic link, success, and error colors remain
+allowed when they are strongly legible.
+
+This applies to the live archive, generated static pages, dialogs, transcript
+controls, and the custom player. The requirement exists because gray-on-black
+text was difficult to read.
+
+## Home and End keys
+
+`Home`, `End`, `Ctrl+Home`, and `Ctrl+End` control video position only while
+the video element itself has keyboard focus. When focus is elsewhere on the
+page, these keys retain normal browser behavior; in particular, `End` scrolls
+to the bottom of the page and `Ctrl+Home` goes to the top.
+
+Clicking the video gives it focus. Keyboard focus is shown with a white outline
+so it is clear when the player will consume these keys.

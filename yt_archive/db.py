@@ -13,6 +13,7 @@ from .paths import (
     list_archived_ids,
     load_archive_info,
     media_url,
+    transcript_is_complete,
     transcript_json_path,
     transcript_vtt_path,
 )
@@ -237,10 +238,7 @@ def rebuild(data_dir: Path) -> int:
                 row,
             )
             transcript_path = transcript_json_path(data_dir, video_id)
-            if (
-                transcript_path.is_file()
-                and transcript_vtt_path(data_dir, video_id).is_file()
-            ):
+            if transcript_is_complete(data_dir, video_id):
                 try:
                     artifact = json.loads(transcript_path.read_text(encoding="utf-8"))
                     _replace_transcript_conn(conn, artifact)

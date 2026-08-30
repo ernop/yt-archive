@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from .db import normalize_video_sort
 from .jobs import JobQueue
+from .locks import video_lock
 from .paths import (
     all_labeled_path,
     condensed_dir,
@@ -28,6 +29,7 @@ from .paths import (
     shots_dir,
     shots_json_path,
     soundtrack_path,
+    transcript_is_complete,
     transcript_json_path,
     transcript_vtt_path,
     video_dir,
@@ -43,10 +45,12 @@ LIVE = "no-store"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 CSS = """
-:root { color-scheme: dark; --bg:#111; --card:#1a1a1a; --line:#333; --fg:#eee; --muted:#999; --red:#c4302b; }
+:root { color-scheme: dark; --bg:#000; --card:#000; --line:#555; --fg:#fff; --muted:#fff; --red:#c4302b; }
 * { box-sizing: border-box; }
 body { margin: 0; font: 16px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
 a { color: #f88; }
+input::placeholder { color: #fff; opacity: 1; }
+button:disabled { color: #fff !important; opacity: 1 !important; cursor: wait; }
 header, main { width: 100%; margin: 0; padding: 1.25rem clamp(1rem, 3vw, 2.5rem) 2rem; }
 h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
 h1 a { color: inherit; text-decoration: none; }
@@ -57,7 +61,7 @@ form.get input { flex: 1; background: #0d0d0d; border: 1px solid var(--line); co
 form.get input:focus { outline: none; border-color: var(--red); }
 form.get button { background: var(--red); color: #fff; border: 0; padding: .7rem 1.2rem;
   border-radius: 6px; font-weight: 600; cursor: pointer; }
-form.get button:disabled { opacity: .5; cursor: wait; }
+form.get button:disabled { opacity: 1; cursor: wait; }
 .archive-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem;
   align-items: end; margin: 0 0 1rem; }
 .archive-tools .find { display: flex; gap: .5rem; min-width: 0; }
@@ -106,7 +110,7 @@ h2 { font-size: 1.1rem; color: var(--muted); font-weight: 600; margin: 2rem 0 .7
 .backup button { background: #161616; border: 1px solid var(--line); color: var(--muted);
   padding: .35rem .7rem; border-radius: 4px; cursor: pointer; margin-right: .4rem; font-size: .82rem; }
 .backup button:hover { color: var(--fg); border-color: #666; }
-.backup button:disabled { opacity: .5; cursor: wait; }
+.backup button:disabled { opacity: 1; cursor: wait; }
 #reget-status { margin-top: .6rem; font-family: ui-monospace, monospace; white-space: pre-wrap; }
 #reget-status.error { color: #f88; }
 #reget-status.done { color: #8d8; }
@@ -116,7 +120,7 @@ h2 { font-size: 1.1rem; color: var(--muted); font-weight: 600; margin: 2rem 0 .7
 .soundtrack button, .backfill button { background: #161616; border: 1px solid var(--line); color: var(--muted);
   padding: .35rem .7rem; border-radius: 4px; cursor: pointer; font-size: .82rem; }
 .soundtrack button:hover, .backfill button:hover { color: var(--fg); border-color: #666; }
-.soundtrack button:disabled, .backfill button:disabled { opacity: .5; cursor: wait; }
+.soundtrack button:disabled, .backfill button:disabled { opacity: 1; cursor: wait; }
 .backfill { margin: 0 0 1rem; }
 #backfill-status, #audio-status { margin-top: .4rem; font-family: ui-monospace, monospace; font-size: .85rem; white-space: pre-wrap; color: var(--muted); }
 #backfill-status.error, #audio-status.error { color: #f88; }
@@ -131,7 +135,7 @@ h2 { font-size: 1.1rem; color: var(--muted); font-weight: 600; margin: 2rem 0 .7
   border-radius: 5px; font: inherit; }
 .transcript button, dialog button { cursor: pointer; }
 .transcript button:hover, dialog button:hover { border-color: #888; }
-.transcript button:disabled, dialog button:disabled { opacity: .55; cursor: wait; }
+.transcript button:disabled, dialog button:disabled { opacity: 1; cursor: wait; }
 .transcript-search { flex: 1 1 18rem; min-width: 12rem; }
 .transcript-progress { margin-top: .8rem; }
 .transcript-progress-value { color: var(--fg); font: 700 1.65rem/1 ui-monospace, monospace;
@@ -168,7 +172,7 @@ dialog { width: min(34rem, calc(100% - 2rem)); color: var(--fg); background: #18
 dialog::backdrop { background: rgba(0,0,0,.72); }
 dialog h2 { color: var(--fg); font-size: 1.25rem; font-weight: 750; margin: 0 0 .4rem; }
 dialog .fields { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; margin: 1rem 0; }
-dialog label { display: grid; gap: .3rem; color: #bbb; font-size: .85rem; }
+dialog label { display: grid; gap: .3rem; color: #fff; font-size: .85rem; }
 dialog .dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .5rem; }
 dialog .primary { background: #2e7441; border-color: #4a9d61; font-weight: 700; }
 @media (max-width: 600px) {
@@ -309,7 +313,7 @@ def home_html(
   </div>
   <form class="archive-tools" method="get" action="/">
     <div class="find">
-      <input name="q" value="{q_val}" placeholder="search title, channel, id…" autocomplete="off">
+      <input name="q" value="{q_val}" placeholder="search title, channel, id, transcript…" autocomplete="off">
       <button type="submit">Search</button>
     </div>
     <label class="sort-field"><span>Sort archive</span>
@@ -462,7 +466,7 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
     video = find_video_file(data_dir, vid)
     transcript_file = transcript_json_path(data_dir, vid)
     captions_file = transcript_vtt_path(data_dir, vid)
-    has_transcript = transcript_file.is_file() and captions_file.is_file()
+    has_transcript = transcript_is_complete(data_dir, vid)
     transcript_language = "und"
     if has_transcript:
         try:
@@ -516,6 +520,7 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
     , .  frame step<br>
     s  save this frame<br>
     0–9  jump to %<br>
+    home / end  video start / end (video focused)<br>
     &lt; &gt;  speed · m mute · f full<br>
     t theater · i / p pip<br>
     pgup / pgdn  prev / next shot<br>
@@ -1145,7 +1150,9 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 folder = video_dir(data_dir, video_id)
                 if not folder.is_dir():
                     return self._bytes(_page("missing", f"<main><p>No archive for {_esc(video_id)}</p></main>"), 404)
-                return self._bytes(detail_html(load_archive_info(data_dir, video_id), data_dir))
+                with video_lock(video_id):
+                    info = load_archive_info(data_dir, video_id)
+                    return self._bytes(detail_html(info, data_dir))
             if path.startswith("/media/"):
                 return self._media(path[len("/media/"):])
             if path.startswith("/static/"):
@@ -1153,6 +1160,8 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
             self.send_error(404)
 
         def do_POST(self):
+            if not self._trusted_mutation():
+                return
             parsed = urlparse(self.path)
             if parsed.path == "/api/backfill-audio":
                 return self._backfill_audio()
@@ -1383,16 +1392,6 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
             if content_type != "application/json":
                 self._json({"error": "Content-Type must be application/json"}, 415)
                 return None
-            request_host = (self.headers.get("Host") or "").lower()
-            if not _is_local_host(request_host):
-                self._json({"error": "untrusted Host header"}, 403)
-                return None
-            origin = self.headers.get("Origin")
-            if origin:
-                origin_host = urlparse(origin).netloc.lower()
-                if not origin_host or origin_host != request_host:
-                    self._json({"error": "cross-origin request rejected"}, 403)
-                    return None
             raw_length = self.headers.get("Content-Length")
             try:
                 length = int(raw_length or 0)
@@ -1415,6 +1414,22 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 self._json({"error": "json body must be an object"}, 400)
                 return None
             return payload
+
+        def _trusted_mutation(self) -> bool:
+            request_host = (self.headers.get("Host") or "").lower()
+            if not _is_local_host(request_host):
+                self._json({"error": "untrusted Host header"}, 403)
+                return False
+            if (self.headers.get("Sec-Fetch-Site") or "").lower() == "cross-site":
+                self._json({"error": "cross-site request rejected"}, 403)
+                return False
+            origin = self.headers.get("Origin")
+            if origin:
+                origin_host = urlparse(origin).netloc.lower()
+                if not origin_host or origin_host != request_host:
+                    self._json({"error": "cross-origin request rejected"}, 403)
+                    return False
+            return True
 
         def _bytes(self, raw: bytes, code=200):
             self.send_response(code)

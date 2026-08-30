@@ -23,16 +23,16 @@ PAGE = """<!doctype html>
 <title>{title}</title>
 <style>
   :root {{ color-scheme: dark; }}
-  body {{ margin: 0; font: 16px/1.4 system-ui, sans-serif; background: #111; color: #eee; }}
+  body {{ margin: 0; font: 16px/1.4 system-ui, sans-serif; background: #000; color: #fff; }}
   a {{ color: #f88; }}
-  header, main {{ max-width: 1200px; margin: 0 auto; padding: 1.25rem; }}
+  header, main {{ width: 100%; margin: 0; padding: 1.25rem; }}
   h1 {{ font-size: 1.4rem; margin: 0 0 .4rem; }}
-  .meta {{ color: #aaa; margin-bottom: 1rem; }}
+  .meta {{ color: #fff; margin-bottom: 1rem; }}
   .sheet {{ width: 100%; height: auto; border: 1px solid #333; }}
   .shots {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }}
   .shots figure {{ margin: 0; background: #1a1a1a; border: 1px solid #333; }}
   .shots img {{ width: 100%; height: auto; display: block; }}
-  .shots figcaption {{ padding: .35rem .5rem; font-size: .8rem; color: #aaa; }}
+  .shots figcaption {{ padding: .35rem .5rem; font-size: .8rem; color: #fff; }}
   .list a {{ display: block; padding: .6rem 0; border-bottom: 1px solid #2a2a2a; text-decoration: none; color: inherit; }}
   .list a:hover {{ color: #f88; }}
 </style>
