@@ -24,6 +24,18 @@ card, with the browser converting them to local time.
 This keeps the default focused on newly added archive material while retaining
 predictable, low-friction ways to find older or alphabetically grouped items.
 
+## Creator pages
+
+Uploader names on archive cards and video detail pages link to a dedicated
+creator page. That page shows every archived video from the uploader and
+supports the same sort choices plus search across titles, descriptions, video
+ids, transcripts, and speaker names.
+
+Creator identity uses YouTube's stable `channel_id` whenever it is available.
+Older archive records without one fall back to their exact channel name. The
+page keeps the creator identity in its URL so it can be bookmarked and shared
+locally.
+
 ## Text contrast
 
 All neutral UI text is pure white (`#fff`) on the black/dark interface. Gray

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from yt_archive import db
 from yt_archive.browse import PAGE
-from yt_archive.web import CSS, home_html
+from yt_archive.web import CSS, creator_html, home_html
 
 
 class BrowsingTests(unittest.TestCase):
@@ -19,6 +19,7 @@ class BrowsingTests(unittest.TestCase):
                 "video_id": "newest00001",
                 "title": "Zulu",
                 "channel": "Beta",
+                "channel_id": "UCbeta",
                 "upload_date": "20200101",
                 "downloaded_at": "2026-08-30T12:00:00+00:00",
             },
@@ -26,6 +27,7 @@ class BrowsingTests(unittest.TestCase):
                 "video_id": "middle00001",
                 "title": "Alpha",
                 "channel": "Alpha",
+                "channel_id": "UCalpha",
                 "upload_date": "20250101",
                 "downloaded_at": "2026-08-29T12:00:00+00:00",
             },
@@ -33,6 +35,7 @@ class BrowsingTests(unittest.TestCase):
                 "video_id": "oldest00001",
                 "title": "Bravo",
                 "channel": "Beta",
+                "channel_id": "UCbeta",
                 "upload_date": "20240101",
                 "downloaded_at": "2026-08-28T12:00:00+00:00",
             },
@@ -91,6 +94,31 @@ class BrowsingTests(unittest.TestCase):
         self.assertIn('class="got-label">got</span><time', html)
         self.assertIn("2026-08-30 12:00 UTC", html)
         self.assertIn("new URLSearchParams(window.location.search)", html)
+        self.assertIn('href="/creator?channel_id=UCbeta"', html)
+        self.assertIn('<article class="card">', html)
+
+    def test_creator_page_lists_only_that_uploader_and_supports_search(self):
+        videos = db.list_creator_videos(self.data, channel_id="UCbeta")
+        self.assertEqual(
+            [video["video_id"] for video in videos],
+            ["newest00001", "oldest00001"],
+        )
+        matches = db.list_creator_videos(
+            self.data, channel_id="UCbeta", query="Zulu"
+        )
+        self.assertEqual([video["video_id"] for video in matches], ["newest00001"])
+        html = creator_html(
+            videos,
+            creator_name="Beta",
+            channel_id="UCbeta",
+            total_count=2,
+            data_dir=self.data,
+        ).decode()
+        self.assertIn("<h1>Beta</h1>", html)
+        self.assertIn("<strong>2</strong> videos", html)
+        self.assertIn("Zulu", html)
+        self.assertIn("Bravo", html)
+        self.assertNotIn("Alpha", html)
 
     def test_neutral_ui_text_is_pure_white(self):
         player_css = (

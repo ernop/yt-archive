@@ -282,15 +282,57 @@ def list_videos(
             sql += " WHERE " + " AND ".join(clauses)
         sql += f" ORDER BY {VIDEO_SORT_ORDERS[normalize_video_sort(sort)]}"
         rows = conn.execute(sql, params).fetchall()
-        items = [_public(r) for r in rows]
-        for it in items:
-            if it["has_framesheet"]:
-                sheets = framesheet_paths(data_dir, it["video_id"])
-                if sheets:
-                    it["thumb_url"] = media_url(data_dir, sheets[0])
-        return items
+        return _decorate_video_rows(data_dir, rows)
     finally:
         conn.close()
+
+
+def list_creator_videos(
+    data_dir: Path,
+    *,
+    channel_id: str = "",
+    channel: str = "",
+    query: str = "",
+    sort: str = "recent",
+) -> list[dict]:
+    """List one uploader's videos, preferring stable channel id identity."""
+    if not channel_id and not channel:
+        return []
+    if not db_path(data_dir).is_file():
+        rebuild(data_dir)
+    conn = connect(data_dir)
+    try:
+        clauses = ["channel_id=?" if channel_id else "channel=?"]
+        params: list[str] = [channel_id or channel]
+        for word in [word for word in (query or "").split() if word]:
+            clauses.append(
+                """(
+                  title LIKE ? OR video_id LIKE ? OR description LIKE ?
+                  OR EXISTS (
+                    SELECT 1 FROM transcript_segments ts
+                    WHERE ts.video_id=videos.video_id
+                      AND (ts.text LIKE ? OR ts.speaker LIKE ?)
+                  )
+                )"""
+            )
+            needle = f"%{word}%"
+            params.extend([needle, needle, needle, needle, needle])
+        sql = "SELECT * FROM videos WHERE " + " AND ".join(clauses)
+        sql += f" ORDER BY {VIDEO_SORT_ORDERS[normalize_video_sort(sort)]}"
+        rows = conn.execute(sql, params).fetchall()
+        return _decorate_video_rows(data_dir, rows)
+    finally:
+        conn.close()
+
+
+def _decorate_video_rows(data_dir: Path, rows) -> list[dict]:
+    items = [_public(row) for row in rows]
+    for item in items:
+        if item["has_framesheet"]:
+            sheets = framesheet_paths(data_dir, item["video_id"])
+            if sheets:
+                item["thumb_url"] = media_url(data_dir, sheets[0])
+    return items
 
 
 def _public(row: sqlite3.Row) -> dict:

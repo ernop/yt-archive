@@ -7,9 +7,9 @@ import mimetypes
 import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
-from .db import normalize_video_sort
+from .db import list_creator_videos, normalize_video_sort
 from .jobs import JobQueue
 from .locks import video_lock
 from .paths import (
@@ -87,6 +87,8 @@ h2 { font-size: 1.1rem; color: var(--muted); font-weight: 600; margin: 2rem 0 .7
 .card { display: grid; grid-template-columns: 220px 1fr; gap: .9rem; background: var(--card);
   border: 1px solid var(--line); border-radius: 8px; overflow: hidden; text-decoration: none; color: inherit; }
 .card:hover { border-color: var(--red); }
+.card-thumb, .card-title { color: #fff; text-decoration: none; }
+.card-title:hover, .creator-link:hover { text-decoration: underline; }
 .card img, .card .ph { width: 100%; height: 124px; object-fit: cover; background: #000; display: block; }
 .card .ph { color: var(--muted); display: flex; align-items: center; justify-content: center; font-size: .8rem; }
 .card .info { min-width: 0; padding: .7rem .7rem .7rem 0; }
@@ -98,6 +100,9 @@ h2 { font-size: 1.1rem; color: var(--muted); font-weight: 600; margin: 2rem 0 .7
 .got time { color: #fff; font: 700 .9rem/1.25 ui-monospace, monospace;
   font-variant-numeric: tabular-nums; }
 .meta { color: var(--muted); font-size: .85rem; }
+.creator-count { margin-top: .55rem; }
+.creator-count strong { color: #fff; font: 750 1.4rem/1 ui-monospace, monospace;
+  font-variant-numeric: tabular-nums; }
 .sheet { width: 100%; height: auto; border: 1px solid var(--line); margin-bottom: 1.25rem; }
 .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
 .shots figure { margin: 0; background: var(--card); border: 1px solid var(--line); }
@@ -256,6 +261,43 @@ def _got_html(downloaded_at: str) -> str:
     )
 
 
+def _creator_url(item: dict) -> str:
+    channel_id = str(item.get("channel_id") or "").strip()
+    channel = str(item.get("channel") or "").strip()
+    if channel_id:
+        return "/creator?" + urlencode({"channel_id": channel_id})
+    if channel:
+        return "/creator?" + urlencode({"channel": channel})
+    return ""
+
+
+def _video_card_html(item: dict, data_dir: Path | None = None) -> str:
+    video_id = item["video_id"]
+    title = item.get("title") or video_id
+    shots = item.get("shots_kept") or len(item.get("shot_files") or [])
+    sheets = framesheet_paths(data_dir, video_id) if data_dir else []
+    thumb = (
+        f'<img src="{_esc(media_url(data_dir, sheets[0]))}" alt="">'
+        if data_dir and item.get("has_framesheet") and sheets
+        else '<div class="ph">no sheet yet</div>'
+    )
+    creator_url = _creator_url(item)
+    channel = _esc(item.get("channel") or "unknown uploader")
+    creator = (
+        f'<a class="creator-link" href="{_esc(creator_url)}">{channel}</a>'
+        if creator_url
+        else channel
+    )
+    return (
+        f'<article class="card"><a class="card-thumb" href="/v/{video_id}">{thumb}</a>'
+        f'<div class="info"><div class="card-head"><strong>'
+        f'<a class="card-title" href="/v/{video_id}">{_esc(title)}</a></strong>'
+        f'{_got_html(item.get("downloaded_at") or "")}</div>'
+        f'<div class="meta">{creator}'
+        f'{f" · {shots} shots" if shots else ""}</div></div></article>'
+    )
+
+
 def home_html(
     items: list[dict],
     query: str = "",
@@ -263,24 +305,7 @@ def home_html(
     sort: str = "recent",
 ) -> bytes:
     sort = normalize_video_sort(sort)
-    cards = []
-    for it in items:
-        vid = it["video_id"]
-        title = it.get("title") or vid
-        shots = it.get("shots_kept") or len(it.get("shot_files") or [])
-        sheets = framesheet_paths(data_dir, vid) if data_dir else []
-        thumb = (
-            f'<img src="{_esc(media_url(data_dir, sheets[0]))}" alt="">'
-            if data_dir and it.get("has_framesheet") and sheets
-            else '<div class="ph">no sheet yet</div>'
-        )
-        cards.append(
-            f'<a class="card" href="/v/{vid}">{thumb}<div class="info">'
-            f'<div class="card-head"><strong>{_esc(title)}</strong>'
-            f'{_got_html(it.get("downloaded_at") or "")}</div>'
-            f'<div class="meta">{_esc(it.get("channel"))}'
-            f'{f" · {shots} shots" if shots else ""}</div></div></a>'
-        )
+    cards = [_video_card_html(item, data_dir) for item in items]
     empty = (
         f'<p class="empty">No matches for “{_esc(query)}”.</p>'
         if query
@@ -403,12 +428,23 @@ async function refreshList() {
     const thumb = it.thumb_url
       ? '<img src="' + it.thumb_url + '" alt="">'
       : '<div class="ph">no sheet yet</div>';
-    return '<a class="card" href="/v/' + it.video_id + '">' + thumb
-      + '<div class="info"><div class="card-head"><strong>'
-      + escapeHtml(it.title || it.video_id) + '</strong>' + gotHtml(it.downloaded_at)
-      + '</div><div class="meta">' + escapeHtml(it.channel || '') + shots + '</div></div></a>';
+    const creator = creatorUrl(it);
+    const channel = escapeHtml(it.channel || 'unknown uploader');
+    const creatorHtml = creator
+      ? '<a class="creator-link" href="' + creator + '">' + channel + '</a>'
+      : channel;
+    return '<article class="card"><a class="card-thumb" href="/v/' + it.video_id + '">' + thumb
+      + '</a><div class="info"><div class="card-head"><strong>'
+      + '<a class="card-title" href="/v/' + it.video_id + '">'
+      + escapeHtml(it.title || it.video_id) + '</a></strong>' + gotHtml(it.downloaded_at)
+      + '</div><div class="meta">' + creatorHtml + shots + '</div></div></article>';
   }).join('');
   localizeTimes();
+}
+function creatorUrl(it) {
+  if (it.channel_id) return '/creator?channel_id=' + encodeURIComponent(it.channel_id);
+  if (it.channel) return '/creator?channel=' + encodeURIComponent(it.channel);
+  return '';
 }
 function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -458,6 +494,75 @@ localizeTimes();
     return _page("ytarchive", body, js)
 
 
+def creator_html(
+    items: list[dict],
+    *,
+    creator_name: str,
+    channel_id: str = "",
+    channel: str = "",
+    query: str = "",
+    sort: str = "recent",
+    total_count: int,
+    data_dir: Path,
+) -> bytes:
+    sort = normalize_video_sort(sort)
+    cards = "".join(_video_card_html(item, data_dir) for item in items)
+    if not cards:
+        cards = f'<p class="empty">No videos match “{_esc(query)}”.</p>'
+    identity = (
+        f'<input type="hidden" name="channel_id" value="{_esc(channel_id)}">'
+        if channel_id
+        else f'<input type="hidden" name="channel" value="{_esc(channel)}">'
+    )
+    sort_options = "".join(
+        f'<option value="{value}"{" selected" if value == sort else ""}>{label}</option>'
+        for value, label in SORT_OPTIONS
+    )
+    youtube_channel = (
+        f' · <a href="https://www.youtube.com/channel/{_esc(channel_id)}">YouTube channel</a>'
+        if channel_id
+        else ""
+    )
+    shown = (
+        f'<strong>{len(items)}</strong> of <strong>{total_count}</strong> videos'
+        if query
+        else f'<strong>{total_count}</strong> videos'
+    )
+    body = f"""
+<header>
+  <div><a href="/">← archive</a></div>
+  <h1>{_esc(creator_name)}</h1>
+  <div class="creator-count">{shown}</div>
+  <div class="meta">{_esc(channel_id)}{youtube_channel}</div>
+</header>
+<main>
+  <h2>Videos by this creator</h2>
+  <form class="archive-tools" method="get" action="/creator">
+    {identity}
+    <div class="find">
+      <input name="q" value="{_esc(query)}" placeholder="search this creator’s videos and transcripts…" autocomplete="off">
+      <button type="submit">Search</button>
+    </div>
+    <label class="sort-field"><span>Sort videos</span>
+      <select name="sort" onchange="this.form.submit()">{sort_options}</select>
+    </label>
+  </form>
+  <div class="list">{cards}</div>
+</main>
+"""
+    js = r"""
+document.querySelectorAll('time[data-local]').forEach((el) => {
+  const date = new Date(el.dateTime);
+  if (!Number.isNaN(date.getTime())) {
+    el.textContent = new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium', timeStyle: 'short',
+    }).format(date);
+  }
+});
+"""
+    return _page(f"{creator_name} · ytarchive", body, js)
+
+
 def detail_html(info: dict, data_dir: Path) -> bytes:
     vid = info["video_id"]
     title = info.get("title") or vid
@@ -489,10 +594,17 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
         for r in kept
         if r.get("t0") is not None
     ]
+    creator_url = _creator_url(info)
+    creator_name = _esc(info.get("channel") or "unknown uploader")
+    creator_link = (
+        f'<a class="creator-link" href="{_esc(creator_url)}">{creator_name}</a>'
+        if creator_url
+        else creator_name
+    )
     parts = [
         f'<header><div><a href="/">← archive</a></div>',
         f"<h1>{_esc(title)}</h1>",
-        f'<div class="meta">{_esc(info.get("channel"))} · {dur} · {vid} · '
+        f'<div class="meta">{creator_link} · {dur} · {vid} · '
         f'<a href="{watch_url(vid)}">YouTube</a></div></header><main>',
     ]
     if video:
@@ -1110,6 +1222,48 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 sort = normalize_video_sort((params.get("sort") or ["recent"])[0])
                 return self._bytes(
                     home_html(list_items(data_dir, q, sort), q, data_dir, sort)
+                )
+            if path == "/creator":
+                params = parse_qs(parsed.query)
+                channel_id = (params.get("channel_id") or [""])[0].strip()[:200]
+                channel = (params.get("channel") or [""])[0].strip()[:300]
+                q = (params.get("q") or [""])[0].strip()
+                sort = normalize_video_sort((params.get("sort") or ["recent"])[0])
+                all_items = list_creator_videos(
+                    data_dir, channel_id=channel_id, channel=channel, sort=sort
+                )
+                if not all_items:
+                    return self._bytes(
+                        _page(
+                            "creator not found",
+                            '<main><p><a href="/">← archive</a></p>'
+                            "<h1>Creator not found</h1></main>",
+                        ),
+                        404,
+                    )
+                items = (
+                    list_creator_videos(
+                        data_dir,
+                        channel_id=channel_id,
+                        channel=channel,
+                        query=q,
+                        sort=sort,
+                    )
+                    if q
+                    else all_items
+                )
+                creator_name = all_items[0].get("channel") or channel or channel_id
+                return self._bytes(
+                    creator_html(
+                        items,
+                        creator_name=creator_name,
+                        channel_id=channel_id,
+                        channel=channel,
+                        query=q,
+                        sort=sort,
+                        total_count=len(all_items),
+                        data_dir=data_dir,
+                    )
                 )
             if path == "/api/list":
                 params = parse_qs(parsed.query)
