@@ -20,6 +20,8 @@ history and `to_archive` marks. This process owns the files and the ML venv
 | [docs/setup.md](docs/setup.md) | New-machine install, `.venv`, live service |
 | [docs/download.md](docs/download.md) | yt-dlp flags, cookies, JS runtime — settled, do not reinvent |
 | [docs/framesheets.md](docs/framesheets.md) | Shot pipeline, thresholds, rejected approaches |
+| [docs/browsing.md](docs/browsing.md) | Default recent-first archive order and URL-backed sort choices |
+| [docs/transcription.md](docs/transcription.md) | Explicit local Whisper jobs, timed transcript UI, captions, speakers |
 
 Every durable note in this repo is in that list or linked from one of those
 files. Do not leave decisions only in chat.
@@ -32,8 +34,8 @@ The main path is the live service, not the CLI.
 `http://127.0.0.1:8765/` — or `http://ytarchive.localhost` on boxes with
 the Caddy `*.localhost` proxy. Paste one URL or a pile of them; each
 becomes a queued job. Jobs run one at a time: download, then shots, then
-soundtrack. The same page lists and searches the archive; each item has a
-player, framesheet, and soundtrack.
+MP3 audio. The same page lists and searches the archive; each item has a
+player, framesheet, MP3 audio, and optional user-triggered transcript.
 
 ```sh
 systemctl --user status yt-archive.service
@@ -58,10 +60,11 @@ second launcher. Use it for one-off get/shots/audio/reindex, or to run the
 server when the unit is not in play.
 
 ```sh
-./yt get <url-or-id>           # download + shots + soundtrack mp3
+./yt get <url-or-id>           # download + shots + MP3 audio
 ./yt get <url-or-id> --skip-shots
 ./yt shots <id>
-./yt audio <id>                # dump soundtrack mp3 (video already on disk)
+./yt audio <id>                # create MP3 audio (video already on disk)
+./yt transcribe <id>           # explicit local Whisper run
 ./yt list
 ./yt reindex                   # rebuild sqlite catalog from data/
 ./yt serve [--host 127.0.0.1] [--port 8765]
@@ -76,6 +79,8 @@ data/<id>/
   _condensed/
     framesheet.png
     soundtrack.mp3
+    transcript.json
+    transcript.vtt
     shots.json
     shots/0000.png …
 ```

@@ -99,13 +99,14 @@ def write_video_index(data_dir: Path, video_id: str) -> Path:
     mp3 = soundtrack_path(data_dir, video_id)
     if mp3.is_file():
         parts.append(
-            f'<p class="meta">Soundtrack</p>'
+            f'<p class="meta">MP3 audio — <a href="_condensed/{_esc(mp3.name)}" download>download MP3</a></p>'
             f'<p><audio controls preload="metadata" src="_condensed/{_esc(mp3.name)}" '
             f'style="width:100%"></audio></p>'
         )
     for sheet in framesheet_paths(data_dir, video_id):
         parts.append(
-            f'<p><img class="sheet" src="_condensed/{_esc(sheet.name)}" alt="framesheet"></p>'
+            f'<p><a href="_condensed/{_esc(sheet.name)}" target="_blank" rel="noopener">'
+            f'<img class="sheet" src="_condensed/{_esc(sheet.name)}" alt="framesheet"></a></p>'
         )
     shot_files = sorted(shots_dir(data_dir, video_id).glob("*.png"))
     times = {}

@@ -1,15 +1,31 @@
 """Tiny SQLite catalog + durable job queue. Files stay the source of truth."""
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .paths import framesheet_paths, list_archived_ids, load_archive_info, media_url
+from .paths import (
+    framesheet_paths,
+    list_archived_ids,
+    load_archive_info,
+    media_url,
+    transcript_json_path,
+    transcript_vtt_path,
+)
 
 DB_NAME = "ytarchive.sqlite"
+
+VIDEO_SORT_ORDERS = {
+    "recent": "downloaded_at DESC, video_id COLLATE NOCASE ASC",
+    "oldest": "downloaded_at ASC, video_id COLLATE NOCASE ASC",
+    "uploaded": "upload_date DESC, title COLLATE NOCASE ASC, video_id COLLATE NOCASE ASC",
+    "title": "title COLLATE NOCASE ASC, video_id COLLATE NOCASE ASC",
+    "channel": "channel COLLATE NOCASE ASC, title COLLATE NOCASE ASC, video_id COLLATE NOCASE ASC",
+}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS videos (
@@ -27,7 +43,8 @@ CREATE TABLE IF NOT EXISTS videos (
   shots_kept INTEGER,
   has_video INTEGER NOT NULL DEFAULT 0,
   has_framesheet INTEGER NOT NULL DEFAULT 0,
-  has_soundtrack INTEGER NOT NULL DEFAULT 0
+  has_soundtrack INTEGER NOT NULL DEFAULT 0,
+  has_transcript INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS videos_by_time ON videos(downloaded_at DESC);
 
@@ -47,6 +64,48 @@ CREATE TABLE IF NOT EXISTS jobs (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS jobs_by_status ON jobs(status, created_at);
+
+CREATE TABLE IF NOT EXISTS work_jobs (
+  id TEXT PRIMARY KEY,
+  work_key TEXT NOT NULL UNIQUE,
+  video_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued',
+  config TEXT NOT NULL DEFAULT '{}',
+  progress REAL NOT NULL DEFAULT 0,
+  message TEXT NOT NULL DEFAULT '',
+  error TEXT NOT NULL DEFAULT '',
+  log TEXT NOT NULL DEFAULT '[]',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS work_jobs_by_status
+  ON work_jobs(status, created_at);
+
+CREATE TABLE IF NOT EXISTS transcripts (
+  video_id TEXT PRIMARY KEY,
+  engine TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL DEFAULT '',
+  language TEXT NOT NULL DEFAULT '',
+  language_probability REAL NOT NULL DEFAULT 0,
+  duration REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT '',
+  full_text TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS transcript_segments (
+  video_id TEXT NOT NULL,
+  segment_index INTEGER NOT NULL,
+  start REAL NOT NULL,
+  end REAL NOT NULL,
+  text TEXT NOT NULL,
+  speaker TEXT NOT NULL DEFAULT '',
+  words_json TEXT NOT NULL DEFAULT '[]',
+  PRIMARY KEY(video_id, segment_index)
+);
+CREATE INDEX IF NOT EXISTS transcript_segments_by_video_time
+  ON transcript_segments(video_id, start);
 """
 
 
@@ -70,6 +129,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "has_soundtrack" not in vcols:
         conn.execute(
             "ALTER TABLE videos ADD COLUMN has_soundtrack INTEGER NOT NULL DEFAULT 0"
+        )
+    if "has_transcript" not in vcols:
+        conn.execute(
+            "ALTER TABLE videos ADD COLUMN has_transcript INTEGER NOT NULL DEFAULT 0"
         )
     jcols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
     if "audio" not in jcols:
@@ -99,6 +162,7 @@ def _row_from_info(info: dict) -> dict:
         "has_video": 1 if info.get("has_video") else 0,
         "has_framesheet": 1 if info.get("has_framesheet") else 0,
         "has_soundtrack": 1 if info.get("has_soundtrack") else 0,
+        "has_transcript": 1 if info.get("has_transcript") else 0,
     }
 
 
@@ -115,12 +179,13 @@ def upsert(data_dir: Path, video_id: str | None = None, info: dict | None = None
             INSERT INTO videos (
               video_id, title, channel, channel_id, duration, upload_date,
               description, video_file, file_size, downloaded_at,
-              shots_detected, shots_kept, has_video, has_framesheet, has_soundtrack
+              shots_detected, shots_kept, has_video, has_framesheet, has_soundtrack,
+              has_transcript
             ) VALUES (
               :video_id, :title, :channel, :channel_id, :duration, :upload_date,
               :description, :video_file, :file_size, :downloaded_at,
               :shots_detected, :shots_kept, :has_video, :has_framesheet,
-              :has_soundtrack
+              :has_soundtrack, :has_transcript
             )
             ON CONFLICT(video_id) DO UPDATE SET
               title=excluded.title,
@@ -136,7 +201,8 @@ def upsert(data_dir: Path, video_id: str | None = None, info: dict | None = None
               shots_kept=excluded.shots_kept,
               has_video=excluded.has_video,
               has_framesheet=excluded.has_framesheet,
-              has_soundtrack=excluded.has_soundtrack
+              has_soundtrack=excluded.has_soundtrack,
+              has_transcript=excluded.has_transcript
             """,
             row,
         )
@@ -150,6 +216,8 @@ def rebuild(data_dir: Path) -> int:
     conn = connect(data_dir)
     try:
         conn.execute("DELETE FROM videos")
+        conn.execute("DELETE FROM transcripts")
+        conn.execute("DELETE FROM transcript_segments")
         for video_id in ids:
             row = _row_from_info(load_archive_info(data_dir, video_id))
             conn.execute(
@@ -157,23 +225,40 @@ def rebuild(data_dir: Path) -> int:
                 INSERT INTO videos (
                   video_id, title, channel, channel_id, duration, upload_date,
                   description, video_file, file_size, downloaded_at,
-                  shots_detected, shots_kept, has_video, has_framesheet, has_soundtrack
+                  shots_detected, shots_kept, has_video, has_framesheet, has_soundtrack,
+                  has_transcript
                 ) VALUES (
                   :video_id, :title, :channel, :channel_id, :duration, :upload_date,
                   :description, :video_file, :file_size, :downloaded_at,
                   :shots_detected, :shots_kept, :has_video, :has_framesheet,
-                  :has_soundtrack
+                  :has_soundtrack, :has_transcript
                 )
                 """,
                 row,
             )
+            transcript_path = transcript_json_path(data_dir, video_id)
+            if (
+                transcript_path.is_file()
+                and transcript_vtt_path(data_dir, video_id).is_file()
+            ):
+                try:
+                    artifact = json.loads(transcript_path.read_text(encoding="utf-8"))
+                    _replace_transcript_conn(conn, artifact)
+                except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+                    pass
         conn.commit()
         return len(ids)
     finally:
         conn.close()
 
 
-def list_videos(data_dir: Path, query: str = "") -> list[dict]:
+def normalize_video_sort(sort: str = "") -> str:
+    return sort if sort in VIDEO_SORT_ORDERS else "recent"
+
+
+def list_videos(
+    data_dir: Path, query: str = "", sort: str = "recent"
+) -> list[dict]:
     if not db_path(data_dir).is_file():
         rebuild(data_dir)
     conn = connect(data_dir)
@@ -185,12 +270,19 @@ def list_videos(data_dir: Path, query: str = "") -> list[dict]:
             clauses = []
             for word in words:
                 clauses.append(
-                    "(title LIKE ? OR channel LIKE ? OR video_id LIKE ? OR description LIKE ?)"
+                    """(
+                      title LIKE ? OR channel LIKE ? OR video_id LIKE ? OR description LIKE ?
+                      OR EXISTS (
+                        SELECT 1 FROM transcript_segments ts
+                        WHERE ts.video_id=videos.video_id
+                          AND (ts.text LIKE ? OR ts.speaker LIKE ?)
+                      )
+                    )"""
                 )
                 needle = f"%{word}%"
-                params.extend([needle, needle, needle, needle])
+                params.extend([needle, needle, needle, needle, needle, needle])
             sql += " WHERE " + " AND ".join(clauses)
-        sql += " ORDER BY downloaded_at DESC"
+        sql += f" ORDER BY {VIDEO_SORT_ORDERS[normalize_video_sort(sort)]}"
         rows = conn.execute(sql, params).fetchall()
         items = [_public(r) for r in rows]
         for it in items:
@@ -220,7 +312,122 @@ def _public(row: sqlite3.Row) -> dict:
         "has_video": bool(row["has_video"]),
         "has_framesheet": bool(row["has_framesheet"]),
         "has_soundtrack": bool(row["has_soundtrack"]),
+        "has_transcript": bool(row["has_transcript"]),
     }
+
+
+def replace_transcript(data_dir: Path, artifact: dict) -> None:
+    conn = connect(data_dir)
+    try:
+        _replace_transcript_conn(conn, artifact)
+        conn.execute(
+            "UPDATE videos SET has_transcript=1 WHERE video_id=?",
+            (artifact["video_id"],),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_transcript(data_dir: Path, video_id: str) -> None:
+    conn = connect(data_dir)
+    try:
+        conn.execute("DELETE FROM transcript_segments WHERE video_id=?", (video_id,))
+        conn.execute("DELETE FROM transcripts WHERE video_id=?", (video_id,))
+        conn.execute(
+            "UPDATE videos SET has_transcript=0 WHERE video_id=?", (video_id,)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _replace_transcript_conn(conn: sqlite3.Connection, artifact: dict) -> None:
+    video_id = artifact["video_id"]
+    conn.execute(
+        """
+        INSERT INTO transcripts (
+          video_id, engine, model, language, language_probability,
+          duration, created_at, full_text
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(video_id) DO UPDATE SET
+          engine=excluded.engine,
+          model=excluded.model,
+          language=excluded.language,
+          language_probability=excluded.language_probability,
+          duration=excluded.duration,
+          created_at=excluded.created_at,
+          full_text=excluded.full_text
+        """,
+        (
+            video_id,
+            artifact.get("engine") or "",
+            artifact.get("model") or "",
+            artifact.get("language") or "",
+            float(artifact.get("language_probability") or 0),
+            float(artifact.get("duration") or 0),
+            artifact.get("created_at") or "",
+            artifact.get("full_text") or "",
+        ),
+    )
+    conn.execute("DELETE FROM transcript_segments WHERE video_id=?", (video_id,))
+    for index, segment in enumerate(artifact.get("segments") or []):
+        conn.execute(
+            """
+            INSERT INTO transcript_segments (
+              video_id, segment_index, start, end, text, speaker, words_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                video_id,
+                int(segment.get("index", index)),
+                float(segment.get("start") or 0),
+                float(segment.get("end") or 0),
+                segment.get("text") or "",
+                segment.get("speaker") or "",
+                json.dumps(segment.get("words") or [], ensure_ascii=False),
+            ),
+        )
+
+
+def get_transcript(data_dir: Path, video_id: str) -> dict | None:
+    conn = connect(data_dir)
+    try:
+        row = conn.execute(
+            "SELECT * FROM transcripts WHERE video_id=?", (video_id,)
+        ).fetchone()
+        if not row:
+            return None
+        segments = conn.execute(
+            """
+            SELECT * FROM transcript_segments
+            WHERE video_id=? ORDER BY segment_index
+            """,
+            (video_id,),
+        ).fetchall()
+        return {
+            "video_id": row["video_id"],
+            "engine": row["engine"],
+            "model": row["model"],
+            "language": row["language"],
+            "language_probability": row["language_probability"],
+            "duration": row["duration"],
+            "created_at": row["created_at"],
+            "full_text": row["full_text"],
+            "segments": [
+                {
+                    "index": segment["segment_index"],
+                    "start": segment["start"],
+                    "end": segment["end"],
+                    "text": segment["text"],
+                    "speaker": segment["speaker"],
+                    "words": json.loads(segment["words_json"] or "[]"),
+                }
+                for segment in segments
+            ],
+        }
+    finally:
+        conn.close()
 
 
 def _now() -> str:
@@ -329,6 +536,23 @@ def update_job(data_dir: Path, job_id: str, **fields) -> dict | None:
     finally:
         conn.close()
     return get_job(data_dir, job_id)
+
+
+def defer_job(data_dir: Path, job_id: str) -> None:
+    """Put a claimed job at the back while its video's source is busy."""
+    now = _now()
+    conn = connect(data_dir)
+    try:
+        conn.execute(
+            """
+            UPDATE jobs SET status='queued', created_at=?, updated_at=?
+            WHERE id=? AND status='running'
+            """,
+            (now, now, job_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def append_job_log(data_dir: Path, job_id: str, line: str) -> None:
@@ -442,6 +666,254 @@ def recover_jobs(data_dir: Path) -> int:
                 WHERE id=?
                 """,
                 (now, row["id"]),
+            )
+        conn.commit()
+        return len(rows)
+    finally:
+        conn.close()
+
+
+def _work_public(row: sqlite3.Row) -> dict:
+    try:
+        config = json.loads(row["config"] or "{}")
+    except json.JSONDecodeError:
+        config = {}
+    try:
+        log = json.loads(row["log"] or "[]")
+    except json.JSONDecodeError:
+        log = []
+    return {
+        "job_id": row["id"],
+        "work_key": row["work_key"],
+        "video_id": row["video_id"],
+        "kind": row["kind"],
+        "status": row["status"],
+        "config": config,
+        "progress": float(row["progress"] or 0),
+        "message": row["message"] or "",
+        "error": row["error"] or "",
+        "log": log,
+        "attempts": int(row["attempts"] or 0),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def enqueue_work(
+    data_dir: Path,
+    *,
+    work_key: str,
+    video_id: str,
+    kind: str,
+    config: dict,
+    force: bool = False,
+) -> dict:
+    """Insert once by durable work key, or requeue the same row for retry/replace."""
+    now = _now()
+    conn = connect(data_dir)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT * FROM work_jobs WHERE work_key=?", (work_key,)
+        ).fetchone()
+        if row:
+            if row["status"] in ("queued", "running"):
+                conn.commit()
+            elif row["status"] == "error" or force:
+                conn.execute(
+                    """
+                    UPDATE work_jobs SET
+                      status='queued', progress=0, message='queued',
+                      error='', log='[]', updated_at=?
+                    WHERE id=?
+                    """,
+                    (now, row["id"]),
+                )
+                conn.commit()
+                row = conn.execute(
+                    "SELECT * FROM work_jobs WHERE id=?", (row["id"],)
+                ).fetchone()
+            else:
+                conn.commit()
+            return _work_public(row)
+        job_id = uuid.uuid4().hex[:12]
+        conn.execute(
+            """
+            INSERT INTO work_jobs (
+              id, work_key, video_id, kind, status, config, progress,
+              message, error, log, attempts, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, 'queued', ?, 0, 'queued', '', '[]', 0, ?, ?)
+            """,
+            (
+                job_id,
+                work_key,
+                video_id,
+                kind,
+                json.dumps(config, sort_keys=True),
+                now,
+                now,
+            ),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM work_jobs WHERE id=?", (job_id,)).fetchone()
+        return _work_public(row)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def get_work_job(data_dir: Path, job_id: str) -> dict | None:
+    conn = connect(data_dir)
+    try:
+        row = conn.execute(
+            "SELECT * FROM work_jobs WHERE id=?", (job_id,)
+        ).fetchone()
+        return _work_public(row) if row else None
+    finally:
+        conn.close()
+
+
+def claim_next_work(data_dir: Path) -> dict | None:
+    conn = connect(data_dir)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            """
+            SELECT * FROM work_jobs
+            WHERE status='queued' ORDER BY created_at ASC LIMIT 1
+            """
+        ).fetchone()
+        if not row:
+            conn.commit()
+            return None
+        changed = conn.execute(
+            """
+            UPDATE work_jobs SET
+              status='running', attempts=attempts+1, message='starting',
+              updated_at=?
+            WHERE id=? AND status='queued'
+            """,
+            (_now(), row["id"]),
+        ).rowcount
+        conn.commit()
+        if not changed:
+            return None
+        row = conn.execute(
+            "SELECT * FROM work_jobs WHERE id=?", (row["id"],)
+        ).fetchone()
+        return _work_public(row)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def update_work_job(data_dir: Path, job_id: str, **fields) -> dict | None:
+    allowed = {"status", "progress", "message", "error"}
+    sets = []
+    params = []
+    for key, value in fields.items():
+        if key not in allowed:
+            raise KeyError(key)
+        if key == "progress":
+            value = max(0.0, min(1.0, float(value)))
+        sets.append(f"{key}=?")
+        params.append(value)
+    if not sets:
+        return get_work_job(data_dir, job_id)
+    sets.append("updated_at=?")
+    params.extend([_now(), job_id])
+    conn = connect(data_dir)
+    try:
+        conn.execute(f"UPDATE work_jobs SET {', '.join(sets)} WHERE id=?", params)
+        conn.commit()
+    finally:
+        conn.close()
+    return get_work_job(data_dir, job_id)
+
+
+def append_work_log(data_dir: Path, job_id: str, line: str) -> None:
+    conn = connect(data_dir)
+    try:
+        row = conn.execute(
+            "SELECT log FROM work_jobs WHERE id=?", (job_id,)
+        ).fetchone()
+        if not row:
+            return
+        try:
+            log = json.loads(row["log"] or "[]")
+        except json.JSONDecodeError:
+            log = []
+        log.append(str(line))
+        conn.execute(
+            "UPDATE work_jobs SET log=?, message=?, updated_at=? WHERE id=?",
+            (json.dumps(log[-100:]), str(line), _now(), job_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def has_queued_work(data_dir: Path) -> bool:
+    conn = connect(data_dir)
+    try:
+        return (
+            conn.execute(
+                "SELECT COUNT(*) FROM work_jobs WHERE status='queued'"
+            ).fetchone()[0]
+            > 0
+        )
+    finally:
+        conn.close()
+
+
+def recover_work_jobs(data_dir: Path) -> int:
+    """Finish published work after a crash; otherwise safely retry the same row."""
+    conn = connect(data_dir)
+    try:
+        rows = conn.execute(
+            "SELECT * FROM work_jobs WHERE status='running'"
+        ).fetchall()
+        for row in rows:
+            published = False
+            path = transcript_json_path(data_dir, row["video_id"])
+            vtt = transcript_vtt_path(data_dir, row["video_id"])
+            if row["kind"] == "transcribe" and path.is_file() and vtt.is_file():
+                try:
+                    artifact = json.loads(path.read_text(encoding="utf-8"))
+                    vtt_sha256 = hashlib.sha256(vtt.read_bytes()).hexdigest()
+                    expected_generation = f"{row['id']}:{row['attempts']}"
+                    if (
+                        artifact.get("work_key") == row["work_key"]
+                        and artifact.get("generation_id") == expected_generation
+                        and artifact.get("vtt_sha256") == vtt_sha256
+                    ):
+                        _replace_transcript_conn(conn, artifact)
+                        conn.execute(
+                            "UPDATE videos SET has_transcript=1 WHERE video_id=?",
+                            (row["video_id"],),
+                        )
+                        published = True
+                except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+                    published = False
+            conn.execute(
+                """
+                UPDATE work_jobs SET
+                  status=?, progress=?, message=?, updated_at=?
+                WHERE id=?
+                """,
+                (
+                    "done" if published else "queued",
+                    1 if published else 0,
+                    "recovered completed transcript"
+                    if published
+                    else "recovered after service restart",
+                    _now(),
+                    row["id"],
+                ),
             )
         conn.commit()
         return len(rows)

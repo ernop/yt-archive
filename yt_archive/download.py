@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -153,8 +155,42 @@ def write_archive_json(data_dir: Path, video_id: str, video: Path, extra: dict |
         if kept:
             prev["downloaded_at"] = kept
         payload = prev
-    out.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    _atomic_json(out, payload)
     from .db import upsert
 
     upsert(data_dir, video_id)
     return out
+
+
+def clear_archive_extras(data_dir: Path, video_id: str, *keys: str) -> None:
+    out = archive_json_path(data_dir, video_id)
+    if not out.is_file():
+        return
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    changed = False
+    for key in keys:
+        if key in payload:
+            payload.pop(key)
+            changed = True
+    if changed:
+        _atomic_json(out, payload)
+
+
+def _atomic_json(path: Path, payload: dict) -> None:
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".part", dir=path.parent
+    )
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        tmp.replace(path)
+    except Exception:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
+        raise

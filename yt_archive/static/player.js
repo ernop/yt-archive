@@ -19,6 +19,7 @@
   const LS_SPEED = "ytarchive.speed";
   const LS_VOL = "ytarchive.vol";
   const LS_THEATER = "ytarchive.theater";
+  const LS_CC = "ytarchive.cc";
   const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
   let showRemaining = false;
   let hideTimer = 0;
@@ -208,6 +209,19 @@
     if (document.pictureInPictureElement) await document.exitPictureInPicture();
     else if (document.pictureInPictureEnabled) await video.requestPictureInPicture();
   };
+  const ccButton = root.querySelector("[data-act=cc]");
+  if (ccButton) {
+    const captions = video.textTracks[0];
+    const setCaptions = (showing) => {
+      if (!captions) return;
+      captions.mode = showing ? "showing" : "hidden";
+      ccButton.textContent = showing ? "CC on" : "CC";
+      localStorage.setItem(LS_CC, showing ? "1" : "0");
+      root.dispatchEvent(new CustomEvent("ytarchive:cc", { detail: { showing } }));
+    };
+    ccButton.onclick = () => setCaptions(captions && captions.mode !== "showing");
+    setCaptions(localStorage.getItem(LS_CC) === "1");
+  }
   root.querySelector("[data-act=theater]").onclick = () => {
     document.body.classList.toggle("theater");
     localStorage.setItem(LS_THEATER, document.body.classList.contains("theater") ? "1" : "0");

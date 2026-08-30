@@ -1,6 +1,7 @@
 """ytarchive web UI — paste a URL, get the video + squash framesheet."""
 from __future__ import annotations
 
+import ipaddress
 import json
 import mimetypes
 import subprocess
@@ -8,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+from .db import normalize_video_sort
 from .jobs import JobQueue
 from .paths import (
     all_labeled_path,
@@ -26,9 +28,12 @@ from .paths import (
     shots_dir,
     shots_json_path,
     soundtrack_path,
+    transcript_json_path,
+    transcript_vtt_path,
     video_dir,
     watch_url,
 )
+from .work import DerivedWorkQueue
 
 # Finished files never change at a given URL (multi-image-client rule).
 # HTML embeds ?v=mtime-size; reget writes new bytes → new key.
@@ -42,7 +47,7 @@ CSS = """
 * { box-sizing: border-box; }
 body { margin: 0; font: 16px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
 a { color: #f88; }
-header, main { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1.25rem 2rem; }
+header, main { width: 100%; margin: 0; padding: 1.25rem clamp(1rem, 3vw, 2.5rem) 2rem; }
 h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
 h1 a { color: inherit; text-decoration: none; }
 .sub { color: var(--muted); margin-bottom: 1.25rem; }
@@ -53,12 +58,17 @@ form.get input:focus { outline: none; border-color: var(--red); }
 form.get button { background: var(--red); color: #fff; border: 0; padding: .7rem 1.2rem;
   border-radius: 6px; font-weight: 600; cursor: pointer; }
 form.get button:disabled { opacity: .5; cursor: wait; }
-form.find { display: flex; gap: .5rem; margin: 0 0 1rem; }
-form.find input { flex: 1; background: #0d0d0d; border: 1px solid var(--line); color: var(--fg);
+.archive-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem;
+  align-items: end; margin: 0 0 1rem; }
+.archive-tools .find { display: flex; gap: .5rem; min-width: 0; }
+.archive-tools input { flex: 1; min-width: 0; background: #0d0d0d; border: 1px solid var(--line); color: var(--fg);
   padding: .45rem .7rem; border-radius: 6px; font-size: .95rem; }
-form.find input:focus { outline: none; border-color: var(--red); }
-form.find button { background: #2a2a2a; color: var(--fg); border: 1px solid var(--line);
+.archive-tools input:focus, .archive-tools select:focus { outline: none; border-color: var(--red); }
+.archive-tools button { background: #2a2a2a; color: var(--fg); border: 1px solid var(--line);
   padding: .45rem .8rem; border-radius: 6px; cursor: pointer; }
+.sort-field { display: grid; gap: .25rem; color: var(--muted); font-size: .78rem; font-weight: 650; }
+.sort-field select { min-width: 12rem; background: #0d0d0d; border: 1px solid var(--line);
+  color: var(--fg); padding: .45rem .7rem; border-radius: 6px; font: 500 .95rem/1.45 system-ui, sans-serif; }
 #status { min-height: 1.4em; color: var(--muted); margin-bottom: .5rem; font-family: ui-monospace, monospace; font-size: .9rem; white-space: pre-wrap; }
 #status.error { color: #f88; }
 #status.done { color: #8d8; }
@@ -75,8 +85,14 @@ h2 { font-size: 1.1rem; color: var(--muted); font-weight: 600; margin: 2rem 0 .7
 .card:hover { border-color: var(--red); }
 .card img, .card .ph { width: 100%; height: 124px; object-fit: cover; background: #000; display: block; }
 .card .ph { color: var(--muted); display: flex; align-items: center; justify-content: center; font-size: .8rem; }
-.card .info { padding: .7rem .7rem .7rem 0; }
-.card strong { display: block; margin-bottom: .25rem; }
+.card .info { min-width: 0; padding: .7rem .7rem .7rem 0; }
+.card-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem;
+  align-items: start; margin-bottom: .3rem; }
+.card strong { display: block; font-size: 1.03rem; font-weight: 700; }
+.got { color: var(--muted); font-size: .72rem; white-space: nowrap; text-align: right; }
+.got-label { margin-right: .3rem; }
+.got time { color: #fff; font: 700 .9rem/1.25 ui-monospace, monospace;
+  font-variant-numeric: tabular-nums; }
 .meta { color: var(--muted); font-size: .85rem; }
 .sheet { width: 100%; height: auto; border: 1px solid var(--line); margin-bottom: 1.25rem; }
 .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
@@ -105,6 +121,67 @@ h2 { font-size: 1.1rem; color: var(--muted); font-weight: 600; margin: 2rem 0 .7
 #backfill-status, #audio-status { margin-top: .4rem; font-family: ui-monospace, monospace; font-size: .85rem; white-space: pre-wrap; color: var(--muted); }
 #backfill-status.error, #audio-status.error { color: #f88; }
 #backfill-status.done, #audio-status.done { color: #8d8; }
+.transcript { margin: 1.25rem 0 2rem; padding: 1rem; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--card); }
+.transcript h2 { color: var(--fg); font-size: 1.25rem; font-weight: 700; margin: 0 0 .65rem; }
+.transcript .actions, .transcript-controls, .speaker-tools { display: flex; flex-wrap: wrap;
+  align-items: center; gap: .55rem; }
+.transcript button, .transcript select, .transcript input, dialog button, dialog select, dialog input {
+  background: #111; border: 1px solid #444; color: var(--fg); padding: .45rem .65rem;
+  border-radius: 5px; font: inherit; }
+.transcript button, dialog button { cursor: pointer; }
+.transcript button:hover, dialog button:hover { border-color: #888; }
+.transcript button:disabled, dialog button:disabled { opacity: .55; cursor: wait; }
+.transcript-search { flex: 1 1 18rem; min-width: 12rem; }
+.transcript-progress { margin-top: .8rem; }
+.transcript-progress-value { color: var(--fg); font: 700 1.65rem/1 ui-monospace, monospace;
+  font-variant-numeric: tabular-nums; }
+.transcript-progress-label { color: var(--muted); margin-left: .45rem; }
+.transcript-progress-track { height: 8px; background: #090909; border-radius: 4px; margin-top: .5rem; overflow: hidden; }
+.transcript-progress-fill { height: 100%; width: 0; background: #68c77b; transition: width .2s; }
+.transcript-progress.error .transcript-progress-value, .transcript-progress.error .transcript-progress-label { color: #f88; }
+.transcript-meta { color: var(--muted); margin: .6rem 0; }
+.caption-box { max-height: min(48vh, 34rem); overflow: auto; border: 1px solid #383838;
+  background: #0d0d0d; margin-top: .75rem; scroll-behavior: smooth; }
+.caption-box.rolling .segment:not(.now) { display: none; }
+.caption-box.size-small .segment-text { font-size: .9rem; }
+.caption-box.size-medium .segment-text { font-size: 1.08rem; }
+.caption-box.size-large .segment-text { font-size: 1.4rem; line-height: 1.5; }
+.segment { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: .75rem;
+  padding: .65rem .75rem; border-bottom: 1px solid #292929; cursor: pointer; }
+.segment:last-child { border-bottom: 0; }
+.segment:hover { background: #171717; }
+.segment.now { background: #202820; box-shadow: inset 4px 0 #68c77b; }
+.segment-time { color: #fff; font: 700 .95rem/1.45 ui-monospace, monospace;
+  font-variant-numeric: tabular-nums; }
+.segment-speaker { color: #a9d6ff; display: block; font-size: .78rem; font-weight: 700;
+  margin-top: .25rem; overflow-wrap: anywhere; }
+.segment-text { color: var(--fg); line-height: 1.45; }
+.word { border-radius: 3px; }
+.word:hover { background: #554b19; color: #fff; }
+.segment.match { background: #28230f; }
+.transcript-empty { color: var(--muted); padding: 1rem; }
+.speaker-tools { border-top: 1px solid #333; margin-top: .8rem; padding-top: .8rem; }
+.speaker-tools label, .transcript-controls label { color: var(--muted); font-size: .85rem; }
+dialog { width: min(34rem, calc(100% - 2rem)); color: var(--fg); background: #181818;
+  border: 1px solid #555; border-radius: 9px; padding: 1.1rem; }
+dialog::backdrop { background: rgba(0,0,0,.72); }
+dialog h2 { color: var(--fg); font-size: 1.25rem; font-weight: 750; margin: 0 0 .4rem; }
+dialog .fields { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; margin: 1rem 0; }
+dialog label { display: grid; gap: .3rem; color: #bbb; font-size: .85rem; }
+dialog .dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .5rem; }
+dialog .primary { background: #2e7441; border-color: #4a9d61; font-weight: 700; }
+@media (max-width: 600px) {
+  .archive-tools { grid-template-columns: 1fr; align-items: stretch; }
+  .sort-field select { width: 100%; }
+  .card { grid-template-columns: 1fr; }
+  .card img, .card .ph { height: auto; min-height: 9rem; }
+  .card .info { padding: .75rem; }
+  .card-head { grid-template-columns: 1fr; gap: .25rem; }
+  .got { text-align: left; }
+  .segment { grid-template-columns: 5.4rem minmax(0, 1fr); }
+  dialog .fields { grid-template-columns: 1fr; }
+}
 """
 
 
@@ -116,6 +193,22 @@ def _esc(text) -> str:
         .replace(">", "&gt;")
         .replace('"', "&quot;")
     )
+
+
+def _is_local_host(value: str) -> bool:
+    value = (value or "").strip().lower()
+    if value.startswith("["):
+        host = value[1:].split("]", 1)[0]
+    else:
+        host, separator, port = value.rpartition(":")
+        if not separator or not port.isdigit():
+            host = value
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def _page(title: str, body: str, extra_js: str = "", extra_head: str = "", extra_tail: str = "") -> bytes:
@@ -139,12 +232,37 @@ def _static_url(name: str) -> str:
     return f"/static/{name}?v={file_cache_key(path)}"
 
 
-def home_html(items: list[dict], query: str = "", data_dir: Path | None = None) -> bytes:
+SORT_OPTIONS = (
+    ("recent", "Recently gotten"),
+    ("oldest", "First gotten"),
+    ("uploaded", "Video date — newest"),
+    ("title", "Title — A–Z"),
+    ("channel", "Channel — A–Z"),
+)
+
+
+def _got_html(downloaded_at: str) -> str:
+    stamp = str(downloaded_at or "")
+    display = stamp[:16].replace("T", " ") if stamp else "unknown"
+    if stamp.endswith("+00:00") or stamp.endswith("Z"):
+        display += " UTC"
+    return (
+        '<span class="got"><span class="got-label">got</span>'
+        f'<time datetime="{_esc(stamp)}" data-local>{_esc(display)}</time></span>'
+    )
+
+
+def home_html(
+    items: list[dict],
+    query: str = "",
+    data_dir: Path | None = None,
+    sort: str = "recent",
+) -> bytes:
+    sort = normalize_video_sort(sort)
     cards = []
     for it in items:
         vid = it["video_id"]
         title = it.get("title") or vid
-        when = (it.get("downloaded_at") or "")[:10]
         shots = it.get("shots_kept") or len(it.get("shot_files") or [])
         sheets = framesheet_paths(data_dir, vid) if data_dir else []
         thumb = (
@@ -154,8 +272,9 @@ def home_html(items: list[dict], query: str = "", data_dir: Path | None = None) 
         )
         cards.append(
             f'<a class="card" href="/v/{vid}">{thumb}<div class="info">'
-            f"<strong>{_esc(title)}</strong>"
-            f'<div class="meta">{_esc(it.get("channel"))} · {when}'
+            f'<div class="card-head"><strong>{_esc(title)}</strong>'
+            f'{_got_html(it.get("downloaded_at") or "")}</div>'
+            f'<div class="meta">{_esc(it.get("channel"))}'
             f'{f" · {shots} shots" if shots else ""}</div></div></a>'
         )
     empty = (
@@ -165,6 +284,10 @@ def home_html(items: list[dict], query: str = "", data_dir: Path | None = None) 
     )
     list_html = "".join(cards) or empty
     q_val = _esc(query)
+    sort_options = "".join(
+        f'<option value="{value}"{" selected" if value == sort else ""}>{label}</option>'
+        for value, label in SORT_OPTIONS
+    )
     body = f"""
 <header>
   <h1><a href="/">ytarchive</a></h1>
@@ -181,12 +304,17 @@ def home_html(items: list[dict], query: str = "", data_dir: Path | None = None) 
 <main>
   <h2>Archive</h2>
   <div class="backfill">
-    <button type="button" id="backfill-audio">backfill soundtracks</button>
+    <button type="button" id="backfill-audio">create missing MP3 audio</button>
     <div id="backfill-status"></div>
   </div>
-  <form class="find" method="get" action="/">
-    <input name="q" value="{q_val}" placeholder="search title, channel, id…" autocomplete="off">
-    <button type="submit">Search</button>
+  <form class="archive-tools" method="get" action="/">
+    <div class="find">
+      <input name="q" value="{q_val}" placeholder="search title, channel, id…" autocomplete="off">
+      <button type="submit">Search</button>
+    </div>
+    <label class="sort-field"><span>Sort archive</span>
+      <select name="sort" onchange="this.form.submit()">{sort_options}</select>
+    </label>
   </form>
   <div class="list">{list_html}</div>
 </main>
@@ -256,22 +384,45 @@ async function paintQueue() {
   return open.length;
 }
 async function refreshList() {
-  const res = await fetch('/api/list');
+  const params = new URLSearchParams(window.location.search);
+  const res = await fetch('/api/list?' + params.toString());
   const items = await res.json();
-  if (!items.length) return;
+  if (!items.length) {
+    const query = params.get('q') || '';
+    listEl.innerHTML = '<p class="empty">'
+      + (query ? 'No matches for “' + escapeHtml(query) + '”.' : 'Nothing archived yet.')
+      + '</p>';
+    return;
+  }
   listEl.innerHTML = items.map((it) => {
-    const when = (it.downloaded_at || '').slice(0, 10);
     const shots = it.shots_kept ? ' · ' + it.shots_kept + ' shots' : '';
     const thumb = it.thumb_url
       ? '<img src="' + it.thumb_url + '" alt="">'
       : '<div class="ph">no sheet yet</div>';
     return '<a class="card" href="/v/' + it.video_id + '">' + thumb
-      + '<div class="info"><strong>' + escapeHtml(it.title || it.video_id) + '</strong>'
-      + '<div class="meta">' + escapeHtml(it.channel || '') + ' · ' + when + shots + '</div></div></a>';
+      + '<div class="info"><div class="card-head"><strong>'
+      + escapeHtml(it.title || it.video_id) + '</strong>' + gotHtml(it.downloaded_at)
+      + '</div><div class="meta">' + escapeHtml(it.channel || '') + shots + '</div></div></a>';
   }).join('');
+  localizeTimes();
 }
 function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function gotHtml(stamp) {
+  return '<span class="got"><span class="got-label">got</span><time datetime="'
+    + escapeHtml(stamp || '') + '" data-local>' + escapeHtml(stamp || 'unknown') + '</time></span>';
+}
+function localizeTimes() {
+  document.querySelectorAll('time[data-local]').forEach((el) => {
+    if (!el.dateTime) return;
+    const date = new Date(el.dateTime);
+    if (Number.isNaN(date.getTime())) return;
+    el.textContent = date.toLocaleString([], {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  });
 }
 document.getElementById('backfill-audio').onclick = async () => {
   const btn = document.getElementById('backfill-audio');
@@ -285,8 +436,8 @@ document.getElementById('backfill-audio').onclick = async () => {
     if (!res.ok) throw new Error(data.error || res.statusText);
     box.className = data.queued ? '' : 'done';
     box.textContent = data.queued
-      ? 'queued ' + data.queued + ' soundtrack job(s)'
-      : 'every archived video already has a soundtrack';
+      ? 'queued ' + data.queued + ' MP3 audio job(s)'
+      : 'every archived video already has MP3 audio';
     paintQueue();
   } catch (err) {
     box.className = 'error';
@@ -298,6 +449,7 @@ document.getElementById('backfill-audio').onclick = async () => {
   const n = await paintQueue().catch(() => 0);
   setTimeout(loop, n ? 800 : 2500);
 })();
+localizeTimes();
 """
     return _page("ytarchive", body, js)
 
@@ -308,6 +460,20 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
     duration = info.get("duration")
     dur = f"{int(duration) // 60}:{int(duration) % 60:02d}" if duration else ""
     video = find_video_file(data_dir, vid)
+    transcript_file = transcript_json_path(data_dir, vid)
+    captions_file = transcript_vtt_path(data_dir, vid)
+    has_transcript = transcript_file.is_file() and captions_file.is_file()
+    transcript_language = "und"
+    if has_transcript:
+        try:
+            transcript_language = (
+                json.loads(transcript_file.read_text(encoding="utf-8")).get(
+                    "language"
+                )
+                or "und"
+            )
+        except (OSError, json.JSONDecodeError):
+            has_transcript = False
     sheets = framesheet_paths(data_dir, vid)
     shot_recs = []
     sj = shots_json_path(data_dir, vid)
@@ -328,9 +494,15 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
     if video:
         shots_attr = _esc(json.dumps(payload, separators=(",", ":")))
         dur_attr = f'{duration or ""}'
+        captions_track = (
+            f'<track kind="captions" srclang="{_esc(transcript_language)}" label="Local transcript" '
+            f'src="{_esc(media_url(data_dir, captions_file))}">'
+            if has_transcript
+            else ""
+        )
         parts.append(f"""
 <div class="ytp" id="ytp" data-id="{_esc(vid)}" data-duration="{dur_attr}" data-shots="{shots_attr}">
-  <video preload="metadata" src="{_esc(media_url(data_dir, video))}"></video>
+  <video preload="metadata" src="{_esc(media_url(data_dir, video))}">{captions_track}</video>
   <div class="ytp-overlay">
     <button type="button" class="ytp-bigplay" data-act="play" aria-label="Play">▶</button>
     <div class="ytp-flash"></div>
@@ -370,6 +542,7 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
       <button type="button" data-act="grab">grab</button>
       <button type="button" data-act="mute">mute</button>
       <button type="button" data-act="pip">pip</button>
+      {('<button type="button" data-act="cc">CC</button>' if has_transcript else '')}
       <button type="button" data-act="theater">wide</button>
       <button type="button" data-act="fs">full</button>
       <button type="button" data-act="help">?</button>
@@ -382,23 +555,115 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
     soundtrack_bits = ['<div class="soundtrack">']
     if mp3.is_file():
         soundtrack_bits.append(
-            f'<p class="meta">Soundtrack — <a href="{_esc(media_url(data_dir, mp3))}">soundtrack.mp3</a></p>'
+            f'<h2>MP3 audio</h2>'
+            f'<p class="meta"><a href="{_esc(media_url(data_dir, mp3))}" download>download MP3 audio</a></p>'
             f'<audio controls preload="metadata" src="{_esc(media_url(data_dir, mp3))}"></audio>'
         )
     else:
-        soundtrack_bits.append('<p class="meta">Soundtrack</p>')
+        soundtrack_bits.append('<h2>MP3 audio</h2>')
     row = ['<div class="row">']
     if video and not mp3.is_file():
-        row.append('<button type="button" id="dump-audio">dump soundtrack</button>')
+        row.append('<button type="button" id="dump-audio">create MP3 audio</button>')
     row.append(
-        '<button type="button" id="open-mp3-folder">open folder which has the mp3 in it</button>'
+        '<button type="button" id="open-mp3-folder">open MP3 folder</button>'
     )
     row.append("</div>")
     if video and not mp3.is_file():
         row.append('<div id="audio-status"></div>')
     soundtrack_bits.extend(row)
     soundtrack_bits.append("</div>")
-    parts.append("".join(soundtrack_bits))
+    soundtrack_html = "".join(soundtrack_bits)
+    transcript_action = "Re-transcribe…" if has_transcript else "Transcribe audio…"
+    transcript_ready = (
+        f"""
+  <div class="transcript-meta" id="transcript-meta">Loading transcript…</div>
+  <div class="transcript-controls">
+    <input class="transcript-search" id="transcript-search" type="search"
+      placeholder="search every spoken word…" autocomplete="off">
+    <label>View
+      <select id="transcript-view">
+        <option value="full">full transcript</option>
+        <option value="rolling">current caption only</option>
+      </select>
+    </label>
+    <label>Text size
+      <select id="transcript-size">
+        <option value="small">small</option>
+        <option value="medium" selected>medium</option>
+        <option value="large">large</option>
+      </select>
+    </label>
+    <button type="button" id="toggle-cc">Enable video CC</button>
+    <a href="{_esc(media_url(data_dir, captions_file))}" download>download WebVTT</a>
+  </div>
+  <div class="caption-box size-medium" id="caption-box" aria-live="polite"></div>
+  <div class="speaker-tools">
+    <strong>Speaker groups</strong>
+    <label>Rename
+      <select id="speaker-old"><option value="">choose speaker</option></select>
+    </label>
+    <label>to
+      <input id="speaker-new" maxlength="80" placeholder="name">
+    </label>
+    <button type="button" id="rename-speaker">Rename/group</button>
+    <span class="meta">Click a segment’s speaker label to assign it.</span>
+  </div>
+"""
+        if has_transcript
+        else ""
+    )
+    parts.append(
+        f"""
+<section class="transcript" id="transcript-panel" data-ready="{str(has_transcript).lower()}">
+  <h2>Spoken transcript</h2>
+  <p class="meta">Local Whisper · speech only; sound-effect descriptions are not mixed into spoken words.</p>
+  <div class="actions">
+    <button type="button" id="open-transcribe">{transcript_action}</button>
+  </div>
+  <div class="transcript-progress" id="transcript-progress" hidden>
+    <span class="transcript-progress-value" id="transcript-progress-value">0%</span>
+    <span class="transcript-progress-label" id="transcript-progress-label">queued</span>
+    <div class="transcript-progress-track"><div class="transcript-progress-fill" id="transcript-progress-fill"></div></div>
+  </div>
+  {transcript_ready}
+</section>
+<dialog id="transcribe-dialog">
+  <h2>{'Replace transcript' if has_transcript else 'Generate transcript'}</h2>
+  <p class="meta">The default uses the highest-quality Whisper model this machine can run. Nothing starts until you confirm.</p>
+  <div class="fields">
+    <label>Model
+      <select id="whisper-model">
+        <option value="large-v3" selected>large-v3 — highest quality</option>
+        <option value="large-v3-turbo">large-v3-turbo — faster</option>
+        <option value="distil-large-v3">distil-large-v3</option>
+        <option value="medium">medium</option>
+        <option value="small">small</option>
+      </select>
+    </label>
+    <label>Language
+      <input id="whisper-language" maxlength="3" placeholder="auto-detect, or en / fi / de">
+    </label>
+    <label>Beam size
+      <select id="whisper-beam">
+        <option value="1">1 — fastest</option>
+        <option value="3">3</option>
+        <option value="5" selected>5 — default</option>
+        <option value="10">10 — thorough</option>
+      </select>
+    </label>
+    <label><span>Speech filtering</span>
+      <span><input type="checkbox" id="whisper-vad" checked> skip silence/non-speech</span>
+    </label>
+  </div>
+  <div class="dialog-actions">
+    <button type="button" id="cancel-transcribe">Cancel</button>
+    <button type="button" id="configured-transcribe">Use these settings</button>
+    <button type="button" class="primary" id="default-transcribe">{'Replace with defaults' if has_transcript else 'Yes — transcribe with defaults'}</button>
+  </div>
+</dialog>
+"""
+    )
+    parts.append(soundtrack_html)
     for n, sheet in enumerate(sheets, start=1):
         label = (
             f"Squished framesheet {n}/{len(sheets)}"
@@ -407,14 +672,14 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
         )
         parts.append(
             f'<p class="meta">{_esc(label)}</p>'
-            f'<a href="{_esc(media_url(data_dir, sheet))}">'
+            f'<a href="{_esc(media_url(data_dir, sheet))}" target="_blank" rel="noopener">'
             f'<img class="sheet" src="{_esc(media_url(data_dir, sheet))}" alt="{_esc(label)}"></a>'
         )
     labeled = all_labeled_path(data_dir, vid)
     if labeled.is_file():
         parts.append(
             f'<p class="meta">All detections (kept + dropped)</p>'
-            f'<a href="{_esc(media_url(data_dir, labeled))}">'
+            f'<a href="{_esc(media_url(data_dir, labeled))}" target="_blank" rel="noopener">'
             f'<img class="sheet" src="{_esc(media_url(data_dir, labeled))}" alt="all shots labeled"></a>'
         )
     times = {r["file"]: r for r in kept}
@@ -554,6 +819,268 @@ if (openBtn) openBtn.onclick = async () => {
   }
   openBtn.disabled = false;
 };
+
+const transcribeDialog = document.getElementById('transcribe-dialog');
+const transcribeProgress = document.getElementById('transcript-progress');
+const transcribeValue = document.getElementById('transcript-progress-value');
+const transcribeLabel = document.getElementById('transcript-progress-label');
+const transcribeFill = document.getElementById('transcript-progress-fill');
+const transcriptReady = document.getElementById('transcript-panel').dataset.ready === 'true';
+document.getElementById('open-transcribe').onclick = () => transcribeDialog.showModal();
+document.getElementById('cancel-transcribe').onclick = () => transcribeDialog.close();
+document.getElementById('default-transcribe').onclick = () => startTranscription({
+  model: 'large-v3', language: '', beam_size: 5, vad_filter: true,
+});
+document.getElementById('configured-transcribe').onclick = () => startTranscription({
+  model: document.getElementById('whisper-model').value,
+  language: document.getElementById('whisper-language').value.trim(),
+  beam_size: Number(document.getElementById('whisper-beam').value),
+  vad_filter: document.getElementById('whisper-vad').checked,
+});
+
+async function startTranscription(config) {
+  transcribeDialog.close();
+  document.getElementById('open-transcribe').disabled = true;
+  transcribeProgress.hidden = false;
+  transcribeProgress.className = 'transcript-progress';
+  setTranscribeProgress(0, 'queueing local Whisper…');
+  try {
+    const res = await fetch('/api/transcribe', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({video_id: vid, config, force: transcriptReady}),
+    });
+    const job = await res.json();
+    if (!res.ok) throw new Error(job.error || res.statusText);
+    for (;;) {
+      const jres = await fetch('/api/work/' + job.job_id);
+      const current = await jres.json();
+      if (!jres.ok) throw new Error(current.error || jres.statusText);
+      setTranscribeProgress(
+        current.progress || 0,
+        current.message || current.status
+      );
+      if (current.status === 'done') {
+        setTranscribeProgress(1, 'transcript ready — reloading');
+        setTimeout(() => location.reload(), 500);
+        return;
+      }
+      if (current.status === 'error') {
+        throw new Error(current.error || 'transcription failed');
+      }
+      await new Promise(resolve => setTimeout(resolve, 900));
+    }
+  } catch (err) {
+    transcribeProgress.classList.add('error');
+    transcribeLabel.textContent = err.message;
+    document.getElementById('open-transcribe').disabled = false;
+  }
+}
+
+function setTranscribeProgress(value, label) {
+  const pct = Math.max(0, Math.min(100, Math.round(Number(value || 0) * 100)));
+  transcribeValue.textContent = pct + '%';
+  transcribeLabel.textContent = label;
+  transcribeFill.style.width = pct + '%';
+}
+
+function html(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function clock(t) {
+  t = Math.max(0, Math.floor(Number(t) || 0));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor(t / 60) % 60;
+  const s = t % 60;
+  return h ? h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0')
+    : m + ':' + String(s).padStart(2, '0');
+}
+
+let transcript = null;
+let activeSegment = -1;
+async function loadTranscript() {
+  const res = await fetch('/api/transcript/' + encodeURIComponent(vid));
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  transcript = data;
+  paintTranscript();
+  paintTranscriptSummary();
+  paintSpeakerOptions();
+}
+
+function paintTranscriptSummary() {
+  if (!transcript) return;
+  const probability = Math.round((transcript.language_probability || 0) * 100);
+  document.getElementById('transcript-meta').textContent =
+    transcript.segments.length + ' spoken segments · '
+    + (transcript.language || 'unknown language')
+    + (probability ? ' ' + probability + '%' : '') + ' · ' + transcript.model;
+}
+
+function segmentHtml(segment, matched, hidden) {
+  const words = (segment.words || []).length
+    ? segment.words.map((word, index) => {
+        const gap = index && !/^[,.;:!?)]/.test(word.word) ? ' ' : '';
+        return gap + '<span class="word" data-t="'
+          + Number(word.start || segment.start) + '">' + html(word.word) + '</span>';
+      }).join('')
+    : html(segment.text);
+  return '<div class="segment' + (matched ? ' match' : '') + '"'
+    + (hidden ? ' hidden' : '') + ' data-index="' + segment.index + '" data-start="'
+    + Number(segment.start) + '" data-end="' + Number(segment.end) + '">'
+    + '<div><span class="segment-time">' + clock(segment.start) + '</span>'
+    + '<button type="button" class="segment-speaker" title="assign or group speaker">'
+    + html(segment.speaker || 'Unassigned') + '</button></div>'
+    + '<div class="segment-text">' + words + '</div></div>';
+}
+
+function paintTranscript() {
+  const box = document.getElementById('caption-box');
+  if (!box || !transcript) return;
+  const query = document.getElementById('transcript-search').value.trim().toLowerCase();
+  let shown = 0;
+  box.innerHTML = transcript.segments.map(segment => {
+    const match = !query || segment.text.toLowerCase().includes(query)
+      || (segment.speaker || '').toLowerCase().includes(query);
+    if (match) shown += 1;
+    return segmentHtml(segment, Boolean(query && match), !match);
+  }).join('') || '<div class="transcript-empty">No spoken words found.</div>';
+  if (query) {
+    document.getElementById('transcript-meta').textContent =
+      shown + ' matching segment' + (shown === 1 ? '' : 's');
+  } else paintTranscriptSummary();
+  bindTranscriptRows();
+  activeSegment = -1;
+  syncTranscript();
+}
+
+function bindTranscriptRows() {
+  const playerVideo = document.querySelector('#ytp video');
+  document.querySelectorAll('.segment').forEach(row => {
+    row.addEventListener('click', event => {
+      if (event.target.closest('.segment-speaker')) return;
+      const word = event.target.closest('.word');
+      const time = word ? Number(word.dataset.t) : Number(row.dataset.start);
+      if (playerVideo) {
+        playerVideo.currentTime = time;
+        playerVideo.play();
+      }
+    });
+    row.querySelector('.segment-speaker').addEventListener('click', async event => {
+      event.stopPropagation();
+      const index = Number(row.dataset.index);
+      const segment = transcript.segments.find(item => item.index === index);
+      const current = segment ? segment.speaker || '' : '';
+      const speaker = prompt(
+        'Speaker name. Use the same name on other segments to group them.',
+        current
+      );
+      if (speaker == null) return;
+      await changeSegmentSpeaker(index, speaker);
+    });
+  });
+}
+
+async function changeSegmentSpeaker(index, speaker) {
+  const res = await fetch('/api/transcript/speaker', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({video_id: vid, segment_index: index, speaker}),
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error || res.statusText);
+  transcript = data;
+  paintTranscript();
+  paintSpeakerOptions();
+}
+
+function paintSpeakerOptions() {
+  const select = document.getElementById('speaker-old');
+  if (!select || !transcript) return;
+  const speakers = [...new Set(transcript.segments.map(s => s.speaker).filter(Boolean))].sort();
+  select.innerHTML = '<option value="">choose speaker</option>'
+    + speakers.map(s => '<option value="' + html(s) + '">' + html(s) + '</option>').join('');
+}
+
+const renameSpeaker = document.getElementById('rename-speaker');
+if (renameSpeaker) renameSpeaker.onclick = async () => {
+  const oldName = document.getElementById('speaker-old').value;
+  const newName = document.getElementById('speaker-new').value.trim();
+  if (!oldName || !newName) return;
+  const res = await fetch('/api/transcript/rename-speaker', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({video_id: vid, old: oldName, new: newName}),
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error || res.statusText);
+  transcript = data;
+  document.getElementById('speaker-new').value = '';
+  paintTranscript();
+  paintSpeakerOptions();
+};
+
+function syncTranscript() {
+  const playerVideo = document.querySelector('#ytp video');
+  if (!playerVideo || !transcript) return;
+  const time = playerVideo.currentTime || 0;
+  const index = transcript.segments.findIndex(
+    segment => time >= segment.start && time < segment.end
+  );
+  if (index === activeSegment) return;
+  activeSegment = index;
+  document.querySelectorAll('.segment').forEach(row => {
+    row.classList.toggle('now', Number(row.dataset.index) === index);
+  });
+  const current = document.querySelector('.segment.now');
+  if (current && !document.getElementById('transcript-search').value) {
+    current.scrollIntoView({block: 'nearest'});
+  }
+}
+
+const transcriptSearch = document.getElementById('transcript-search');
+if (transcriptSearch) transcriptSearch.addEventListener('input', paintTranscript);
+const transcriptView = document.getElementById('transcript-view');
+if (transcriptView) {
+  transcriptView.value = localStorage.getItem('ytarchive.transcript.view') || 'full';
+  transcriptView.onchange = () => {
+    localStorage.setItem('ytarchive.transcript.view', transcriptView.value);
+    document.getElementById('caption-box').classList.toggle('rolling', transcriptView.value === 'rolling');
+    syncTranscript();
+  };
+  transcriptView.onchange();
+}
+const transcriptSize = document.getElementById('transcript-size');
+if (transcriptSize) {
+  transcriptSize.value = localStorage.getItem('ytarchive.transcript.size') || 'medium';
+  transcriptSize.onchange = () => {
+    localStorage.setItem('ytarchive.transcript.size', transcriptSize.value);
+    const box = document.getElementById('caption-box');
+    box.classList.remove('size-small', 'size-medium', 'size-large');
+    box.classList.add('size-' + transcriptSize.value);
+  };
+  transcriptSize.onchange();
+}
+const playerVideo = document.querySelector('#ytp video');
+if (playerVideo) playerVideo.addEventListener('timeupdate', syncTranscript);
+const toggleCc = document.getElementById('toggle-cc');
+if (toggleCc && playerVideo) {
+  const track = playerVideo.textTracks[0];
+  const paintCc = () => toggleCc.textContent =
+    track && track.mode === 'showing' ? 'Disable video CC' : 'Enable video CC';
+  toggleCc.onclick = () => {
+    const playerCc = document.querySelector('#ytp [data-act=cc]');
+    if (playerCc) playerCc.click();
+    else if (track) track.mode = track.mode === 'showing' ? 'hidden' : 'showing';
+    paintCc();
+  };
+  document.getElementById('ytp').addEventListener('ytarchive:cc', paintCc);
+  paintCc();
+}
+if (transcriptReady) loadTranscript().catch(err => {
+  document.getElementById('transcript-meta').textContent = err.message;
+});
 """
     return _page(
         title,
@@ -564,7 +1091,7 @@ if (openBtn) openBtn.onclick = async () => {
     )
 
 
-def make_handler(data_dir: Path, queue: JobQueue):
+def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             print(f"{self.address_string()} {fmt % args}", flush=True)
@@ -573,11 +1100,17 @@ def make_handler(data_dir: Path, queue: JobQueue):
             parsed = urlparse(self.path)
             path = unquote(parsed.path)
             if path == "/":
-                q = (parse_qs(parsed.query).get("q") or [""])[0].strip()
-                return self._bytes(home_html(list_items(data_dir, q), q, data_dir))
+                params = parse_qs(parsed.query)
+                q = (params.get("q") or [""])[0].strip()
+                sort = normalize_video_sort((params.get("sort") or ["recent"])[0])
+                return self._bytes(
+                    home_html(list_items(data_dir, q, sort), q, data_dir, sort)
+                )
             if path == "/api/list":
-                q = (parse_qs(parsed.query).get("q") or [""])[0].strip()
-                return self._json(list_items(data_dir, q))
+                params = parse_qs(parsed.query)
+                q = (params.get("q") or [""])[0].strip()
+                sort = normalize_video_sort((params.get("sort") or ["recent"])[0])
+                return self._json(list_items(data_dir, q, sort))
             if path == "/api/jobs":
                 from .db import list_jobs
 
@@ -587,6 +1120,22 @@ def make_handler(data_dir: Path, queue: JobQueue):
                 if not job:
                     return self._json({"error": "unknown job"}, 404)
                 return self._json(queue.snapshot(job))
+            if path.startswith("/api/work/"):
+                job = work_queue.get(path.split("/", 3)[-1])
+                if not job:
+                    return self._json({"error": "unknown derived job"}, 404)
+                return self._json(job)
+            if path.startswith("/api/transcript/"):
+                from .db import get_transcript
+
+                try:
+                    video_id = parse_video_id(path.split("/", 3)[-1])
+                except ValueError:
+                    return self._json({"error": "bad id"}, 404)
+                transcript = get_transcript(data_dir, video_id)
+                if not transcript:
+                    return self._json({"error": "no transcript"}, 404)
+                return self._json(transcript)
             if path.startswith("/v/"):
                 video_id = path[3:].strip("/")
                 try:
@@ -607,6 +1156,12 @@ def make_handler(data_dir: Path, queue: JobQueue):
             parsed = urlparse(self.path)
             if parsed.path == "/api/backfill-audio":
                 return self._backfill_audio()
+            if parsed.path == "/api/transcribe":
+                return self._transcribe()
+            if parsed.path == "/api/transcript/speaker":
+                return self._set_segment_speaker()
+            if parsed.path == "/api/transcript/rename-speaker":
+                return self._rename_speaker()
             if parsed.path == "/api/open-folder":
                 return self._open_folder()
             if parsed.path == "/api/grab":
@@ -628,6 +1183,62 @@ def make_handler(data_dir: Path, queue: JobQueue):
             except ValueError as exc:
                 return self._json({"error": str(exc)}, 400)
             return self._json(queue.snapshot(job), 202)
+
+        def _transcribe(self):
+            payload = self._read_json()
+            if payload is None:
+                return
+            try:
+                video_id = parse_video_id(
+                    (payload.get("video_id") or payload.get("url") or "").strip()
+                )
+                config = payload.get("config") or {}
+                if not isinstance(config, dict):
+                    raise ValueError("config must be an object")
+                job = work_queue.submit_transcription(
+                    video_id, config, force=bool(payload.get("force"))
+                )
+            except (ValueError, OSError) as exc:
+                return self._json({"error": str(exc)}, 400)
+            return self._json(job, 202 if job["status"] != "done" else 200)
+
+        def _set_segment_speaker(self):
+            payload = self._read_json()
+            if payload is None:
+                return
+            try:
+                video_id = parse_video_id((payload.get("video_id") or "").strip())
+                segment_index = int(payload.get("segment_index"))
+                from .transcribe import update_segment_speaker
+
+                update_segment_speaker(
+                    data_dir, video_id, segment_index, payload.get("speaker") or ""
+                )
+                from .db import get_transcript
+
+                return self._json(get_transcript(data_dir, video_id))
+            except (ValueError, TypeError, OSError, json.JSONDecodeError) as exc:
+                return self._json({"error": str(exc)}, 400)
+
+        def _rename_speaker(self):
+            payload = self._read_json()
+            if payload is None:
+                return
+            try:
+                video_id = parse_video_id((payload.get("video_id") or "").strip())
+                from .transcribe import rename_speaker
+
+                rename_speaker(
+                    data_dir,
+                    video_id,
+                    payload.get("old") or "",
+                    payload.get("new") or "",
+                )
+                from .db import get_transcript
+
+                return self._json(get_transcript(data_dir, video_id))
+            except (ValueError, OSError, json.JSONDecodeError) as exc:
+                return self._json({"error": str(exc)}, 400)
 
         def _backfill_audio(self):
             queued = []
@@ -765,6 +1376,46 @@ def make_handler(data_dir: Path, queue: JobQueue):
             self.end_headers()
             self.wfile.write(raw)
 
+        def _read_json(self):
+            content_type = (self.headers.get("Content-Type") or "").split(";", 1)[
+                0
+            ].strip().lower()
+            if content_type != "application/json":
+                self._json({"error": "Content-Type must be application/json"}, 415)
+                return None
+            request_host = (self.headers.get("Host") or "").lower()
+            if not _is_local_host(request_host):
+                self._json({"error": "untrusted Host header"}, 403)
+                return None
+            origin = self.headers.get("Origin")
+            if origin:
+                origin_host = urlparse(origin).netloc.lower()
+                if not origin_host or origin_host != request_host:
+                    self._json({"error": "cross-origin request rejected"}, 403)
+                    return None
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length or 0)
+            except ValueError:
+                self._json({"error": "invalid Content-Length"}, 400)
+                return None
+            if length < 0:
+                self._json({"error": "invalid Content-Length"}, 400)
+                return None
+            if length > 64 * 1024:
+                self._json({"error": "request body too large"}, 413)
+                return None
+            raw = self.rfile.read(length) if length else b"{}"
+            try:
+                payload = json.loads(raw.decode("utf-8") or "{}")
+            except json.JSONDecodeError:
+                self._json({"error": "bad json"}, 400)
+                return None
+            if not isinstance(payload, dict):
+                self._json({"error": "json body must be an object"}, 400)
+                return None
+            return payload
+
         def _bytes(self, raw: bytes, code=200):
             self.send_response(code)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -783,6 +1434,9 @@ def serve(data_dir: Path | None = None, host: str = "127.0.0.1", port: int = 876
 
     n = rebuild(data_dir)
     queue = JobQueue(data_dir)
-    httpd = ThreadingHTTPServer((host, port), make_handler(data_dir, queue))
+    work_queue = DerivedWorkQueue(data_dir)
+    httpd = ThreadingHTTPServer(
+        (host, port), make_handler(data_dir, queue, work_queue)
+    )
     print(f"ytarchive  http://{host}:{port}/  data={data_dir}  index={n} ({db_path(data_dir)})", flush=True)
     httpd.serve_forever()

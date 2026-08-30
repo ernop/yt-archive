@@ -6,9 +6,18 @@ import traceback
 
 from . import db
 from .audio import dump_soundtrack
-from .download import download
+from .download import clear_archive_extras, download
 from .framesheet import make_shots
-from .paths import find_video_file, framesheet_paths, parse_video_id, soundtrack_path, watch_url
+from .locks import try_video_lock
+from .paths import (
+    find_video_file,
+    framesheet_paths,
+    parse_video_id,
+    soundtrack_path,
+    transcript_json_path,
+    transcript_vtt_path,
+    watch_url,
+)
 
 
 class JobQueue:
@@ -59,6 +68,15 @@ class JobQueue:
                 self._run(job)
 
     def _run(self, job: dict) -> None:
+        with try_video_lock(job["video_id"]) as acquired:
+            if not acquired:
+                db.defer_job(self.data_dir, job["job_id"])
+                with self._cv:
+                    self._cv.wait(timeout=1)
+                return
+            self._run_locked(job)
+
+    def _run_locked(self, job: dict) -> None:
         job_id = job["job_id"]
         video_id = job["video_id"]
 
@@ -67,6 +85,22 @@ class JobQueue:
             db.append_job_log(self.data_dir, job_id, str(msg))
 
         try:
+            mp3 = soundtrack_path(self.data_dir, video_id)
+            if job["force_video"]:
+                if mp3.is_file():
+                    mp3.unlink()
+                    log("removed old MP3 audio for reget")
+                for path in (
+                    transcript_json_path(self.data_dir, video_id),
+                    transcript_vtt_path(self.data_dir, video_id),
+                ):
+                    if path.is_file():
+                        path.unlink()
+                clear_archive_extras(
+                    self.data_dir, video_id, "transcript", "captions"
+                )
+                db.delete_transcript(self.data_dir, video_id)
+                log("cleared stale transcript state for reget")
             video = find_video_file(self.data_dir, video_id)
             need_video = job["force_video"] or video is None
             if need_video:
@@ -96,10 +130,6 @@ class JobQueue:
                 db.update_job(self.data_dir, job_id, shots="skipped")
                 log("framesheet already exists")
 
-            mp3 = soundtrack_path(self.data_dir, video_id)
-            if job["force_video"] and mp3.is_file():
-                mp3.unlink()
-                log("removed old soundtrack for reget")
             need_audio = not mp3.is_file()
             if need_audio:
                 db.update_job(self.data_dir, job_id, audio="running")

@@ -1,4 +1,4 @@
-"""CLI: get / shots / audio / serve / list."""
+"""CLI: get / shots / audio / transcribe / serve / list."""
 from __future__ import annotations
 
 import argparse
@@ -9,6 +9,7 @@ from .audio import dump_soundtrack
 from .download import download
 from .framesheet import make_shots
 from .paths import default_data_dir, find_video_file, parse_video_id
+from .transcribe import MODELS, transcribe_soundtrack
 from .web import serve
 
 
@@ -31,8 +32,16 @@ def main(argv: list[str] | None = None) -> int:
         help="also write shots_all_labeled.png (every detection, numbered + timestamp)",
     )
 
-    audio_p = sub.add_parser("audio", help="dump soundtrack mp3 from an already-downloaded video")
+    audio_p = sub.add_parser("audio", help="create MP3 audio from an already-downloaded video")
     audio_p.add_argument("target", help="YouTube URL or 11-char id")
+
+    transcribe_p = sub.add_parser(
+        "transcribe", help="explicitly run local Whisper on an existing MP3"
+    )
+    transcribe_p.add_argument("target", help="YouTube URL or 11-char id")
+    transcribe_p.add_argument("--model", choices=MODELS, default="large-v3")
+    transcribe_p.add_argument("--language", default="", help="ISO code; blank auto-detects")
+    transcribe_p.add_argument("--beam-size", type=int, default=5)
 
     sub.add_parser("list", help="list archived videos")
     sub.add_parser("reindex", help="rebuild the sqlite catalog from data/")
@@ -51,6 +60,17 @@ def main(argv: list[str] | None = None) -> int:
         return _shots(data_dir, args.target, args.sim, args.all_sheet)
     if args.cmd == "audio":
         return _audio(data_dir, args.target)
+    if args.cmd == "transcribe":
+        return _transcribe(
+            data_dir,
+            args.target,
+            {
+                "model": args.model,
+                "language": args.language,
+                "beam_size": args.beam_size,
+                "vad_filter": True,
+            },
+        )
     if args.cmd == "list":
         from .db import list_videos
 
@@ -78,7 +98,7 @@ def _get(data_dir: Path, target: str, sim: float, skip_shots: bool) -> int:
         print(json.dumps({k: summary[k] for k in ("video_id", "shots_detected", "shots_kept")}, indent=2))
     mp3 = dump_soundtrack(video, data_dir, video_id)
     if mp3:
-        print(f"soundtrack: {mp3} ({mp3.stat().st_size / 1e6:.1f} MB)")
+        print(f"MP3 audio: {mp3} ({mp3.stat().st_size / 1e6:.1f} MB)")
     print(f"browse: /v/{video_id}")
     return 0
 
@@ -105,5 +125,15 @@ def _audio(data_dir: Path, target: str) -> int:
     if not mp3:
         print("no audio stream")
         return 0
-    print(f"soundtrack: {mp3} ({mp3.stat().st_size / 1e6:.1f} MB)")
+    print(f"MP3 audio: {mp3} ({mp3.stat().st_size / 1e6:.1f} MB)")
+    return 0
+
+
+def _transcribe(data_dir: Path, target: str, config: dict) -> int:
+    video_id = parse_video_id(target)
+    artifact = transcribe_soundtrack(data_dir, video_id, config)
+    print(
+        f"transcript: {len(artifact['segments'])} spoken segments, "
+        f"language={artifact['language']}, model={artifact['model']}"
+    )
     return 0

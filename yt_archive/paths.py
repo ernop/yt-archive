@@ -80,6 +80,14 @@ def soundtrack_path(data_dir: Path, video_id: str) -> Path:
     return condensed_dir(data_dir, video_id) / "soundtrack.mp3"
 
 
+def transcript_json_path(data_dir: Path, video_id: str) -> Path:
+    return condensed_dir(data_dir, video_id) / "transcript.json"
+
+
+def transcript_vtt_path(data_dir: Path, video_id: str) -> Path:
+    return condensed_dir(data_dir, video_id) / "transcript.vtt"
+
+
 def restrict_filename(text: str, *, fallback: str = "untitled", max_len: int = 80) -> str:
     """Keep a title fragment in [A-Za-z0-9._-], same charset as --restrict-filenames."""
     text = unicodedata.normalize("NFKD", text or "")
@@ -212,11 +220,17 @@ def load_archive_info(data_dir: Path, video_id: str) -> dict:
     info["has_video"] = find_video_file(data_dir, video_id) is not None
     info["has_framesheet"] = bool(framesheet_paths(data_dir, video_id))
     info["has_soundtrack"] = soundtrack_path(data_dir, video_id).is_file()
+    info["has_transcript"] = (
+        transcript_json_path(data_dir, video_id).is_file()
+        and transcript_vtt_path(data_dir, video_id).is_file()
+    )
     info["shot_files"] = sorted(p.name for p in shots_dir(data_dir, video_id).glob("*.png"))
     return info
 
 
-def list_items(data_dir: Path, query: str = "") -> list[dict]:
+def list_items(
+    data_dir: Path, query: str = "", sort: str = "recent"
+) -> list[dict]:
     from .db import list_videos
 
-    return list_videos(data_dir, query)
+    return list_videos(data_dir, query, sort)
