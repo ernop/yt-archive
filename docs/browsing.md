@@ -36,6 +36,38 @@ Older archive records without one fall back to their exact channel name. The
 page keeps the creator identity in its URL so it can be bookmarked and shared
 locally.
 
+## Browse a creator on YouTube
+
+Paste a creator homepage, `@handle`, plain handle, or `UC…` channel ID into
+the home page's input. **Get** opens a picker for creators; individual video
+links still go straight into the download queue. **Browse creator** explicitly
+treats the input as a creator (useful for handles that are exactly 11 characters,
+which Get otherwise interprets as video IDs). Older `/user/name`, `/c/name`,
+and vanity homepage URLs work too. A creator's archived page links to the picker
+when its channel ID is known.
+
+The picker loads all listed videos, Shorts, and streams from the creator's
+homepage, including when the pasted URL ends in `/videos` or another channel
+tab. Loading only reads metadata; it does not download media. Large channels
+may take a few minutes. Known private/restricted items, live broadcasts, upcoming
+streams, and streams still processing are shown but cannot be selected.
+YouTube can still reject an apparently available item at download time; its
+normal queue error remains visible.
+
+Filter by title or video ID, check individual items, or **Select all matching**
+across every page. Selections survive filtering and pagination; **Clear selection**
+clears them all. **Get selected** queues that selection. **Get all available**
+queues every eligible listed item regardless of the filter or current page.
+Saved and already queued videos are skipped, including on repeated requests.
+Downloads use the usual one-at-a-time video → framesheet → MP3 pipeline and
+survive leaving the page or restarting the service.
+
+Lookups are temporary previews, retained for up to an hour of inactivity, with
+at most 16 previews and two simultaneous lookups. A restart clears previews;
+browse again to refresh. A partial lookup is explicitly labeled incomplete,
+so "all" refers only to the returned list. Lookup failures can be retried with
+Browse. No video limit is passed to yt-dlp; the UI shows 100 items per page.
+
 ## Text contrast
 
 All neutral UI text is pure white (`#fff`) on the black/dark interface. Gray

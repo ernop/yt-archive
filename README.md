@@ -2,6 +2,11 @@
 
 A local YouTube archive: paste a URL, download the video, and get a contact sheet of its distinct shots. Browse and play everything already saved.
 
+Paste a creator's YouTube homepage, `@handle`, or username to browse their
+videos, Shorts, and past streams. Search and select a batch, or **Get all
+available**; saved and already queued videos are skipped. See
+[creator browsing](docs/browsing.md#browse-a-creator-on-youtube).
+
 Pairs with [matthoom](https://github.com/ernop/matthoom). Matthoom holds YouTube **watch history** (Takeout) and a gallery that can mark videos to archive. This service does the other half: **the file on disk** and **the shot images**.
 
 ```sh

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .paths import (
+    find_video_file,
     framesheet_paths,
     list_archived_ids,
     load_archive_info,
@@ -16,6 +17,7 @@ from .paths import (
     transcript_is_complete,
     transcript_json_path,
     transcript_vtt_path,
+    watch_url,
 )
 
 DB_NAME = "ytarchive.sqlite"
@@ -549,6 +551,36 @@ def get_job(data_dir: Path, job_id: str) -> dict | None:
         return _job_public(row) if row else None
     finally:
         conn.close()
+
+
+def enqueue_missing_videos(data_dir: Path, video_ids: list[str]) -> dict:
+    """Atomically queue a creator selection, skipping saved and open videos."""
+    conn = connect(data_dir)
+    queued, skipped = [], []
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        open_ids = {row[0] for row in conn.execute(
+            "SELECT video_id FROM jobs WHERE status IN ('queued', 'running')"
+        )}
+        now = _now()
+        for video_id in dict.fromkeys(video_ids):
+            if video_id in open_ids or find_video_file(data_dir, video_id):
+                skipped.append(video_id)
+                continue
+            conn.execute(
+                """INSERT INTO jobs (id, url, video_id, status, download, shots,
+                   force_video, force_shots, error, log, created_at, updated_at)
+                   VALUES (?, ?, ?, 'queued', 'pending', 'pending', 0, 0, '', '[]', ?, ?)""",
+                (uuid.uuid4().hex[:12], watch_url(video_id), video_id, now, now),
+            )
+            queued.append(video_id)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    return {"queued": len(queued), "skipped": len(skipped), "video_ids": queued}
 
 
 def update_job(data_dir: Path, job_id: str, **fields) -> dict | None:

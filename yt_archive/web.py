@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
+from .creators import CreatorBrowser, creator_url
 from .db import list_creator_videos, normalize_video_sort
 from .jobs import JobQueue
 from .locks import video_lock
@@ -57,7 +58,8 @@ h1 a { color: inherit; text-decoration: none; }
 .sub { color: var(--muted); margin-bottom: 1.25rem; }
 form.get { display: flex; gap: .5rem; margin-bottom: 1rem; }
 form.get input { flex: 1; background: #0d0d0d; border: 1px solid var(--line); color: var(--fg);
-  padding: .7rem .8rem; border-radius: 6px; font-size: 1rem; }
+  padding: .7rem .8rem; border-radius: 6px; font-size: 1rem; min-width: 0; }
+form.get #browse-creator { background: #222; border: 1px solid var(--line); }
 form.get input:focus { outline: none; border-color: var(--red); }
 form.get button { background: var(--red); color: #fff; border: 0; padding: .7rem 1.2rem;
   border-radius: 6px; font-weight: 600; cursor: pointer; }
@@ -181,6 +183,8 @@ dialog label { display: grid; gap: .3rem; color: #fff; font-size: .85rem; }
 dialog .dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .5rem; }
 dialog .primary { background: #2e7441; border-color: #4a9d61; font-weight: 700; }
 @media (max-width: 600px) {
+  form.get { flex-wrap: wrap; }
+  form.get input { flex-basis: 100%; }
   .archive-tools { grid-template-columns: 1fr; align-items: stretch; }
   .sort-field select { width: 100%; }
   .card { grid-template-columns: 1fr; }
@@ -320,14 +324,17 @@ def home_html(
     body = f"""
 <header>
   <h1><a href="/">ytarchive</a></h1>
-  <div class="sub">Paste one URL or a pile of them. Each becomes a queued job; they run one at a time.</div>
+  <div class="sub">Paste video links to get them, or a creator’s homepage / @handle to choose their videos.</div>
   <form class="get" id="get-form">
     <input name="url" id="url" type="text" autofocus
-      placeholder="paste links — one or many, then Get"
+      aria-label="Video links or YouTube creator"
+      placeholder="video links, creator homepage, or @username"
       autocomplete="off">
     <button type="submit" id="go">Get</button>
+    <button type="button" id="browse-creator">Browse creator</button>
   </form>
   <div id="status"></div>
+  <div id="creator-results"></div>
   <div id="queue"></div>
 </header>
 <main>
@@ -356,6 +363,9 @@ const queueEl = document.getElementById('queue');
 const listEl = document.querySelector('.list');
 let knownDone = new Set();
 let primed = false;
+document.getElementById('browse-creator').onclick = () => {
+  if (urlBox.value.trim()) window.location.assign('/browse?' + new URLSearchParams({source: urlBox.value.trim()}));
+};
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const urls = urlBox.value.split(/\s+/).map((s) => s.trim()).filter(Boolean);
@@ -363,6 +373,8 @@ form.addEventListener('submit', async (e) => {
   urlBox.value = '';
   urlBox.focus();
   status.className = '';
+  const creators = document.getElementById('creator-results');
+  creators.replaceChildren();
   const notes = [];
   for (const url of urls) {
     try {
@@ -373,6 +385,16 @@ form.addEventListener('submit', async (e) => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || res.statusText);
+      if (data.browse_url) {
+        if (urls.length === 1) { window.location.assign(data.browse_url); return; }
+        const link = document.createElement('a');
+        link.href = data.browse_url;
+        link.textContent = 'Browse ' + url;
+        const row = document.createElement('p');
+        row.append(link);
+        creators.append(row);
+        continue;
+      }
       notes.push((data.status === 'queued' ? 'queued ' : data.status + ' ') + data.video_id);
     } catch (err) {
       notes.push(url + ' — ' + err.message);
@@ -520,6 +542,7 @@ def creator_html(
     )
     youtube_channel = (
         f' · <a href="https://www.youtube.com/channel/{_esc(channel_id)}">YouTube channel</a>'
+        f' · <a href="/browse?{_esc(urlencode({"source": channel_id}))}">Browse more from this creator</a>'
         if channel_id
         else ""
     )
@@ -561,6 +584,51 @@ document.querySelectorAll('time[data-local]').forEach((el) => {
 });
 """
     return _page(f"{creator_name} · ytarchive", body, js)
+
+
+def browse_creator_html(source: str = "") -> bytes:
+    body = f"""
+<header>
+  <p><a href="/">← archive and download queue</a></p>
+  <h1>Browse a YouTube creator</h1>
+  <p>See their videos, Shorts, and past streams. Pick a few or get all available items.</p>
+  <form class="get" id="creator-form">
+    <input id="creator-source" aria-label="YouTube creator" value="{_esc(source)}"
+      placeholder="YouTube homepage, @handle, username, or channel ID" required autocomplete="off">
+    <button id="creator-load" type="submit">Browse</button>
+  </form>
+  <div id="creator-status" role="status" aria-live="polite"></div>
+</header>
+<main id="creator-picker" hidden>
+  <h2 id="creator-title"></h2>
+  <p><a id="creator-youtube" target="_blank" rel="noopener">Open on YouTube</a></p>
+  <p id="creator-warning" role="status"></p>
+  <p>Saved and queued videos are skipped. Live, upcoming, and known restricted items cannot be selected.</p>
+  <div class="creator-actions">
+    <button id="creator-get-selected" type="button" class="primary" disabled>Get selected (0)</button>
+    <button id="creator-get-all" type="button" disabled>Get all available (0)</button>
+    <span id="creator-selected-count" aria-live="polite"></span>
+  </div>
+  <p class="meta">Get all includes the full list, even items hidden by your filter. Select all matching works across every page.</p>
+  <div class="creator-actions">
+    <input id="creator-filter" type="search" aria-label="Filter creator videos" placeholder="Filter titles or video IDs…">
+    <button id="creator-select" type="button">Select all matching</button>
+    <button id="creator-clear" type="button">Clear selection</button>
+  </div>
+  <p id="creator-count" aria-live="polite"></p>
+  <div id="creator-items"></div>
+  <nav class="creator-actions" aria-label="Creator video pages">
+    <button id="creator-prev" type="button">Previous</button>
+    <span id="creator-page"></span>
+    <button id="creator-next" type="button">Next</button>
+  </nav>
+</main>
+"""
+    return _page(
+        "Browse creator · ytarchive", body,
+        extra_head=f'<link rel="stylesheet" href="{_static_url("creators.css")}">',
+        extra_tail=f'<script src="{_static_url("creators.js")}"></script>',
+    )
 
 
 def detail_html(info: dict, data_dir: Path) -> bytes:
@@ -1209,6 +1277,8 @@ if (transcriptReady) loadTranscript().catch(err => {
 
 
 def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
+    creators = CreatorBrowser(data_dir, queue)
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             print(f"{self.address_string()} {fmt % args}", flush=True)
@@ -1216,6 +1286,13 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
         def do_GET(self):
             parsed = urlparse(self.path)
             path = unquote(parsed.path)
+            if path == "/browse":
+                return self._bytes(browse_creator_html((parse_qs(parsed.query).get("source") or [""])[0]))
+            if path.startswith("/api/creators/"):
+                listing = creators.get(path.removeprefix("/api/creators/"))
+                if not listing:
+                    return self._json({"error": "Preview expired or service restarted. Browse the creator again."}, 404)
+                return self._json(listing)
             if path == "/":
                 params = parse_qs(parsed.query)
                 q = (params.get("q") or [""])[0].strip()
@@ -1317,6 +1394,28 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
             if not self._trusted_mutation():
                 return
             parsed = urlparse(self.path)
+            if parsed.path == "/api/creators":
+                payload = self._read_json()
+                if payload is None:
+                    return
+                try:
+                    return self._json(creators.start(payload.get("source")), 202)
+                except ValueError as exc:
+                    return self._json({"error": str(exc)}, 400)
+            if parsed.path.startswith("/api/creators/") and parsed.path.endswith("/get"):
+                payload = self._read_json(max_bytes=1024 * 1024)
+                if payload is None:
+                    return
+                try:
+                    if "all" in payload and not isinstance(payload["all"], bool):
+                        raise ValueError("all must be a boolean")
+                    result = creators.enqueue(
+                        parsed.path.removeprefix("/api/creators/").removesuffix("/get"),
+                        video_ids=payload.get("video_ids"), all_items=payload.get("all", False),
+                    )
+                    return self._json(result, 202)
+                except ValueError as exc:
+                    return self._json({"error": str(exc)}, 400)
             if parsed.path == "/api/backfill-audio":
                 return self._backfill_audio()
             if parsed.path == "/api/transcribe":
@@ -1338,10 +1437,22 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
             except json.JSONDecodeError:
                 qs = parse_qs(raw.decode("utf-8", errors="replace"))
                 payload = {"url": (qs.get("url") or [""])[0]}
-            url = (payload.get("url") or payload.get("video_id") or "").strip()
+            if not isinstance(payload, dict):
+                return self._json({"error": "body must be an object"}, 400)
+            url = payload.get("url") or payload.get("video_id") or ""
+            if not isinstance(url, str):
+                return self._json({"error": "url must be text"}, 400)
+            url = url.strip()
             force_video = bool(payload.get("force_video"))
             force_shots = bool(payload.get("force_shots"))
             try:
+                try:
+                    parse_video_id(url)
+                except ValueError:
+                    if force_video or force_shots:
+                        raise
+                    source = creator_url(url)
+                    return self._json({"browse_url": "/browse?" + urlencode({"source": source})})
                 job = queue.submit(url, force_video=force_video, force_shots=force_shots)
             except ValueError as exc:
                 return self._json({"error": str(exc)}, 400)
@@ -1539,7 +1650,7 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
             self.end_headers()
             self.wfile.write(raw)
 
-        def _read_json(self):
+        def _read_json(self, max_bytes=64 * 1024):
             content_type = (self.headers.get("Content-Type") or "").split(";", 1)[
                 0
             ].strip().lower()
@@ -1555,7 +1666,7 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
             if length < 0:
                 self._json({"error": "invalid Content-Length"}, 400)
                 return None
-            if length > 64 * 1024:
+            if length > max_bytes:
                 self._json({"error": "request body too large"}, 413)
                 return None
             raw = self.rfile.read(length) if length else b"{}"

@@ -32,8 +32,10 @@ The main path is the live service, not the CLI.
 
 `yt-archive.service` (user unit) owns `127.0.0.1:8765`. Open
 `http://127.0.0.1:8765/` — or `http://ytarchive.localhost` on boxes with
-the Caddy `*.localhost` proxy. Paste one URL or a pile of them; each
-becomes a queued job. Jobs run one at a time: download, then shots, then
+the Caddy `*.localhost` proxy. Paste one video URL or a pile of them; each
+becomes a queued job. Creator homepages / handles open a picker for selected
+or all available uploads (see [docs/browsing.md](docs/browsing.md)).
+Jobs run one at a time: download, then shots, then
 MP3 audio. The same page lists and searches the archive; each item has a
 player, framesheet, MP3 audio, and optional user-triggered transcript.
 

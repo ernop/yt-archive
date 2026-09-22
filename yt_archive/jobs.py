@@ -10,6 +10,7 @@ from .download import clear_archive_extras, download
 from .framesheet import make_shots
 from .locks import try_video_lock
 from .paths import (
+    VIDEO_ID_RE,
     find_video_file,
     framesheet_paths,
     parse_video_id,
@@ -37,20 +38,28 @@ class JobQueue:
         video_id = parse_video_id(url)
         if force_video:
             force_shots = True
-        if not force_video and not force_shots:
-            existing = db.find_open_job(self.data_dir, video_id)
-            if existing:
-                return existing
-        job = db.insert_job(
-            self.data_dir,
-            url.strip() or watch_url(video_id),
-            video_id,
-            force_video=force_video,
-            force_shots=force_shots,
-        )
         with self._cv:
+            if not force_video and not force_shots:
+                existing = db.find_open_job(self.data_dir, video_id)
+                if existing:
+                    return existing
+            job = db.insert_job(
+                self.data_dir,
+                url.strip() or watch_url(video_id),
+                video_id,
+                force_video=force_video,
+                force_shots=force_shots,
+            )
             self._cv.notify()
         return job
+
+    def submit_many(self, video_ids: list[str]) -> dict:
+        if any(not isinstance(vid, str) or not VIDEO_ID_RE.fullmatch(vid) for vid in video_ids):
+            raise ValueError("Invalid YouTube video ID in selection.")
+        with self._cv:
+            result = db.enqueue_missing_videos(self.data_dir, video_ids)
+            self._cv.notify()
+        return result
 
     def get(self, job_id: str) -> dict | None:
         return db.get_job(self.data_dir, job_id)
