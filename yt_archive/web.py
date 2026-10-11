@@ -124,10 +124,10 @@ h2 { font-size: 1.1rem; color: var(--muted); font-weight: 600; margin: 2rem 0 .7
 .soundtrack { margin: 0 0 1.5rem; }
 .soundtrack audio { width: 100%; margin: .4rem 0 .6rem; }
 .soundtrack .row { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
-.soundtrack button, .backfill button { background: #161616; border: 1px solid var(--line); color: var(--muted);
+.soundtrack .row button, .backfill button { background: #161616; border: 1px solid var(--line); color: var(--muted);
   padding: .35rem .7rem; border-radius: 4px; cursor: pointer; font-size: .82rem; }
-.soundtrack button:hover, .backfill button:hover { color: var(--fg); border-color: #666; }
-.soundtrack button:disabled, .backfill button:disabled { opacity: 1; cursor: wait; }
+.soundtrack .row button:hover, .backfill button:hover { color: var(--fg); border-color: #666; }
+.soundtrack .row button:disabled, .backfill button:disabled { opacity: 1; cursor: wait; }
 .backfill { margin: 0 0 1rem; }
 #backfill-status, #audio-status { margin-top: .4rem; font-family: ui-monospace, monospace; font-size: .85rem; white-space: pre-wrap; color: var(--muted); }
 #backfill-status.error, #audio-status.error { color: #f88; }
@@ -243,6 +243,15 @@ def _page(title: str, body: str, extra_js: str = "", extra_head: str = "", extra
 def _static_url(name: str) -> str:
     path = STATIC_DIR / name
     return f"/static/{name}?v={file_cache_key(path)}"
+
+
+def _media_player_includes() -> tuple[str, str]:
+    """The stylesheet and script tags of this repo's copy of the shared media player
+    (docs/setup.md, "Media player")."""
+    return (
+        f'<link rel="stylesheet" href="{_esc(_static_url("media-player/media-player.css"))}">',
+        f'<script src="{_esc(_static_url("media-player/media-player.js"))}"></script>',
+    )
 
 
 SORT_OPTIONS = (
@@ -657,11 +666,14 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
     if sj.exists():
         shot_recs = json.loads(sj.read_text(encoding="utf-8")).get("shots", [])
     kept = [r for r in shot_recs if r.get("file") and r.get("kept") is not False]
-    payload = [
-        {"t": r.get("t0"), "mid": r.get("mid")}
+    # Each kept shot's start is a marker on the player's scale; its id is the shot image's file,
+    # so the page can light that image while the shot plays.
+    shot_markers = [
+        {"t": r["t0"], "label": f"Shot {Path(r['file']).stem}", "id": r["file"]}
         for r in kept
         if r.get("t0") is not None
     ]
+    player_head, player_tail = _media_player_includes()
     creator_url = _creator_url(info)
     creator_name = _esc(info.get("channel") or "unknown uploader")
     creator_link = (
@@ -676,8 +688,8 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
         f'<a href="{watch_url(vid)}">YouTube</a></div></header><main>',
     ]
     if video:
-        shots_attr = _esc(json.dumps(payload, separators=(",", ":")))
-        dur_attr = f'{duration or ""}'
+        markers_attr = _esc(json.dumps(shot_markers, separators=(",", ":")))
+        dur_attr = f' data-duration="{duration}"' if duration else ""
         captions_track = (
             f'<track kind="captions" srclang="{_esc(transcript_language)}" label="Local transcript" '
             f'src="{_esc(media_url(data_dir, captions_file))}">'
@@ -685,56 +697,13 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
             else ""
         )
         parts.append(f"""
-<div class="ytp" id="ytp" data-id="{_esc(vid)}" data-duration="{dur_attr}" data-shots="{shots_attr}">
-  <video preload="metadata" src="{_esc(media_url(data_dir, video))}">{captions_track}</video>
-  <div class="ytp-overlay">
-    <button type="button" class="ytp-bigplay" data-act="play" aria-label="Play">▶</button>
-    <div class="ytp-flash"></div>
-  </div>
-  <button type="button" class="ytp-resume"></button>
-  <div class="ytp-help">
-    <b>keys</b><br>
-    space / k  play-pause<br>
-    j / l  −10s / +10s<br>
-    ← →  −5s / +5s · shift = 1s<br>
-    , .  frame step<br>
-    s  save this frame<br>
-    0–9  jump to %<br>
-    home / end  video start / end (video focused)<br>
-    &lt; &gt;  speed · m mute · f full<br>
-    t theater · i / p pip<br>
-    pgup / pgdn  prev / next shot<br>
-    ? this list
-  </div>
-  <div class="ytp-bar">
-    <div class="ytp-scrub">
-      <div class="ytp-scrub-track"></div>
-      <div class="ytp-scrub-buf"></div>
-      <div class="ytp-scrub-fill"></div>
-      <div class="ytp-ticks"></div>
-      <div class="ytp-scrub-knob"></div>
-      <div class="ytp-tip"></div>
-    </div>
-    <div class="ytp-row">
-      <button type="button" data-act="play">▶</button>
-      <button type="button" data-act="back">−10</button>
-      <button type="button" data-act="fwd">+10</button>
-      <span class="ytp-time">0:00 / 0:00</span>
-      <button type="button" data-act="slower">−</button>
-      <span class="ytp-speed">1×</span>
-      <button type="button" data-act="faster">+</button>
-      <span class="ytp-grow"></span>
-      <button type="button" data-act="grab">grab</button>
-      <button type="button" data-act="mute">mute</button>
-      <button type="button" data-act="pip">pip</button>
-      {('<button type="button" data-act="cc">CC</button>' if has_transcript else '')}
-      <button type="button" data-act="theater">wide</button>
-      <button type="button" data-act="fs">full</button>
-      <button type="button" data-act="help">?</button>
-    </div>
-  </div>
+<div class="ytp" id="ytp" data-id="{_esc(vid)}">
+  <video controls preload="metadata" src="{_esc(media_url(data_dir, video))}" data-media-player
+    data-title="{_esc(title)}"{dur_attr} data-markers="{markers_attr}" data-markers-label="Shot"
+    data-wide>{captions_track}</video>
 </div>
-<p class="meta">click a shot to seek · s saves this frame next to the mp3 · shift-click opens the PNG · resume and speed are remembered</p>
+<p class="meta">click a shot to play from it, then PageUp and PageDown step through shots · S saves this frame next to the MP3 · T widens the page ·
+shift-click a shot to open its PNG · ? lists every key</p>
 """)
     mp3 = soundtrack_path(data_dir, vid)
     soundtrack_bits = ['<div class="soundtrack">']
@@ -742,7 +711,8 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
         soundtrack_bits.append(
             f'<h2>MP3 audio</h2>'
             f'<p class="meta"><a href="{_esc(media_url(data_dir, mp3))}" download>download MP3 audio</a></p>'
-            f'<audio controls preload="metadata" src="{_esc(media_url(data_dir, mp3))}"></audio>'
+            f'<audio controls preload="metadata" src="{_esc(media_url(data_dir, mp3))}" data-media-player '
+            f'data-title="{_esc(f"MP3 audio: {title}")}"></audio>'
         )
     else:
         soundtrack_bits.append('<h2>MP3 audio</h2>')
@@ -874,10 +844,9 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
         t0 = rec.get("t0")
         sample = rec.get("sample", t0)
         cap = shot.stem + (f" @ {sample:.1f}s" if sample is not None else "")
-        data_t = f'data-t="{sample}"' if sample is not None else ""
-        data_start = f' data-start="{t0}"' if t0 is not None else ""
+        data_t = f' data-t="{sample}"' if sample is not None else ""
         figs.append(
-            f'<figure {data_t}{data_start}>'
+            f'<figure data-file="{_esc(shot.name)}"{data_t}>'
             f'<a href="{_esc(media_url(data_dir, shot))}">'
             f'<img src="{_esc(media_url(data_dir, shot))}" alt="{shot.stem}"></a>'
             f"<figcaption>{cap}</figcaption></figure>"
@@ -1255,12 +1224,12 @@ if (toggleCc && playerVideo) {
   const paintCc = () => toggleCc.textContent =
     track && track.mode === 'showing' ? 'Disable video CC' : 'Enable video CC';
   toggleCc.onclick = () => {
-    const playerCc = document.querySelector('#ytp [data-act=cc]');
-    if (playerCc) playerCc.click();
+    const player = window.MediaPlayer && MediaPlayer.get(playerVideo);
+    if (player) player.toggleCaptions();
     else if (track) track.mode = track.mode === 'showing' ? 'hidden' : 'showing';
     paintCc();
   };
-  document.getElementById('ytp').addEventListener('ytarchive:cc', paintCc);
+  document.getElementById('ytp').addEventListener('media-player:captions', paintCc);
   paintCc();
 }
 if (transcriptReady) loadTranscript().catch(err => {
@@ -1271,8 +1240,8 @@ if (transcriptReady) loadTranscript().catch(err => {
         title,
         "".join(parts),
         extra_js=reget_js,
-        extra_head=f'<link rel="stylesheet" href="{_esc(_static_url("player.css"))}">',
-        extra_tail=f'<script src="{_esc(_static_url("player.js"))}"></script>',
+        extra_head=f'{player_head}<link rel="stylesheet" href="{_esc(_static_url("video.css"))}">',
+        extra_tail=f'{player_tail}<script src="{_esc(_static_url("video.js"))}"></script>',
     )
 
 

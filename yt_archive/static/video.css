@@ -1,0 +1,16 @@
+/* The video page around the shared media player (docs/setup.md): the archive's red for the
+   played part and play button, the picture's height, wide mode (T), and the shot images that
+   follow the playhead. */
+.ytp .mp,
+.soundtrack .mp {
+  --mp-accent: var(--red);
+  --mp-accent-text: #fff;
+}
+.ytp { margin: 0.5rem 0 1.25rem; }
+.ytp .mp { --mp-video-max-height: 72vh; }
+html.mp-wide .ytp .mp { --mp-video-max-height: 86vh; }
+.soundtrack .mp { margin: 0.4rem 0 0.6rem; }
+
+.shots figure { cursor: pointer; }
+.shots figure:hover { border-color: var(--red); }
+.shots figure.now { border-color: var(--red); box-shadow: 0 0 0 1px var(--red); }

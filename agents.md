@@ -17,10 +17,10 @@ history and `to_archive` marks. This process owns the files and the ML venv
 | Doc | What it is |
 |-----|------------|
 | [README.md](README.md) | Public GitHub intro — what this is, how to invoke it |
-| [docs/setup.md](docs/setup.md) | New-machine install, `.venv`, live service |
+| [docs/setup.md](docs/setup.md) | New-machine install, `.venv`, the media player copy, live service |
 | [docs/download.md](docs/download.md) | yt-dlp flags, cookies, JS runtime — settled, do not reinvent |
 | [docs/framesheets.md](docs/framesheets.md) | Shot pipeline, thresholds, rejected approaches |
-| [docs/browsing.md](docs/browsing.md) | Default recent-first archive order and URL-backed sort choices |
+| [docs/browsing.md](docs/browsing.md) | Archive order and sort, creator pages, text contrast, the video and audio player |
 | [docs/transcription.md](docs/transcription.md) | Explicit local Whisper jobs, timed transcript UI, captions, speakers |
 
 Every durable note in this repo is in that list or linked from one of those

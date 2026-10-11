@@ -37,6 +37,18 @@ automatic. See [transcription.md](transcription.md).
 `.venv/` is gitignored. A symlink at `.venv` to an already-built equivalent
 venv (torch, OpenCLIP, faster-whisper) also satisfies `./yt`.
 
+## Media player
+
+Video pages play the video and MP3 audio in the shared media player library,
+which lives in its own repo. This repo keeps a copy of it in
+`yt_archive/static/media-player/`, served at `/static/media-player/`; nothing
+is loaded from another checkout (owner, 2026-10-11: no dependency on a
+checkout sitting next to this one; until then the service served
+`../media-player`). Never edit the copy. To take a library change, run the
+library's `copy-into.sh yt_archive/static/media-player` from this repo, which
+also rewrites `media-player.sha256`, then the tests: `tests/test_player.py`
+fails on a copy that differs from those checksums and checks the page wiring.
+
 ## Live service
 
 `./yt serve` binds `127.0.0.1:8765`. On this fleet the user unit

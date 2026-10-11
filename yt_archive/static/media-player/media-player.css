@@ -1,0 +1,807 @@
+/* media-player styles. A page themes the player by setting the --mp-* properties on .mp (see
+   README.md in the media-player repository); the defaults below have zero specificity, so any
+   page rule wins. Projects keep a copy made by copy-into.sh; never edit a copy.
+
+   Text is always --mp-text at full strength: hierarchy comes from size and weight, never from
+   fading or graying text. */
+
+:where(.mp) {
+    --mp-bg: #000;
+    --mp-text: #fff;
+    --mp-border: #fff;
+    --mp-accent: #2563eb;
+    --mp-accent-text: #fff;
+    --mp-hover: #262626;
+    --mp-buffered: color-mix(in srgb, var(--mp-text) 32%, transparent);
+    --mp-marker: #f59e0b;
+    --mp-error: #dc2626;
+    --mp-media-bg: #000;
+    --mp-overlay-bg: rgb(0 0 0 / 0.9);
+    --mp-overlay-text: #fff;
+    --mp-overlay-hover: rgb(255 255 255 / 0.2);
+    --mp-font: system-ui, sans-serif;
+    --mp-radius: 6px;
+    --mp-radius-sm: 4px;
+    --mp-fs-value: 1.375rem;
+    --mp-fs-control: 0.9375rem;
+    --mp-fs-small: 0.8125rem;
+    --mp-control-size: 2.25em;
+    --mp-video-max-height: 80vh;
+    --mp-thumb: 14px;
+}
+
+.mp {
+    position: relative;
+    display: block;
+    width: 100%;
+    container-type: inline-size;
+    color: var(--mp-text);
+    background: var(--mp-bg);
+    border: 1px solid var(--mp-border);
+    border-radius: var(--mp-radius);
+    font-family: var(--mp-font);
+    font-size: var(--mp-fs-control);
+    line-height: 1.25;
+    box-sizing: border-box;
+}
+
+.mp *,
+.mp *::before,
+.mp *::after {
+    box-sizing: border-box;
+}
+
+.mp:focus {
+    outline: none;
+}
+
+/* Not :focus-visible: a mouse click also hands the player the keys the page scrolls with. */
+.mp:focus-within {
+    border-color: var(--mp-accent);
+    box-shadow: 0 0 0 1px var(--mp-accent);
+}
+
+.mp [hidden] {
+    display: none !important;
+}
+
+/* ------------------------------------------------------------------ video stage */
+
+.mp-stage {
+    position: relative;
+    overflow: hidden;
+    background: var(--mp-media-bg);
+    border-radius: var(--mp-radius) var(--mp-radius) 0 0;
+}
+
+.mp-stage > video {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: var(--mp-video-max-height);
+    object-fit: contain;
+    background: var(--mp-media-bg);
+    cursor: pointer;
+}
+
+.mp-bigplay {
+    position: absolute;
+    inset: 0;
+    width: 4.5rem;
+    height: 4.5rem;
+    margin: auto;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    color: var(--mp-overlay-text);
+    background: var(--mp-overlay-bg);
+    border: 2px solid var(--mp-overlay-text);
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.mp-bigplay svg {
+    width: 2.25rem;
+    height: 2.25rem;
+    margin-left: 0.25rem;
+    fill: currentColor;
+}
+
+.mp-stage .mp-flash {
+    position: absolute;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: calc(100% - 2rem);
+    padding: 0.3em 0.8em;
+    overflow: hidden;
+    color: var(--mp-overlay-text);
+    background: var(--mp-overlay-bg);
+    border-radius: var(--mp-radius-sm);
+    font-size: var(--mp-fs-value);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    visibility: hidden;
+}
+
+.mp .mp-flash.is-on {
+    visibility: visible;
+}
+
+/* ------------------------------------------------------------------ bar */
+
+.mp-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+    padding: 0.6em 0.75em 0.55em;
+}
+
+.mp-error {
+    margin: 0.5em 0.75em 0;
+    padding: 0.5em 0.75em;
+    color: var(--mp-text);
+    background: var(--mp-bg);
+    border: 2px solid var(--mp-error);
+    border-radius: var(--mp-radius-sm);
+    font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ seek scale */
+
+.mp-scale {
+    display: flex;
+    align-items: center;
+    gap: 0.75em;
+}
+
+.mp-time {
+    flex: none;
+    font-size: var(--mp-fs-value);
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* Inset by half a thumb, so the thumb at either end stays clear of the times beside it. */
+.mp-scale-body {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0.25em calc(var(--mp-thumb) / 2) 0;
+}
+
+.mp-track {
+    position: relative;
+    height: 12px;
+    background: var(--mp-bg);
+    border: 1px solid var(--mp-border);
+    border-radius: 999px;
+    cursor: pointer;
+    touch-action: none;
+}
+
+/* A taller strip than the visible track takes the clicks. */
+.mp-track::before {
+    content: "";
+    position: absolute;
+    inset: -9px 0;
+}
+
+.mp-track:focus {
+    outline: none;
+}
+
+.mp-track:focus-visible {
+    outline: 2px solid var(--mp-accent);
+    outline-offset: 3px;
+}
+
+.mp-buffered,
+.mp-markers {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.mp-buffered {
+    overflow: hidden;
+    border-radius: 999px;
+}
+
+.mp-buffered span {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: var(--mp-buffered);
+}
+
+.mp-fill {
+    position: absolute;
+    inset: 0;
+    background: var(--mp-accent);
+    border-radius: 999px;
+    transform: scaleX(0);
+    transform-origin: left center;
+    pointer-events: none;
+}
+
+.mp-markers span {
+    position: absolute;
+    top: -4px;
+    bottom: -4px;
+    width: 3px;
+    margin-left: -1.5px;
+    background: var(--mp-marker-color, var(--mp-marker));
+}
+
+/* The marker the playhead is at or past stands taller and wider, edged in the bar's color. */
+.mp-markers span.is-current {
+    top: -7px;
+    bottom: -7px;
+    width: 5px;
+    margin-left: -2.5px;
+    box-shadow: 0 0 0 1px var(--mp-bg);
+}
+
+.mp-thumb {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: var(--mp-thumb);
+    height: var(--mp-thumb);
+    margin: calc(var(--mp-thumb) / -2) 0 0 calc(var(--mp-thumb) / -2);
+    background: var(--mp-accent);
+    border: 2px solid var(--mp-bg);
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px var(--mp-border);
+    pointer-events: none;
+}
+
+.mp.is-waiting .mp-track {
+    background-image: repeating-linear-gradient(-45deg, transparent 0 6px, var(--mp-buffered) 6px 12px);
+    background-size: 17px 17px;
+    animation: mp-stripes 0.6s linear infinite;
+}
+
+@keyframes mp-stripes {
+    to {
+        background-position: 17px 0;
+    }
+}
+
+.mp-tip {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    z-index: 2;
+    display: flex;
+    gap: 0.5em;
+    padding: 0.2em 0.5em;
+    color: var(--mp-overlay-text);
+    background: var(--mp-overlay-bg);
+    border-radius: var(--mp-radius-sm);
+    transform: translateX(-50%);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.mp-tip strong {
+    font-weight: 700;
+}
+
+/* Audio players often sit at the top of a scrolling pane, where a time above the track is cut
+   off; it shows over the notch labels instead. */
+.mp-audio .mp-tip {
+    top: calc(100% + 4px);
+    bottom: auto;
+}
+
+.mp-ticks {
+    position: relative;
+    height: calc(var(--mp-fs-small) + 12px);
+    margin-top: 3px;
+}
+
+.mp-tick {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    height: 4px;
+    background: var(--mp-text);
+    transform: translateX(-50%);
+}
+
+.mp-tick.is-major {
+    width: 2px;
+    height: 8px;
+}
+
+.mp-tick-label {
+    position: absolute;
+    top: 10px;
+    font-size: var(--mp-fs-small);
+    font-weight: 500;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    transform: translateX(-50%);
+}
+
+.mp-tick-label.is-start {
+    transform: none;
+}
+
+.mp-tick-label.is-end {
+    transform: translateX(-100%);
+}
+
+/* ------------------------------------------------------------------ controls */
+
+.mp-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5em 0.9em;
+}
+
+/* A group moves to its own line before it wraps, and wraps only when even that line is too narrow
+   (large buttons on a phone). */
+.mp-group {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35em;
+}
+
+.mp-grow {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.mp-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3em;
+    min-width: var(--mp-control-size);
+    height: var(--mp-control-size);
+    padding: 0 0.6em;
+    color: var(--mp-text);
+    background: var(--mp-bg);
+    border: 1px solid var(--mp-border);
+    border-radius: var(--mp-radius-sm);
+    font: inherit;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.mp-btn:hover {
+    background: var(--mp-hover);
+}
+
+.mp-btn:focus-visible,
+.mp-bigplay:focus-visible,
+.mp-range input:focus-visible {
+    outline: 2px solid var(--mp-accent);
+    outline-offset: 2px;
+}
+
+/* Disabled stays full strength: the dashed edge says it, not faded text. */
+.mp-btn:disabled {
+    border-style: dashed;
+    cursor: not-allowed;
+}
+
+.mp-btn:disabled:hover {
+    background: var(--mp-bg);
+}
+
+.mp-btn svg {
+    width: 1.3em;
+    height: 1.3em;
+    fill: currentColor;
+}
+
+.mp-btn .mp-stroke,
+.mp-bigplay .mp-stroke {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.mp-play {
+    width: calc(var(--mp-control-size) * 1.22);
+    height: calc(var(--mp-control-size) * 1.22);
+    padding: 0;
+    color: var(--mp-accent-text);
+    background: var(--mp-accent);
+    border-color: var(--mp-accent);
+    border-radius: 50%;
+}
+
+.mp-play:hover {
+    background: var(--mp-accent);
+    box-shadow: 0 0 0 2px var(--mp-bg), 0 0 0 4px var(--mp-accent);
+}
+
+.mp-play svg {
+    width: 1.4em;
+    height: 1.4em;
+}
+
+.mp-label,
+.mp-unit {
+    font-size: var(--mp-fs-small);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.mp-value {
+    min-width: 3.1em;
+    font-size: calc(var(--mp-fs-control) * 1.15);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.mp-volume .mp-value {
+    min-width: 2.1em;
+    text-align: right;
+}
+
+.mp-resume {
+    color: var(--mp-accent-text);
+    background: var(--mp-accent);
+    border-color: var(--mp-accent);
+}
+
+.mp-resume:hover {
+    background: var(--mp-accent);
+    box-shadow: 0 0 0 2px var(--mp-bg), 0 0 0 4px var(--mp-accent);
+}
+
+.mp-cc[aria-pressed="true"],
+.mp-wide[aria-pressed="true"] {
+    color: var(--mp-accent-text);
+    background: var(--mp-accent);
+    border-color: var(--mp-accent);
+}
+
+.mp-audio .mp-flash {
+    overflow: hidden;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    visibility: hidden;
+}
+
+.mp-legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    white-space: nowrap;
+}
+
+.mp-legend-item {
+    gap: 0.4em;
+    font-size: var(--mp-fs-small);
+}
+
+/* A hidden kind: a dashed edge and an outlined swatch, never faded text. */
+.mp-legend-item[aria-pressed="false"] {
+    border-style: dashed;
+}
+
+.mp-legend-swatch {
+    width: 4px;
+    height: 1.1em;
+    background: var(--mp-marker-color, var(--mp-marker));
+}
+
+.mp-legend-item[aria-pressed="false"] .mp-legend-swatch {
+    background: transparent;
+    outline: 1px solid var(--mp-marker-color, var(--mp-marker));
+}
+
+.mp-legend-count {
+    font-size: var(--mp-fs-control);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ volume slider with its scale */
+
+.mp-range {
+    position: relative;
+    display: inline-block;
+    flex: 0 1 8em;
+    min-width: 5.5em;
+    padding-bottom: calc(var(--mp-fs-small) + 6px);
+}
+
+.mp-range input {
+    display: block;
+    width: 100%;
+    height: 1.25em;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+    appearance: none;
+}
+
+.mp-range input::-webkit-slider-runnable-track {
+    height: 6px;
+    border: 1px solid var(--mp-border);
+    border-radius: 999px;
+    background: linear-gradient(to right, var(--mp-accent) var(--mp-volume, 100%), var(--mp-bg) var(--mp-volume, 100%));
+}
+
+.mp-range input::-moz-range-track {
+    height: 6px;
+    border: 1px solid var(--mp-border);
+    border-radius: 999px;
+    background: var(--mp-bg);
+}
+
+.mp-range input::-moz-range-progress {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--mp-accent);
+}
+
+.mp-range input::-webkit-slider-thumb {
+    width: var(--mp-thumb);
+    height: var(--mp-thumb);
+    margin-top: calc((6px - 2px - var(--mp-thumb)) / 2);
+    background: var(--mp-accent);
+    border: 2px solid var(--mp-bg);
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px var(--mp-border);
+    appearance: none;
+}
+
+.mp-range input::-moz-range-thumb {
+    width: var(--mp-thumb);
+    height: var(--mp-thumb);
+    background: var(--mp-accent);
+    border: 2px solid var(--mp-bg);
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px var(--mp-border);
+}
+
+/* The thumb's center travels between half a thumb from each end; the notches follow it. */
+.mp-range-scale {
+    position: absolute;
+    right: calc(var(--mp-thumb) / 2);
+    bottom: 0;
+    left: calc(var(--mp-thumb) / 2);
+    height: calc(var(--mp-fs-small) + 6px);
+    pointer-events: none;
+}
+
+.mp-range-scale i {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    height: 3px;
+    background: var(--mp-text);
+    transform: translateX(-50%);
+}
+
+.mp-range-scale i.is-major {
+    width: 2px;
+    height: 5px;
+}
+
+.mp-range-scale b {
+    position: absolute;
+    top: 6px;
+    font-size: var(--mp-fs-small);
+    font-weight: 500;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    transform: translateX(-50%);
+}
+
+.mp-range-scale b.is-start {
+    transform: translateX(calc(var(--mp-thumb) / -2));
+}
+
+.mp-range-scale b.is-end {
+    transform: translateX(calc(-100% + var(--mp-thumb) / 2));
+}
+
+/* ------------------------------------------------------------------ keys panel */
+
+.mp-help {
+    padding: 0.75em 0.9em;
+    background: var(--mp-bg);
+    border: 1px solid var(--mp-border);
+    border-radius: var(--mp-radius-sm);
+}
+
+.mp-help-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1em;
+    margin-bottom: 0.5em;
+}
+
+.mp-help-title {
+    font-size: calc(var(--mp-fs-control) * 1.2);
+    font-weight: 700;
+}
+
+.mp-help-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 34em), 1fr));
+    column-gap: 2em;
+}
+
+.mp-help-row {
+    display: flex;
+    gap: 1em;
+    min-width: 0;
+    padding: 0.2em 0;
+    white-space: nowrap;
+}
+
+.mp-help-keys {
+    flex: 0 0 10.5em;
+    font-weight: 700;
+}
+
+.mp-help-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mp-help-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4em 1.25em;
+    margin-top: 0.6em;
+}
+
+.mp-help-swatch-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    white-space: nowrap;
+}
+
+.mp-help-swatch {
+    width: 1.75em;
+    height: 10px;
+    border: 1px solid var(--mp-border);
+    border-radius: 999px;
+}
+
+.mp-help-swatch.is-played {
+    background: var(--mp-accent);
+}
+
+.mp-help-swatch.is-buffered {
+    background: var(--mp-buffered);
+}
+
+.mp-help-swatch.is-marker {
+    width: 4px;
+    height: 1.1em;
+    background: var(--mp-marker-color, var(--mp-marker));
+    border: 0;
+    border-radius: 0;
+}
+
+.mp-help-swatch.is-loading {
+    background: repeating-linear-gradient(-45deg, transparent 0 4px, var(--mp-buffered) 4px 8px);
+}
+
+.mp-help-note {
+    margin: 0.6em 0 0;
+    font-size: var(--mp-fs-small);
+}
+
+/* ------------------------------------------------------------------ full screen */
+
+.mp.is-fullscreen {
+    background: var(--mp-media-bg);
+    border: 0;
+    border-radius: 0;
+}
+
+.mp.is-fullscreen .mp-stage {
+    position: absolute;
+    inset: 0;
+    border-radius: 0;
+}
+
+.mp.is-fullscreen .mp-stage > video,
+.mp.is-fullscreen .mp-stage > .mp-source {
+    height: 100%;
+    max-height: none;
+}
+
+.mp.is-fullscreen .mp-error {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    left: 1rem;
+    z-index: 3;
+}
+
+.mp.is-fullscreen .mp-bar {
+    --mp-bg: transparent;
+    --mp-text: var(--mp-overlay-text);
+    --mp-border: var(--mp-overlay-text);
+    --mp-hover: var(--mp-overlay-hover);
+    --mp-buffered: color-mix(in srgb, var(--mp-overlay-text) 32%, transparent);
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 2;
+    padding: 0.9em 1.25em 0.8em;
+    color: var(--mp-text);
+    background: var(--mp-overlay-bg);
+}
+
+.mp.is-fullscreen .mp-help {
+    max-height: 60vh;
+    overflow: auto;
+}
+
+.mp.is-idle .mp-bar {
+    visibility: hidden;
+}
+
+.mp.is-idle,
+.mp.is-idle video {
+    cursor: none;
+}
+
+/* ------------------------------------------------------------------ narrow players */
+
+@container (max-width: 44rem) {
+    .mp-skip-far,
+    .mp-legend-label,
+    .mp-speed .mp-label {
+        display: none;
+    }
+}
+
+/* The half-jump buttons stay at every width: a page shows them only because its listeners need them. */
+@container (max-width: 30rem) {
+    .mp-range,
+    .mp-legend {
+        display: none;
+    }
+
+    .mp-time {
+        font-size: calc(var(--mp-fs-value) * 0.8);
+    }
+
+    .mp-scale {
+        gap: 0.5em;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mp.is-waiting .mp-track {
+        animation: none;
+    }
+}

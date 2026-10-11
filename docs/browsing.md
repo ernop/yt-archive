@@ -77,15 +77,29 @@ weight—not reduced contrast. Semantic link, success, and error colors remain
 allowed when they are strongly legible.
 
 This applies to the live archive, generated static pages, dialogs, transcript
-controls, and the custom player. The requirement exists because gray-on-black
+controls, and the media player. The requirement exists because gray-on-black
 text was difficult to read.
 
-## Home and End keys
+## Video and audio player
 
-`Home`, `End`, `Ctrl+Home`, and `Ctrl+End` control video position only while
-the video element itself has keyboard focus. When focus is elsewhere on the
-page, these keys retain normal browser behavior; in particular, `End` scrolls
-to the bottom of the page and `Ctrl+Home` goes to the top.
+The video and the MP3 audio play in the shared media player, of which this
+repo keeps a copy ([setup.md](setup.md#media-player)), so every project plays
+media the same way; it replaced this site's own player in October 2026. `?` on
+the page lists every key. What the video page adds:
 
-Clicking the video gives it focus. Keyboard focus is shown with a white outline
-so it is clear when the player will consume these keys.
+- Every kept shot is a marker on the seek scale, named by its image
+  (`Shot 0041`). The image of the shot that is playing is outlined in red.
+- Clicking a shot image plays from it and gives the player the keyboard, so
+  PageUp and PageDown then step through the shots. Shift-click opens the PNG.
+- `S` or the camera button saves the frame showing as a full-size PNG into
+  `_condensed/`, next to the MP3 (`grab-<title>-<time>.png`).
+- `T` or the wide button gives the video 86% of the window height instead of
+  72%. The player remembers the choice, as it does captions.
+- With a transcript, `C`, the player's CC button and the transcript's caption
+  button all switch the same captions.
+
+Keys that scroll the page (Up, Down, Home, End, PageUp, PageDown) act on the
+player only while it has keyboard focus: after clicking it, tabbing into it or
+clicking a shot image. The player's edge is red while it has focus. Elsewhere
+these keys keep their normal browser behavior; in particular `End` scrolls to
+the bottom of the page and `Ctrl+Home` goes to the top.
