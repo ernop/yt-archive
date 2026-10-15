@@ -20,7 +20,8 @@ history and `to_archive` marks. This process owns the files and the ML venv
 | [docs/setup.md](docs/setup.md) | New-machine install, `.venv`, the media player copy, live service |
 | [docs/download.md](docs/download.md) | yt-dlp flags, cookies, JS runtime — settled, do not reinvent |
 | [docs/framesheets.md](docs/framesheets.md) | Shot pipeline, thresholds, rejected approaches |
-| [docs/browsing.md](docs/browsing.md) | Archive order and sort, creator pages, text contrast, the video and audio player |
+| [docs/browsing.md](docs/browsing.md) | Download queue panel, archive status and update, single-line list rows, order and sort, creator pages, text contrast, the video page and player |
+| [docs/bookmarklet.md](docs/bookmarklet.md) | The **+ ytarchive** bookmarklet: queue the YouTube page you're on, its key, why a pop-up |
 | [docs/transcription.md](docs/transcription.md) | Explicit local Whisper jobs, timed transcript UI, captions, speakers |
 
 Every durable note in this repo is in that list or linked from one of those
@@ -35,9 +36,13 @@ The main path is the live service, not the CLI.
 the Caddy `*.localhost` proxy. Paste one video URL or a pile of them; each
 becomes a queued job. Creator homepages / handles open a picker for selected
 or all available uploads (see [docs/browsing.md](docs/browsing.md)).
+The **+ ytarchive** bookmarklet on that page queues the YouTube page you are
+on in one click ([docs/bookmarklet.md](docs/bookmarklet.md)).
 Jobs run one at a time: download, then shots, then
-MP3 audio. The same page lists and searches the archive; each item has a
-player, framesheet, MP3 audio, and optional user-triggered transcript.
+MP3 audio, shown live in the page's **download queue** panel. The same page
+lists and searches the archive, and offers **Update N videos** when older
+videos lack current work (see [docs/browsing.md](docs/browsing.md)); each item
+has a player, framesheet, MP3 audio, and optional user-triggered transcript.
 
 ```sh
 systemctl --user status yt-archive.service
@@ -77,9 +82,10 @@ server when the unit is not in play.
 ```
 data/<id>/
   <title>-<id>.mkv          # original, sacred — never overwrite or transcode
-  *.info.json  *.webp  archive.json  index.html
+  *.info.json  *.webp  archive.json
   _condensed/
-    framesheet.png
+    framesheet.png          # or framesheet-1.png, framesheet-2.png … (docs/framesheets.md)
+    preview.jpg             # sheet 1 at 480 px wide, for the archive list
     soundtrack.mp3
     transcript.json
     transcript.vtt
@@ -89,6 +95,10 @@ data/<id>/
 
 Files are the source of truth. `data/ytarchive.sqlite` is a catalog so
 list/search does not re-read every `archive.json`. `./yt reindex` rebuilds it.
+
+`data/bookmarklet.key` is the bookmarklet's secret (see
+[docs/bookmarklet.md](docs/bookmarklet.md)); it is not rebuildable from the
+archive, only replaceable.
 
 `YT_ARCHIVE_DATA` overrides the data root. Default is `./data`.
 

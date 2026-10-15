@@ -3,7 +3,15 @@
 Parent: [agents.md](../agents.md). Settled 2026-08-18. Do not reinvent.
 
 Code: `yt_archive/framesheet.py`. Everything local (HF cache
-`~/.cache/huggingface`, ~600 MB CLIP).
+`~/.cache/huggingface`, ~600 MB CLIP). The pinned weights load from that cache
+without contacting the Hugging Face Hub (`_load_clip` passes
+`local_files_only`); only a missing cache downloads them. Before 2026-10-14
+every shot job sent the Hub a revision check.
+
+Sheets are written as `.framesheet*.png.part` and renamed into place only once
+every sheet of the set is complete, so a stopped job leaves the previous
+sheets, not a truncated one. A sheet that does not end in its PNG `IEND` chunk
+counts as "framesheet to split" and is laid out again from the shot images.
 
 ## Pipeline
 
@@ -46,9 +54,43 @@ resulting sheets remain compact rectangles. Multi-sheet files are
 `framesheet-1.png`, `framesheet-2.png`, … in shot order.
 
 `paths.framesheet_paths()` lists whichever form exists (legacy single sheet
-first), and every consumer — detail page, card thumbnail (part 1), static
-export, job skip-check — goes through it. A re-run deletes all
+first), and every consumer in this repo — detail page, list thumbnail,
+archive-needs check — goes through it. A re-run deletes all
 `framesheet*.png` first so old and new parts never mix.
+
+matthoom reads only `_condensed/framesheet.png`, so it shows no sheet for a
+multi-sheet video (its shot images still work).
+
+Splitting an existing oversized sheet does not re-run CLIP:
+`framesheet.retile_sheets()` loads the kept shot PNGs in `shots.json` order
+and lays them out again under this rule, then rewrites `shots.json`,
+`archive.json`, and the list thumbnail.
+
+## List thumbnail (settled 2026-10-14)
+
+`_condensed/preview.jpg` is sheet 1 resized to at most 480 px wide (JPEG q85).
+It is written right after sheet 1 and rebuilt when it is older than sheet 1.
+The archive list uses it; it never uses a full sheet, which can be hundreds of
+megapixels (Pillow's decompression-bomb guard is lifted only while making the
+preview).
+
+## Is a video current? (settled 2026-10-14)
+
+`shots.json` records the method: `"sample": "change"` and
+`"compare": "last-kept"`. A file without both came from an older method
+(TransNet, adjacent dedupe, …) and counts as **old shot detection**.
+`paths.archive_needs()` names everything a plain job would still do for a
+video — no framesheet, old shot detection, framesheet to split, no list
+thumbnail, no MP3 audio — and a plain job does exactly that: full pipeline
+for the first two, `retile_sheets` for a split, a resize for the thumbnail.
+A video with nothing missing is reported complete and no job is queued. See
+[browsing.md](browsing.md#archive-status) for the UI.
+
+## Progress
+
+`make_shots` reports each stage for the queue panel: reading frames (from
+ffmpeg's `-progress` clock against the probed duration), loading the CLIP
+model, comparing frames n / N, saving shot images, laying out the sheet.
 
 ## Sample dir is on disk, not /tmp (settled 2026-08-29)
 

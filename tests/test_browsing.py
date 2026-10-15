@@ -6,7 +6,6 @@ import unittest
 from pathlib import Path
 
 from yt_archive import db
-from yt_archive.browse import PAGE
 from yt_archive.web import CSS, creator_html, home_html
 
 
@@ -91,11 +90,32 @@ class BrowsingTests(unittest.TestCase):
             sort="title",
         ).decode()
         self.assertIn('<option value="title" selected>Title — A–Z</option>', html)
-        self.assertIn('class="got-label">got</span><time', html)
-        self.assertIn("2026-08-30 12:00 UTC", html)
-        self.assertIn("new URLSearchParams(window.location.search)", html)
+        self.assertIn(
+            '<time datetime="2026-08-30T12:00:00+00:00" data-local>2026-08-30 12:00 UTC</time>', html
+        )
+        self.assertIn('<span class="d g">Got</span>', html)
         self.assertIn('href="/creator?channel_id=UCbeta"', html)
-        self.assertIn('<article class="card">', html)
+        self.assertEqual(html.count('<div class="vrow">'), 3)
+        self.assertIn('<span class="d u">2020-01-01</span>', html)
+        # The list refreshes by re-reading this page, not by a second renderer in JS.
+        self.assertIn("refreshArchive", html)
+        self.assertNotIn("/api/list", html)
+
+    def test_list_rows_are_single_line_and_never_load_full_framesheets(self):
+        folder = self.data / "newest00001"
+        (folder / "newest00001.mp4").write_bytes(b"video")
+        (folder / "_condensed").mkdir()
+        (folder / "_condensed" / "framesheet.png").write_bytes(b"huge sheet")
+        (folder / "newest00001.webp").write_bytes(b"youtube thumb")
+        db.rebuild(self.data)
+        html = home_html(db.list_videos(self.data), data_dir=self.data).decode()
+        self.assertNotIn("framesheet.png", html)
+        self.assertIn("/media/newest00001/newest00001.webp", html)
+        self.assertIn('loading="lazy"', html)
+        row = html[html.index('<div class="vrow"><a class="thumb" href="/v/newest00001"'):]
+        row = row[: row.index("</div>") + 6]
+        self.assertNotIn("<br", row)
+        self.assertNotIn("<p", row)
 
     def test_creator_page_lists_only_that_uploader_and_supports_search(self):
         videos = db.list_creator_videos(self.data, channel_id="UCbeta")
@@ -124,13 +144,15 @@ class BrowsingTests(unittest.TestCase):
         video_css = (
             Path(__file__).parents[1] / "yt_archive" / "static" / "video.css"
         ).read_text(encoding="utf-8")
-        combined = (CSS + PAGE + video_css).lower()
+        creators_css = (
+            Path(__file__).parents[1] / "yt_archive" / "static" / "creators.css"
+        ).read_text(encoding="utf-8")
+        combined = (CSS + video_css + creators_css).lower()
         for forbidden in ("color: #999", "color: #aaa", "color: #bbb",
                           "color: #ccc", "color: #ddd", "color: #eee"):
             self.assertNotIn(forbidden, combined)
         self.assertIn("--fg:#fff", CSS)
         self.assertIn("--muted:#fff", CSS)
-        self.assertIn("background: #000; color: #fff", PAGE)
         self.assertIn("input::placeholder { color: #fff; opacity: 1; }", CSS)
 
 

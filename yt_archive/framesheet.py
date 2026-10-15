@@ -10,13 +10,14 @@
      together. Above 250, balanced sheets cap at MAX_SHEET_TILES (200)
      so there is no tiny final sheet.
 
-Also writes the individual shot PNGs under _condensed/shots/.
+Also writes the individual shot PNGs under _condensed/shots/, and preview.jpg
+(the first sheet, PREVIEW_WIDTH wide) for list rows.
 Optional --all-sheet writes shots_all_labeled.png (numbered + timestamp).
 """
 from __future__ import annotations
 
-import json
 import math
+import os
 import shutil
 import subprocess
 import tempfile
@@ -25,10 +26,15 @@ from pathlib import Path
 from .paths import (
     all_labeled_path,
     condensed_dir,
+    find_video_file,
+    framesheet_paths,
+    preview_is_fresh,
+    preview_path,
+    read_shots_json,
     shots_dir,
     shots_json_path,
 )
-from .download import write_archive_json
+from .download import _atomic_json, write_archive_json
 
 MAX_LONG = 800
 GAP = 4
@@ -39,6 +45,11 @@ LABEL_H = 36
 ALL_TILE = 360
 MAX_SHEET_TILES = 200
 SINGLE_SHEET_TILES = 250
+PREVIEW_WIDTH = 480
+
+
+def _no_progress(fraction, message):
+    pass
 
 
 def make_shots(
@@ -49,11 +60,13 @@ def make_shots(
     layout: str = "squash",
     write_all_sheet: bool = False,
     log=print,
+    progress=None,
 ) -> dict:
     import torch
     import open_clip
     from PIL import Image
 
+    progress = progress or _no_progress
     cond = condensed_dir(data_dir, video_id)
     dest_shots = shots_dir(data_dir, video_id)
     dest_shots.mkdir(parents=True, exist_ok=True)
@@ -68,13 +81,15 @@ def make_shots(
     tmp = tempfile.mkdtemp(prefix="yt_archive_keys_", dir=str(data_dir))
     try:
         log(f"sampling {video.name} at {SAMPLE_FPS} fps…")
-        thumbs = _sample_thumbs(video, Path(tmp))
+        thumbs = _sample_thumbs(video, Path(tmp), progress)
         if not thumbs:
             raise RuntimeError(f"no frames sampled from {video}")
-        embs = _embed_all(thumbs, torch, open_clip, Image)
+        progress(None, "loading the CLIP model")
+        embs = _embed_all(thumbs, torch, open_clip, Image, progress)
         keep_idx, sim_at = _keep_last(embs, sim_threshold)
         duration = len(thumbs) / SAMPLE_FPS
         log(f"{len(thumbs)} samples, {len(keep_idx)} shots at sim<{sim_threshold} vs last kept")
+        progress(None, f"saving {len(keep_idx)} shot images")
 
         for j, i in enumerate(keep_idx):
             t0 = i / SAMPLE_FPS
@@ -101,7 +116,10 @@ def make_shots(
         shutil.rmtree(tmp)
 
     cond.mkdir(parents=True, exist_ok=True)
-    sheet_names, sheet_sizes, descs = _write_sheets(kept_imgs, cond, layout, log)
+    progress(None, "laying out the framesheet")
+    sheet_names, sheet_sizes, descs = _write_sheets(
+        kept_imgs, cond, layout, log, preview_path(data_dir, video_id)
+    )
 
     if write_all_sheet and all_imgs:
         labeled, ldesc = _layout_labeled(all_imgs, records)
@@ -125,9 +143,7 @@ def make_shots(
         "sheet_sizes": sheet_sizes,
         "shots": records,
     }
-    shots_json_path(data_dir, video_id).write_text(
-        json.dumps(summary, indent=2) + "\n", encoding="utf-8"
-    )
+    _atomic_json(shots_json_path(data_dir, video_id), summary)
     write_archive_json(
         data_dir,
         video_id,
@@ -135,16 +151,92 @@ def make_shots(
         extra={
             "shots_detected": len(records),
             "shots_kept": len(kept_imgs),
-            "framesheet": str((cond / sheet_names[0]).relative_to(video.parent)),
-            "framesheets": [
-                str((cond / name).relative_to(video.parent)) for name in sheet_names
-            ],
+            **_sheet_extras(cond, video, sheet_names),
         },
     )
     return summary
 
 
-def _write_sheets(imgs, cond: Path, layout: str, log=print):
+def _sheet_extras(cond: Path, video: Path, sheet_names: list[str]) -> dict:
+    return {
+        "framesheet": str((cond / sheet_names[0]).relative_to(video.parent)),
+        "framesheets": [str((cond / name).relative_to(video.parent)) for name in sheet_names],
+    }
+
+
+def retile_sheets(
+    data_dir: Path, video_id: str, layout: str = "squash", log=print, progress=None
+) -> list[str]:
+    """Lay the existing shot images out again under the current sheet-size rule; no CLIP."""
+    from PIL import Image
+
+    progress = progress or _no_progress
+    video = find_video_file(data_dir, video_id)
+    summary = read_shots_json(data_dir, video_id)
+    records = [r for r in summary.get("shots") or [] if r.get("file") and r.get("kept") is not False]
+    if not video or not records:
+        raise RuntimeError("no shot images to lay out; rebuild the shots instead")
+    folder = shots_dir(data_dir, video_id)
+    imgs = []
+    for n, rec in enumerate(records, start=1):
+        with Image.open(folder / rec["file"]) as im:
+            imgs.append(im.convert("RGB"))
+        progress(n / len(records), f"loading shot images {n} / {len(records)}")
+    cond = condensed_dir(data_dir, video_id)
+    progress(None, "laying out the framesheet")
+    names, sizes, descs = _write_sheets(imgs, cond, layout, log, preview_path(data_dir, video_id))
+    summary.update(
+        shots_kept=len(imgs),
+        framesheet=names[0],
+        framesheets=names,
+        layout="; ".join(descs),
+        sheet_size=sizes[0],
+        sheet_sizes=sizes,
+    )
+    _atomic_json(shots_json_path(data_dir, video_id), summary)
+    write_archive_json(data_dir, video_id, video, extra=_sheet_extras(cond, video, names))
+    return names
+
+
+def ensure_preview(data_dir: Path, video_id: str, log=print) -> bool:
+    """Write preview.jpg from an existing first sheet when it is missing or older."""
+    if preview_is_fresh(data_dir, video_id):
+        return False
+    sheets = framesheet_paths(data_dir, video_id)
+    if not sheets:
+        return False
+    from PIL import Image
+
+    # Our own sheets; the largest exceed PIL's decompression-bomb pixel limit.
+    limit, Image.MAX_IMAGE_PIXELS = Image.MAX_IMAGE_PIXELS, None
+    try:
+        with Image.open(sheets[0]) as sheet:
+            _write_preview(sheet, preview_path(data_dir, video_id))
+    finally:
+        Image.MAX_IMAGE_PIXELS = limit
+    log(f"list thumbnail → {preview_path(data_dir, video_id).name}")
+    return True
+
+
+def _write_preview(sheet, dest: Path) -> None:
+    from PIL import Image
+
+    if sheet.mode != "RGB":
+        sheet = sheet.convert("RGB")
+    width = min(PREVIEW_WIDTH, sheet.width)
+    height = max(1, round(sheet.height * width / sheet.width))
+    small = sheet.resize((width, height), Image.LANCZOS, reducing_gap=3.0)
+    fd, tmp = tempfile.mkstemp(prefix=".preview-", suffix=".part", dir=dest.parent)
+    os.close(fd)
+    try:
+        small.save(tmp, format="JPEG", quality=85)
+        os.replace(tmp, dest)
+    except Exception:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def _write_sheets(imgs, cond: Path, layout: str, log=print, preview: Path | None = None):
     """Tile imgs into one sheet through 250, then balanced sheets of <=200.
 
     A single chunk saves as framesheet.png; more become framesheet-1.png,
@@ -152,22 +244,36 @@ def _write_sheets(imgs, cond: Path, layout: str, log=print):
     removed either way, so a re-run never mixes old and new parts.
     """
     tile = _layout_grid if layout == "grid" else _layout_squash
-    for old in cond.glob("framesheet*.png"):
-        old.unlink()
     chunks = []
     offset = 0
     for size in _sheet_chunk_sizes(len(imgs)):
         chunks.append(imgs[offset:offset + size])
         offset += size
-    names, sizes, descs = [], [], []
-    for n, chunk in enumerate(chunks, start=1):
-        sheet, desc = tile(chunk)
-        name = "framesheet.png" if len(chunks) == 1 else f"framesheet-{n}.png"
-        sheet.save(cond / name)
-        names.append(name)
-        sizes.append([sheet.width, sheet.height])
-        descs.append(desc)
-        log(f"framesheet {desc} {sheet.width}x{sheet.height} → {cond / name}")
+    names, sizes, descs, parts = [], [], [], []
+    try:
+        # Every sheet is complete on disk before any old one goes, so a stop midway
+        # leaves the previous sheets, never a truncated one.
+        for n, chunk in enumerate(chunks, start=1):
+            sheet, desc = tile(chunk)
+            name = "framesheet.png" if len(chunks) == 1 else f"framesheet-{n}.png"
+            part = cond / f".{name}.part"
+            parts.append(part)
+            sheet.save(part, format="PNG")
+            names.append(name)
+            sizes.append([sheet.width, sheet.height])
+            descs.append(desc)
+            log(f"framesheet {desc} {sheet.width}x{sheet.height} → {cond / name}")
+            if preview is not None and n == 1:
+                _write_preview(sheet, preview)
+            sheet.close()
+        for old in cond.glob("framesheet*.png"):
+            if old.name not in names:
+                old.unlink()
+        for part, name in zip(parts, names):
+            os.replace(part, cond / name)
+    finally:
+        for part in parts:
+            part.unlink(missing_ok=True)
     return names, sizes, descs
 
 
@@ -182,18 +288,50 @@ def _sheet_chunk_sizes(total: int) -> list[int]:
     return [base + 1] * extra + [base] * (sheet_count - extra)
 
 
-def _sample_thumbs(video: Path, out_dir: Path) -> list[Path]:
+def _sample_thumbs(video: Path, out_dir: Path, progress=_no_progress) -> list[Path]:
     dest = out_dir / "%05d.png"
-    subprocess.run(
-        [
-            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-            "-i", str(video),
-            "-vf", f"fps={SAMPLE_FPS},scale={MAX_LONG}:{MAX_LONG}:force_original_aspect_ratio=decrease",
-            str(dest),
-        ],
-        check=True,
-    )
+    duration = _probe_duration(video)
+    cmd = [
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y",
+        "-i", str(video),
+        "-vf", f"fps={SAMPLE_FPS},scale={MAX_LONG}:{MAX_LONG}:force_original_aspect_ratio=decrease",
+        str(dest),
+    ]
+    with tempfile.TemporaryFile(mode="w+") as errors:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=errors, text=True)
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            key, _, value = line.strip().partition("=")
+            if key != "out_time_us" or not duration:
+                continue
+            try:
+                at = int(value) / 1e6
+            except ValueError:
+                continue
+            progress(min(1.0, at / duration), f"reading frames {_clock(at)} / {_clock(duration)}")
+        if proc.wait() != 0:
+            errors.seek(0)
+            raise subprocess.CalledProcessError(proc.returncode, cmd, stderr=errors.read()[-2000:])
     return sorted(out_dir.glob("*.png"))
+
+
+def _probe_duration(video: Path) -> float:
+    try:
+        out = subprocess.check_output(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
+            text=True,
+        )
+        return max(0.0, float(out.strip()))
+    except (subprocess.CalledProcessError, ValueError, OSError):
+        return 0.0
+
+
+def _clock(seconds: float) -> str:
+    total = max(0, int(seconds))
+    hours, rest = divmod(total, 3600)
+    minutes, secs = divmod(rest, 60)
+    return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes}:{secs:02d}"
 
 
 def _keep_last(embs, threshold: float) -> tuple[list[int], list[float | None]]:
@@ -207,10 +345,26 @@ def _keep_last(embs, threshold: float) -> tuple[list[int], list[float | None]]:
     return keep, sims
 
 
-def _embed_all(files: list[Path], torch, open_clip, Image):
-    model, _, preprocess = open_clip.create_model_and_transforms(
-        "ViT-B-32", pretrained="laion2b_s34b_b79k"
-    )
+def _load_clip(open_clip):
+    """The pinned CLIP weights never change, so a cached copy loads without asking the
+    Hugging Face Hub; the Hub is contacted only to download them the first time."""
+    from functools import partial
+
+    from open_clip import pretrained
+
+    hub_download = pretrained.hf_hub_download
+    pretrained.hf_hub_download = partial(hub_download, local_files_only=True)
+    try:
+        return open_clip.create_model_and_transforms("ViT-B-32", pretrained="laion2b_s34b_b79k")
+    except (FileNotFoundError, RuntimeError):
+        pass
+    finally:
+        pretrained.hf_hub_download = hub_download
+    return open_clip.create_model_and_transforms("ViT-B-32", pretrained="laion2b_s34b_b79k")
+
+
+def _embed_all(files: list[Path], torch, open_clip, Image, progress=_no_progress):
+    model, _, preprocess = _load_clip(open_clip)
     model.eval()
     embs = []
     with torch.no_grad():
@@ -220,6 +374,8 @@ def _embed_all(files: list[Path], torch, open_clip, Image):
             )
             encoded = model.encode_image(batch)
             embs.append(encoded / encoded.norm(dim=-1, keepdim=True))
+            done = min(len(files), i + BATCH)
+            progress(done / len(files), f"comparing frames {done} / {len(files)}")
     return torch.cat(embs)
 
 

@@ -57,6 +57,17 @@ def normalize_config(raw: dict | None = None) -> dict:
     }
 
 
+def _whisper_model(WhisperModel, name: str, **options):
+    """Released Whisper weights never change: load the cached copy without asking the
+    Hugging Face Hub, and download only a model that is not cached yet."""
+    from huggingface_hub.errors import LocalEntryNotFoundError
+
+    try:
+        return WhisperModel(name, local_files_only=True, **options)
+    except LocalEntryNotFoundError:
+        return WhisperModel(name, **options)
+
+
 def transcribe_soundtrack(
     data_dir: Path,
     video_id: str,
@@ -118,7 +129,8 @@ def _transcribe_soundtrack_locked(
         f"({compute_type}{f', {threads} threads' if device == 'cpu' else ''})"
     )
     try:
-        model = WhisperModel(
+        model = _whisper_model(
+            WhisperModel,
             config["model"],
             device=device,
             compute_type=compute_type,
@@ -130,7 +142,8 @@ def _transcribe_soundtrack_locked(
         log("CUDA model load failed; retrying safely on CPU int8")
         device = "cpu"
         compute_type = "int8"
-        model = WhisperModel(
+        model = _whisper_model(
+            WhisperModel,
             config["model"],
             device=device,
             compute_type=compute_type,

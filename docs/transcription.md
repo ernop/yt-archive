@@ -66,7 +66,9 @@ Install the current local runtime in this repository's venv:
   faster-whisper nvidia-cublas-cu12 nvidia-cudnn-cu12
 ```
 
-The model is downloaded to the normal Hugging Face cache on first use. CUDA
+The model is downloaded to the normal Hugging Face cache on first use. After
+that it loads from the cache with `local_files_only`, so a transcription sends
+no request to the Hugging Face Hub (released weights never change). CUDA
 with float16 is selected when CTranslate2 can use the local GPU; otherwise the
 same model runs with CPU int8.
 

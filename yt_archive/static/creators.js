@@ -58,22 +58,25 @@
       const image = document.createElement('img');
       image.src = 'https://i.ytimg.com/vi/' + item.video_id + '/mqdefault.jpg';
       image.loading = 'lazy';
+      image.referrerPolicy = 'no-referrer';
       image.alt = '';
-      const info = document.createElement('div');
       const title = document.createElement('label');
       title.htmlFor = checkbox.id;
       title.textContent = item.title;
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-      const state = item.archived ? 'Saved' : item.queued ? 'Queued' : item.unavailable || 'Available';
-      meta.textContent = [duration(item.duration), state].filter(Boolean).join(' · ');
+      title.title = item.title;
+      const length = document.createElement('span');
+      length.className = 'length';
+      length.textContent = duration(item.duration);
+      const state = document.createElement('span');
+      state.className = 'state' + (item.archived ? ' saved' : item.queued ? ' queued' : item.unavailable ? ' unavailable' : '');
+      state.textContent = item.archived ? 'Saved' : item.queued ? 'Queued' : item.unavailable || 'Available';
+      state.title = state.textContent;
       const link = document.createElement('a');
-      link.textContent = item.archived ? 'Open archive' : 'Watch on YouTube';
+      link.textContent = item.archived ? 'Open archive' : 'YouTube';
       link.href = item.archived ? '/v/' + item.video_id : 'https://www.youtube.com/watch?v=' + item.video_id;
       link.target = '_blank';
-      link.rel = 'noopener';
-      info.append(title, meta, link);
-      row.append(checkbox, image, info);
+      link.rel = 'noopener noreferrer';
+      row.append(checkbox, image, title, length, state, link);
       rows.append(row);
     }
     if (!filtered.length) {

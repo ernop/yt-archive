@@ -1,34 +1,37 @@
 """ytarchive web UI — paste a URL, get the video + squash framesheet."""
 from __future__ import annotations
 
+import hmac
 import ipaddress
 import json
 import mimetypes
+import re
 import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
+from . import db
 from .creators import CreatorBrowser, creator_url
 from .db import list_creator_videos, normalize_video_sort
 from .jobs import JobQueue
-from .locks import video_lock
 from .paths import (
     all_labeled_path,
+    bookmarklet_key,
     condensed_dir,
     default_data_dir,
     file_cache_key,
     find_video_file,
     framesheet_paths,
+    NEEDS,
     is_complete_png,
-    list_archived_ids,
     write_grab_png,
     list_items,
     load_archive_info,
     media_url,
     parse_video_id,
+    read_shots_json,
     shots_dir,
-    shots_json_path,
     soundtrack_path,
     transcript_is_complete,
     transcript_json_path,
@@ -46,13 +49,15 @@ LIVE = "no-store"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 CSS = """
-:root { color-scheme: dark; --bg:#000; --card:#000; --line:#555; --fg:#fff; --muted:#fff; --red:#c4302b; }
+:root { color-scheme: dark; --bg:#000; --card:#000; --line:#555; --fg:#fff; --muted:#fff; --red:#c4302b;
+  --ok:#8d8; --bad:#f88; --mono: ui-monospace, SFMono-Regular, Menlo, monospace; }
 * { box-sizing: border-box; }
 body { margin: 0; font: 16px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
 a { color: #f88; }
 input::placeholder { color: #fff; opacity: 1; }
 button:disabled { color: #fff !important; opacity: 1 !important; cursor: wait; }
 header, main { width: 100%; margin: 0; padding: 1.25rem clamp(1rem, 3vw, 2.5rem) 2rem; }
+header { padding-bottom: .5rem; }
 h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
 h1 a { color: inherit; text-decoration: none; }
 .sub { color: var(--muted); margin-bottom: 1.25rem; }
@@ -72,66 +77,128 @@ form.get button:disabled { opacity: 1; cursor: wait; }
 .archive-tools input:focus, .archive-tools select:focus { outline: none; border-color: var(--red); }
 .archive-tools button { background: #2a2a2a; color: var(--fg); border: 1px solid var(--line);
   padding: .45rem .8rem; border-radius: 6px; cursor: pointer; }
-.sort-field { display: grid; gap: .25rem; color: var(--muted); font-size: .78rem; font-weight: 650; }
+.sort-field { display: grid; gap: .25rem; color: var(--muted); font-size: .78rem; font-weight: 700; }
 .sort-field select { min-width: 12rem; background: #0d0d0d; border: 1px solid var(--line);
   color: var(--fg); padding: .45rem .7rem; border-radius: 6px; font: 500 .95rem/1.45 system-ui, sans-serif; }
-#status { min-height: 1.4em; color: var(--muted); margin-bottom: .5rem; font-family: ui-monospace, monospace; font-size: .9rem; white-space: pre-wrap; }
-#status.error { color: #f88; }
-#status.done { color: #8d8; }
-#queue { margin: 0 0 1.25rem; font: 13px/1.45 ui-monospace, monospace; }
-#queue:empty { display: none; }
-#queue .job { color: var(--muted); padding: .15rem 0; }
-#queue .job.running { color: var(--fg); }
-#queue .job.done a { color: #8d8; }
-#queue .job.error { color: #f88; }
-h2 { font-size: 1.1rem; color: var(--muted); font-weight: 600; margin: 2rem 0 .75rem; }
-.list { display: flex; flex-direction: column; gap: .75rem; }
-.card { display: grid; grid-template-columns: 220px 1fr; gap: .9rem; background: var(--card);
-  border: 1px solid var(--line); border-radius: 8px; overflow: hidden; text-decoration: none; color: inherit; }
-.card:hover { border-color: var(--red); }
-.card-thumb, .card-title { color: #fff; text-decoration: none; }
-.card-title:hover, .creator-link:hover { text-decoration: underline; }
-.card img, .card .ph { width: 100%; height: 124px; object-fit: cover; background: #000; display: block; }
-.card .ph { color: var(--muted); display: flex; align-items: center; justify-content: center; font-size: .8rem; }
-.card .info { min-width: 0; padding: .7rem .7rem .7rem 0; }
-.card-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem;
-  align-items: start; margin-bottom: .3rem; }
-.card strong { display: block; font-size: 1.03rem; font-weight: 700; }
-.got { color: var(--muted); font-size: .72rem; white-space: nowrap; text-align: right; }
-.got-label { margin-right: .3rem; }
-.got time { color: #fff; font: 700 .9rem/1.25 ui-monospace, monospace;
-  font-variant-numeric: tabular-nums; }
+#status { color: var(--muted); margin-bottom: .75rem; font-size: .95rem; }
+#status:empty { display: none; }
+#status .note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#status .note.error { color: var(--bad); }
+#status .note.done { color: var(--ok); }
+.bookmarklet { margin: 0 0 1rem; }
+.bookmarklet a { display: inline-block; background: #222; border: 1px solid var(--line); color: #fff;
+  padding: .2rem .65rem; border-radius: 6px; font-weight: 700; text-decoration: none; cursor: grab; }
+.bookmarklet a:hover { border-color: var(--red); }
+.add h1 { font-size: 2rem; }
+.add.done h1 { color: #8d8; }
+.add.error h1 { color: #f88; }
+.add-title { font-size: 1.15rem; font-weight: 700; margin: .3rem 0 .6rem; overflow-wrap: anywhere; }
+.add .meta { overflow-wrap: anywhere; }
+h2 { font-size: 1.1rem; color: var(--muted); font-weight: 650; margin: 2rem 0 .75rem; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.btn { background: #161616; border: 1px solid var(--line); color: #fff; padding: .3rem .65rem;
+  border-radius: 4px; cursor: pointer; font: 600 .85rem/1.3 system-ui, sans-serif; }
+.btn:hover { border-color: #fff; }
+.btn.primary { background: #2e7441; border-color: #4a9d61; }
+
+.queue { margin: .25rem 0 1rem; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.queue-head { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem 1.1rem;
+  padding: .55rem .8rem; background: #0d0d0d; }
+.queue-head h2 { margin: 0; font-size: 1.15rem; font-weight: 800; color: #fff; }
+.queue-counts { display: flex; flex-wrap: wrap; gap: .3rem 1rem; font-size: .9rem; }
+.queue-counts strong { font: 800 1.1rem/1 var(--mono); font-variant-numeric: tabular-nums; margin-right: .25rem; }
+.queue-counts .working strong { color: #fff; }
+.queue-counts .failed strong { color: var(--bad); }
+.queue-head .btn { margin-left: auto; }
+.qrow { display: grid; grid-template-columns: 6.5rem minmax(0, 3fr) minmax(0, 4fr) 7.5rem 9.5rem;
+  gap: .9rem; align-items: center; padding: .4rem .8rem; border-top: 1px solid #262626; white-space: nowrap; }
+.qrow > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.qstate { font-weight: 800; font-size: .9rem; }
+.qrow.running .qstate { color: #fff; }
+.qrow.running { background: #141414; }
+.qrow.error .qstate, .qrow.error .qdetail { color: var(--bad); }
+.qpos { font: 800 1rem var(--mono); margin-right: .3rem; }
+.qtitle { color: #fff; font-weight: 700; text-decoration: none; }
+a.qtitle:hover { text-decoration: underline; }
+.qid { font: 600 .9rem var(--mono); }
+.qdetail { font-size: .9rem; }
+.qrow.error .qdetail { cursor: pointer; }
+.qrow.expanded .qdetail { white-space: pre-wrap; overflow-wrap: anywhere; }
+.step { display: inline-block; padding: .05rem .45rem; margin-right: .3rem; border: 1px solid #444;
+  border-radius: 999px; font-size: .8rem; font-weight: 600; }
+.step.done, .step.skipped { border-color: #3d6b46; color: var(--ok); }
+.step.running { border-color: #fff; font-weight: 800; }
+.step .pct { font: 800 .85rem var(--mono); font-variant-numeric: tabular-nums; }
+.qtime { font: 700 .95rem var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+.qact { display: flex; gap: .35rem; justify-content: flex-end; }
+.qmore { padding: .35rem .8rem; border-top: 1px solid #262626; font-size: .9rem; }
+
+.archive-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: .4rem 1rem; margin: 1.5rem 0 .75rem; }
+.archive-head h2 { margin: 0; font-size: 1.25rem; font-weight: 800; color: #fff; }
+.archive-head .count strong { font: 800 1.15rem var(--mono); margin-right: .25rem; }
+.health { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem .9rem; margin: 0 0 1rem;
+  padding: .5rem .8rem; border: 1px solid #7a5a1d; border-radius: 8px; background: #140f04; }
+.health strong { font: 800 1.05rem var(--mono); }
+.health .kinds { display: flex; flex-wrap: wrap; gap: .2rem .9rem; font-size: .9rem; }
+.health .kinds b { font-family: var(--mono); margin-right: .2rem; }
+#update-status:empty { display: none; }
+
+.vlist { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.vrow { display: grid; grid-template-columns: 8rem minmax(0, 6fr) minmax(0, 2.2fr) 5.5rem 4.5rem 7rem 11rem;
+  gap: .9rem; align-items: center; padding: .3rem .8rem .3rem .3rem; border-top: 1px solid #262626;
+  white-space: nowrap; }
+.vlist.no-creator .vrow { grid-template-columns: 8rem minmax(0, 6fr) 5.5rem 4.5rem 7rem 11rem; }
+.vrow:first-child { border-top: 0; }
+.vrow:not(.vhead):hover { background: #111; }
+.vrow > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.vhead { background: #0d0d0d; padding-top: .45rem; padding-bottom: .45rem; font-weight: 800; font-size: .95rem; }
+.vrow .thumb { display: block; }
+.vrow .thumb img, .vrow .thumb .ph { width: 8rem; aspect-ratio: 16 / 9; object-fit: cover; display: block;
+  border-radius: 3px; background: #111; }
+.vrow .thumb .ph { display: flex; align-items: center; justify-content: center; font-size: .75rem; }
+.vrow .t { color: #fff; font-weight: 700; font-size: 1.02rem; text-decoration: none; }
+.vrow .t:hover, .creator-link:hover { text-decoration: underline; }
+.vrow .n, .vrow .d { text-align: right; }
+.vrow .n { font: 700 1rem var(--mono); font-variant-numeric: tabular-nums; }
+.vrow .d { font: 600 .92rem var(--mono); font-variant-numeric: tabular-nums; }
+.vhead .n, .vhead .d { font: 800 .95rem system-ui, sans-serif; }
+.vrow .busy { color: #fff; font-weight: 800; font-size: .8rem; margin-left: .5rem; padding: .05rem .4rem;
+  border: 1px solid #fff; border-radius: 999px; }
 .meta { color: var(--muted); font-size: .85rem; }
 .creator-count { margin-top: .55rem; }
-.creator-count strong { color: #fff; font: 750 1.4rem/1 ui-monospace, monospace;
+.creator-count strong { color: #fff; font: 750 1.4rem/1 var(--mono);
   font-variant-numeric: tabular-nums; }
+.empty { color: var(--muted); padding: .6rem .8rem; }
+
+.facts { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem 1.2rem; margin: .4rem 0 .2rem; font-size: .9rem; }
+.facts b { font: 800 1.05rem var(--mono); font-variant-numeric: tabular-nums; margin-right: .2rem; }
+.facts .creator-link { font-weight: 700; font-size: 1rem; }
+.banner { margin: .75rem 0; padding: .5rem .8rem; border: 1px solid #fff; border-radius: 8px; background: #141414; }
+.banner strong { margin-right: .5rem; }
+.description { margin: 0 0 1.25rem; }
+.description summary { cursor: pointer; font-weight: 800; font-size: 1.05rem; }
+.description .text { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: .5rem; max-width: none; }
 .sheet { width: 100%; height: auto; border: 1px solid var(--line); margin-bottom: 1.25rem; }
+.sheet-label { font-weight: 700; margin: .5rem 0 .3rem; }
 .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
 .shots figure { margin: 0; background: var(--card); border: 1px solid var(--line); }
 .shots img { width: 100%; height: auto; display: block; }
 .shots figcaption { padding: .3rem .45rem; font-size: .8rem; color: var(--muted); }
-.empty { color: var(--muted); }
 .backup { margin-top: 2.75rem; padding-top: 1rem; border-top: 1px solid var(--line);
-  color: var(--muted); font-size: .82rem; }
+  color: var(--muted); font-size: .85rem; }
+.backup h2 { margin: 0 0 .5rem; font-size: 1rem; font-weight: 800; color: #fff; }
 .backup p { margin: 0 0 .5rem; }
-.backup button { background: #161616; border: 1px solid var(--line); color: var(--muted);
-  padding: .35rem .7rem; border-radius: 4px; cursor: pointer; margin-right: .4rem; font-size: .82rem; }
-.backup button:hover { color: var(--fg); border-color: #666; }
-.backup button:disabled { opacity: 1; cursor: wait; }
-#reget-status { margin-top: .6rem; font-family: ui-monospace, monospace; white-space: pre-wrap; }
+.backup button { margin-right: .4rem; }
+#reget-status { margin-top: .6rem; font-family: var(--mono); white-space: pre-wrap; }
 #reget-status.error { color: #f88; }
 #reget-status.done { color: #8d8; }
 .soundtrack { margin: 0 0 1.5rem; }
+.soundtrack h2 { color: #fff; font-weight: 800; }
 .soundtrack audio { width: 100%; margin: .4rem 0 .6rem; }
 .soundtrack .row { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
-.soundtrack .row button, .backfill button { background: #161616; border: 1px solid var(--line); color: var(--muted);
-  padding: .35rem .7rem; border-radius: 4px; cursor: pointer; font-size: .82rem; }
-.soundtrack .row button:hover, .backfill button:hover { color: var(--fg); border-color: #666; }
-.soundtrack .row button:disabled, .backfill button:disabled { opacity: 1; cursor: wait; }
-.backfill { margin: 0 0 1rem; }
-#backfill-status, #audio-status { margin-top: .4rem; font-family: ui-monospace, monospace; font-size: .85rem; white-space: pre-wrap; color: var(--muted); }
-#backfill-status.error, #audio-status.error { color: #f88; }
-#backfill-status.done, #audio-status.done { color: #8d8; }
+#audio-status { margin-top: .4rem; font-family: var(--mono); font-size: .85rem; white-space: pre-wrap; color: var(--muted); }
+#audio-status.error { color: #f88; }
+#audio-status.done { color: #8d8; }
 .transcript { margin: 1.25rem 0 2rem; padding: 1rem; border: 1px solid var(--line);
   border-radius: 8px; background: var(--card); }
 .transcript h2 { color: var(--fg); font-size: 1.25rem; font-weight: 700; margin: 0 0 .65rem; }
@@ -145,7 +212,7 @@ h2 { font-size: 1.1rem; color: var(--muted); font-weight: 600; margin: 2rem 0 .7
 .transcript button:disabled, dialog button:disabled { opacity: 1; cursor: wait; }
 .transcript-search { flex: 1 1 18rem; min-width: 12rem; }
 .transcript-progress { margin-top: .8rem; }
-.transcript-progress-value { color: var(--fg); font: 700 1.65rem/1 ui-monospace, monospace;
+.transcript-progress-value { color: var(--fg); font: 700 1.65rem/1 var(--mono);
   font-variant-numeric: tabular-nums; }
 .transcript-progress-label { color: var(--muted); margin-left: .45rem; }
 .transcript-progress-track { height: 8px; background: #090909; border-radius: 4px; margin-top: .5rem; overflow: hidden; }
@@ -158,41 +225,41 @@ h2 { font-size: 1.1rem; color: var(--muted); font-weight: 600; margin: 2rem 0 .7
 .caption-box.size-small .segment-text { font-size: .9rem; }
 .caption-box.size-medium .segment-text { font-size: 1.08rem; }
 .caption-box.size-large .segment-text { font-size: 1.4rem; line-height: 1.5; }
-.segment { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: .75rem;
-  padding: .65rem .75rem; border-bottom: 1px solid #292929; cursor: pointer; }
+.segment { display: grid; grid-template-columns: 5.5rem 9rem minmax(0, 1fr); gap: .75rem;
+  align-items: baseline; padding: .55rem .75rem; border-bottom: 1px solid #292929; cursor: pointer; }
 .segment:last-child { border-bottom: 0; }
 .segment:hover { background: #171717; }
 .segment.now { background: #202820; box-shadow: inset 4px 0 #68c77b; }
-.segment-time { color: #fff; font: 700 .95rem/1.45 ui-monospace, monospace;
+.segment-time { color: #fff; font: 700 .95rem/1.45 var(--mono);
   font-variant-numeric: tabular-nums; }
-.segment-speaker { color: #a9d6ff; display: block; font-size: .78rem; font-weight: 700;
-  margin-top: .25rem; overflow-wrap: anywhere; }
+.transcript .segment-speaker { color: #a9d6ff; background: none; border: 0; padding: 0; font-size: .85rem;
+  font-weight: 700; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .segment-text { color: var(--fg); line-height: 1.45; }
 .word { border-radius: 3px; }
 .word:hover { background: #554b19; color: #fff; }
 .segment.match { background: #28230f; }
 .transcript-empty { color: var(--muted); padding: 1rem; }
 .speaker-tools { border-top: 1px solid #333; margin-top: .8rem; padding-top: .8rem; }
-.speaker-tools label, .transcript-controls label { color: var(--muted); font-size: .85rem; }
+.speaker-tools label, .transcript-controls label { color: var(--muted); font-size: .85rem; font-weight: 700; }
 dialog { width: min(34rem, calc(100% - 2rem)); color: var(--fg); background: #181818;
   border: 1px solid #555; border-radius: 9px; padding: 1.1rem; }
 dialog::backdrop { background: rgba(0,0,0,.72); }
 dialog h2 { color: var(--fg); font-size: 1.25rem; font-weight: 750; margin: 0 0 .4rem; }
 dialog .fields { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; margin: 1rem 0; }
-dialog label { display: grid; gap: .3rem; color: #fff; font-size: .85rem; }
+dialog label { display: grid; gap: .3rem; color: #fff; font-size: .85rem; font-weight: 700; }
 dialog .dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .5rem; }
 dialog .primary { background: #2e7441; border-color: #4a9d61; font-weight: 700; }
-@media (max-width: 600px) {
+@media (max-width: 760px) {
   form.get { flex-wrap: wrap; }
   form.get input { flex-basis: 100%; }
   .archive-tools { grid-template-columns: 1fr; align-items: stretch; }
   .sort-field select { width: 100%; }
-  .card { grid-template-columns: 1fr; }
-  .card img, .card .ph { height: auto; min-height: 9rem; }
-  .card .info { padding: .75rem; }
-  .card-head { grid-template-columns: 1fr; gap: .25rem; }
-  .got { text-align: left; }
-  .segment { grid-template-columns: 5.4rem minmax(0, 1fr); }
+  .vrow, .vlist.no-creator .vrow { grid-template-columns: 5.5rem minmax(0, 1fr) 4.5rem; }
+  .vrow .thumb img, .vrow .thumb .ph { width: 5.5rem; }
+  .vrow > .c, .vrow > .s, .vrow > .u, .vrow > .g { display: none; }
+  .qrow { grid-template-columns: 5.5rem minmax(0, 1fr) auto; }
+  .qrow > .qdetail, .qrow > .qtime { display: none; }
+  .segment { grid-template-columns: 4.6rem 6rem minmax(0, 1fr); gap: .5rem; }
   dialog .fields { grid-template-columns: 1fr; }
 }
 """
@@ -228,6 +295,7 @@ def _page(title: str, body: str, extra_js: str = "", extra_head: str = "", extra
     html = f"""<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
 <title>{_esc(title)}</title>
 <style>{CSS}</style>
 {extra_head}
@@ -263,15 +331,46 @@ SORT_OPTIONS = (
 )
 
 
-def _got_html(downloaded_at: str) -> str:
-    stamp = str(downloaded_at or "")
+def _clock(seconds) -> str:
+    try:
+        total = int(round(float(seconds)))
+    except (TypeError, ValueError):
+        return ""
+    if total <= 0:
+        return ""
+    hours, rest = divmod(total, 3600)
+    minutes, secs = divmod(rest, 60)
+    return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes}:{secs:02d}"
+
+
+def _upload_date(value: str) -> str:
+    value = str(value or "")
+    if len(value) == 8 and value.isdigit():
+        return f"{value[:4]}-{value[4:6]}-{value[6:]}"
+    return value
+
+
+def _time_html(stamp: str) -> str:
+    """A UTC timestamp; LOCAL_TIMES_JS rewrites it in the viewer's time zone."""
+    stamp = str(stamp or "")
     display = stamp[:16].replace("T", " ") if stamp else "unknown"
     if stamp.endswith("+00:00") or stamp.endswith("Z"):
         display += " UTC"
-    return (
-        '<span class="got"><span class="got-label">got</span>'
-        f'<time datetime="{_esc(stamp)}" data-local>{_esc(display)}</time></span>'
-    )
+    return f'<time datetime="{_esc(stamp)}" data-local>{_esc(display)}</time>'
+
+
+def _size(num_bytes) -> str:
+    try:
+        size = float(num_bytes)
+    except (TypeError, ValueError):
+        return ""
+    if size <= 0:
+        return ""
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1000 or unit == "GB":
+            return f"{size:.0f} {unit}" if unit in ("B", "KB") or size >= 100 else f"{size:.1f} {unit}"
+        size /= 1000
+    return ""
 
 
 def _creator_url(item: dict) -> str:
@@ -284,31 +383,83 @@ def _creator_url(item: dict) -> str:
     return ""
 
 
-def _video_card_html(item: dict, data_dir: Path | None = None) -> str:
+LIST_HEAD = (
+    '<div class="vrow vhead"><span></span><span>Title</span>{creator}'
+    '<span class="n">Length</span><span class="n s">Shots</span>'
+    '<span class="d u">Uploaded</span><span class="d g">Got</span></div>'
+)
+
+
+def _video_row_html(item: dict, *, show_creator: bool = True, busy: frozenset = frozenset()) -> str:
+    """One archived video as a single-line row (docs/browsing.md, "Archive list")."""
     video_id = item["video_id"]
-    title = item.get("title") or video_id
-    shots = item.get("shots_kept") or len(item.get("shot_files") or [])
-    sheets = framesheet_paths(data_dir, video_id) if data_dir else []
+    href = f"/v/{_esc(video_id)}"
     thumb = (
-        f'<img src="{_esc(media_url(data_dir, sheets[0]))}" alt="">'
-        if data_dir and item.get("has_framesheet") and sheets
-        else '<div class="ph">no sheet yet</div>'
+        f'<img src="{_esc(item["thumb_url"])}" alt="" loading="lazy" decoding="async">'
+        if item.get("thumb_url")
+        else '<span class="ph">no image</span>'
     )
-    creator_url = _creator_url(item)
-    channel = _esc(item.get("channel") or "unknown uploader")
-    creator = (
-        f'<a class="creator-link" href="{_esc(creator_url)}">{channel}</a>'
-        if creator_url
-        else channel
+    creator = ""
+    if show_creator:
+        name = _esc(item.get("channel") or "unknown uploader")
+        url = _creator_url(item)
+        creator = (
+            f'<a class="c creator-link" href="{_esc(url)}">{name}</a>' if url else f'<span class="c">{name}</span>'
+        )
+    shots = item.get("shots_kept") or ""
+    flag = '<span class="busy">updating</span>' if video_id in busy else ""
+    return (
+        f'<div class="vrow"><a class="thumb" href="{href}" tabindex="-1">{thumb}</a>'
+        f'<span><a class="t" href="{href}" title="{_esc(item.get("title") or video_id)}">'
+        f'{_esc(item.get("title") or video_id)}</a>{flag}</span>'
+        f'{creator}'
+        f'<span class="n">{_esc(_clock(item.get("duration")))}</span>'
+        f'<span class="n s">{_esc(shots)}</span>'
+        f'<span class="d u">{_esc(_upload_date(item.get("upload_date")))}</span>'
+        f'<span class="d g">{_time_html(item.get("downloaded_at") or "")}</span></div>'
+    )
+
+
+def _video_list_html(items: list[dict], empty: str, *, show_creator: bool = True,
+                     busy: frozenset = frozenset()) -> str:
+    rows = "".join(_video_row_html(item, show_creator=show_creator, busy=busy) for item in items)
+    head = LIST_HEAD.format(creator='<span class="c">Creator</span>' if show_creator else "")
+    css = "vlist" if show_creator else "vlist no-creator"
+    return f'<div class="{css}" id="archive-list">{head}{rows or f"<p class=empty>{empty}</p>"}</div>'
+
+
+def _health_html(summary: dict) -> str:
+    """The "out of date" bar: videos a plain job would still change (docs/browsing.md)."""
+    videos = summary.get("videos") or []
+    if not videos:
+        return '<div id="archive-health"></div>'
+    counts = summary.get("counts") or {}
+    kinds = "".join(
+        f"<span><b>{counts[need]}</b>{_esc(label)}</span>"
+        for need, label in NEEDS.items()
+        if counts.get(need)
     )
     return (
-        f'<article class="card"><a class="card-thumb" href="/v/{video_id}">{thumb}</a>'
-        f'<div class="info"><div class="card-head"><strong>'
-        f'<a class="card-title" href="/v/{video_id}">{_esc(title)}</a></strong>'
-        f'{_got_html(item.get("downloaded_at") or "")}</div>'
-        f'<div class="meta">{creator}'
-        f'{f" · {shots} shots" if shots else ""}</div></div></article>'
+        '<div id="archive-health"><div class="health">'
+        f'<span><strong>{len(videos)}</strong> videos are missing newer work:</span>'
+        f'<span class="kinds">{kinds}</span>'
+        f'<button type="button" class="btn primary" id="update-archive">Update {len(videos)} videos</button>'
+        '<span id="update-status"></span></div></div>'
     )
+
+
+LOCAL_TIMES_JS = r"""
+function localizeTimes(root) {
+  (root || document).querySelectorAll('time[data-local]').forEach((el) => {
+    const date = new Date(el.dateTime);
+    if (!el.dateTime || Number.isNaN(date.getTime())) return;
+    const pad = (n) => String(n).padStart(2, '0');
+    el.textContent = date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
+      + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+  });
+}
+localizeTimes();
+"""
 
 
 def home_html(
@@ -316,15 +467,25 @@ def home_html(
     query: str = "",
     data_dir: Path | None = None,
     sort: str = "recent",
+    bookmarklet: str = "",
+    health: dict | None = None,
+    busy: frozenset = frozenset(),
+    total: int | None = None,
 ) -> bytes:
     sort = normalize_video_sort(sort)
-    cards = [_video_card_html(item, data_dir) for item in items]
-    empty = (
-        f'<p class="empty">No matches for “{_esc(query)}”.</p>'
-        if query
-        else '<p class="empty">Nothing archived yet.</p>'
+    bookmarklet_html = (
+        f'<p class="bookmarklet">Or drag <a id="bookmarklet" href="#" data-key="{_esc(bookmarklet)}">'
+        "+ ytarchive</a> to your bookmarks bar and click it on any YouTube video or creator page.</p>"
+        if bookmarklet
+        else ""
     )
-    list_html = "".join(cards) or empty
+    empty = f"No matches for “{_esc(query)}”." if query else "Nothing archived yet."
+    total = len(items) if total is None else total
+    count = (
+        f'<strong>{len(items)}</strong>of <strong>{total}</strong>videos match'
+        if query
+        else f"<strong>{total}</strong>videos"
+    )
     q_val = _esc(query)
     sort_options = "".join(
         f'<option value="{value}"{" selected" if value == sort else ""}>{label}</option>'
@@ -342,16 +503,17 @@ def home_html(
     <button type="submit" id="go">Get</button>
     <button type="button" id="browse-creator">Browse creator</button>
   </form>
-  <div id="status"></div>
+  <div id="status" role="status" aria-live="polite"></div>
   <div id="creator-results"></div>
-  <div id="queue"></div>
+  <section class="queue" id="queue" aria-label="Download queue" hidden>
+    <div class="queue-head"><h2>Download queue</h2><span class="queue-counts" id="queue-counts"></span></div>
+    <div id="queue-rows"></div>
+  </section>
+  {bookmarklet_html}
 </header>
-<main>
-  <h2>Archive</h2>
-  <div class="backfill">
-    <button type="button" id="backfill-audio">create missing MP3 audio</button>
-    <div id="backfill-status"></div>
-  </div>
+<main id="archive">
+  <div class="archive-head"><h2>Archive</h2><span class="count" id="archive-count">{count}</span></div>
+  {_health_html(health or {})}
   <form class="archive-tools" method="get" action="/">
     <div class="find">
       <input name="q" value="{q_val}" placeholder="search title, channel, id, transcript…" autocomplete="off">
@@ -361,39 +523,69 @@ def home_html(
       <select name="sort" onchange="this.form.submit()">{sort_options}</select>
     </label>
   </form>
-  <div class="list">{list_html}</div>
+  {_video_list_html(items, empty, busy=busy)}
 </main>
 """
-    js = r"""
+    js = LOCAL_TIMES_JS + r"""
 const form = document.getElementById('get-form');
 const status = document.getElementById('status');
 const urlBox = document.getElementById('url');
-const queueEl = document.getElementById('queue');
-const listEl = document.querySelector('.list');
-let knownDone = new Set();
-let primed = false;
+const countsEl = document.getElementById('queue-counts');
+const rowsEl = document.getElementById('queue-rows');
+const expanded = new Set();
+const NEEDS = """ + json.dumps(NEEDS) + r""";
+let allWaiting = false;
+let openSeen = null;
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function note(text, kind, href) {
+  const row = document.createElement(href ? 'a' : 'div');
+  row.className = 'note' + (kind ? ' ' + kind : '');
+  row.textContent = text;
+  if (href) { row.href = href; row.style.display = 'block'; }
+  status.append(row);
+}
 document.getElementById('browse-creator').onclick = () => {
   if (urlBox.value.trim()) window.location.assign('/browse?' + new URLSearchParams({source: urlBox.value.trim()}));
 };
+const bookmarklet = document.getElementById('bookmarklet');
+if (bookmarklet) {
+  const code = '(()=>{const u=new URL(' + JSON.stringify(location.origin + '/add') + ');'
+    + "u.searchParams.set('url',location.href);"
+    + "u.searchParams.set('title',document.title);"
+    + "u.searchParams.set('key'," + JSON.stringify(bookmarklet.dataset.key) + ');'
+    + "if(!window.open(u.href,'_blank','popup,width=560,height=340'))"
+    + "alert('ytarchive: allow pop-ups on this site to queue videos');})()";
+  bookmarklet.href = 'javascript:' + encodeURIComponent(code);
+  bookmarklet.onclick = (e) => {
+    e.preventDefault();
+    status.replaceChildren();
+    note('Drag that button to your bookmarks bar, then click it on a YouTube page.');
+  };
+}
+async function post(path, body) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const urls = urlBox.value.split(/\s+/).map((s) => s.trim()).filter(Boolean);
   if (!urls.length) return;
   urlBox.value = '';
   urlBox.focus();
-  status.className = '';
+  status.replaceChildren();
   const creators = document.getElementById('creator-results');
   creators.replaceChildren();
-  const notes = [];
   for (const url of urls) {
     try {
-      const res = await fetch('/api/get', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({url}),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || res.statusText);
+      const data = await post('/api/get', {url});
       if (data.browse_url) {
         if (urls.length === 1) { window.location.assign(data.browse_url); return; }
         const link = document.createElement('a');
@@ -404,123 +596,160 @@ form.addEventListener('submit', async (e) => {
         creators.append(row);
         continue;
       }
-      notes.push((data.status === 'queued' ? 'queued ' : data.status + ' ') + data.video_id);
+      const name = data.title || data.video_id;
+      if (data.status === 'complete') note('Already archived and up to date: ' + name, 'done', '/v/' + data.video_id);
+      else if (data.existing) note('Already in the queue: ' + name);
+      else note('Added to the queue: ' + name);
     } catch (err) {
-      notes.push(url + ' — ' + err.message);
-      status.className = 'error';
+      note(url + ' — ' + err.message, 'error');
     }
   }
-  status.textContent = notes.join('\n');
   paintQueue();
 });
-function jobLine(j) {
-  const label = j.video_id + (j.phase && j.phase !== j.status ? ' · ' + j.phase : '');
-  if (j.status === 'done') {
-    return '<div class="job done"><a href="/v/' + j.video_id + '">' + label + ' done</a></div>';
-  }
-  const extra = j.status === 'error' ? ' — ' + (j.error || 'failed')
-    : (j.log && j.log.length ? ' — ' + j.log[j.log.length - 1] : '');
-  return '<div class="job ' + j.status + '">' + label + extra + '</div>';
-}
-async function paintQueue() {
-  const res = await fetch('/api/jobs');
-  const jobs = await res.json();
-  queueEl.innerHTML = jobs.map(jobLine).join('');
-  const open = jobs.filter((j) => j.status === 'queued' || j.status === 'running');
-  if (!primed) {
-    for (const j of jobs) {
-      if (j.status === 'done') knownDone.add(j.job_id);
-    }
-    primed = true;
-  }
-  let added = false;
-  for (const j of jobs) {
-    if (j.status === 'done' && !knownDone.has(j.job_id)) {
-      knownDone.add(j.job_id);
-      added = true;
-    }
-  }
-  if (added) refreshList();
-  return open.length;
-}
-async function refreshList() {
-  const params = new URLSearchParams(window.location.search);
-  const res = await fetch('/api/list?' + params.toString());
-  const items = await res.json();
-  if (!items.length) {
-    const query = params.get('q') || '';
-    listEl.innerHTML = '<p class="empty">'
-      + (query ? 'No matches for “' + escapeHtml(query) + '”.' : 'Nothing archived yet.')
-      + '</p>';
-    return;
-  }
-  listEl.innerHTML = items.map((it) => {
-    const shots = it.shots_kept ? ' · ' + it.shots_kept + ' shots' : '';
-    const thumb = it.thumb_url
-      ? '<img src="' + it.thumb_url + '" alt="">'
-      : '<div class="ph">no sheet yet</div>';
-    const creator = creatorUrl(it);
-    const channel = escapeHtml(it.channel || 'unknown uploader');
-    const creatorHtml = creator
-      ? '<a class="creator-link" href="' + creator + '">' + channel + '</a>'
-      : channel;
-    return '<article class="card"><a class="card-thumb" href="/v/' + it.video_id + '">' + thumb
-      + '</a><div class="info"><div class="card-head"><strong>'
-      + '<a class="card-title" href="/v/' + it.video_id + '">'
-      + escapeHtml(it.title || it.video_id) + '</a></strong>' + gotHtml(it.downloaded_at)
-      + '</div><div class="meta">' + creatorHtml + shots + '</div></div></article>';
+const STEPS = [['download', 'Download'], ['shots', 'Shots'], ['audio', 'MP3']];
+function steps(j) {
+  return STEPS.map(([key, label]) => {
+    const state = j[key] || 'pending';
+    let text = esc(label);
+    if (state === 'running' && j.progress != null) text += ' <span class="pct">' + Math.floor(j.progress * 100) + '%</span>';
+    if (state === 'done' || state === 'skipped') text = '✓ ' + text;
+    return '<span class="step ' + state + '">' + text + '</span>';
   }).join('');
-  localizeTimes();
 }
-function creatorUrl(it) {
-  if (it.channel_id) return '/creator?channel_id=' + encodeURIComponent(it.channel_id);
-  if (it.channel) return '/creator?channel=' + encodeURIComponent(it.channel);
-  return '';
+function clock(seconds) {
+  seconds = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(seconds / 3600), m = Math.floor(seconds / 60) % 60, s = seconds % 60;
+  return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0');
 }
-function escapeHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function when(iso) {
+  const date = new Date(iso);
+  if (!iso || Number.isNaN(date.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  const today = new Date().toDateString() === date.toDateString();
+  return (today ? '' : (date.getMonth() + 1) + '/' + date.getDate() + ' ')
+    + pad(date.getHours()) + ':' + pad(date.getMinutes());
 }
-function gotHtml(stamp) {
-  return '<span class="got"><span class="got-label">got</span><time datetime="'
-    + escapeHtml(stamp || '') + '" data-local>' + escapeHtml(stamp || 'unknown') + '</time></span>';
+function titleHtml(j) {
+  const text = j.title ? esc(j.title) : '<span class="qid">' + esc(j.video_id) + '</span>';
+  return j.archived
+    ? '<a class="qtitle" href="/v/' + esc(j.video_id) + '" title="' + esc(j.title || j.video_id) + '">' + text + '</a>'
+    : '<span class="qtitle" title="' + esc(j.url) + '">' + text + '</span>';
 }
-function localizeTimes() {
-  document.querySelectorAll('time[data-local]').forEach((el) => {
-    if (!el.dateTime) return;
-    const date = new Date(el.dateTime);
-    if (Number.isNaN(date.getTime())) return;
-    el.textContent = date.toLocaleString([], {
-      year: 'numeric', month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
+function row(kind, j, state, detail, time, actions) {
+  const open = expanded.has(j.job_id) ? ' expanded' : '';
+  return '<div class="qrow ' + kind + open + '" data-job="' + esc(j.job_id) + '" data-url="' + esc(j.url) + '">'
+    + '<span class="qstate">' + state + '</span>' + titleHtml(j)
+    + '<span class="qdetail" title="' + esc(j.error || j.message || '') + '">' + detail + '</span>'
+    + '<span class="qtime"' + time + '</span>'
+    + '<span class="qact">' + (actions || '') + '</span></div>';
+}
+function render(q) {
+  const parts = [];
+  if (q.running.length) parts.push('<span class="working"><strong>' + q.running.length + '</strong>working</span>');
+  if (q.waiting_count) parts.push('<span><strong>' + q.waiting_count + '</strong>waiting</span>');
+  if (q.failed.length) parts.push('<span class="failed"><strong>' + q.failed.length + '</strong>failed</span>');
+  if (q.waiting_count > 1) parts.push('<button type="button" class="btn" data-act="clear">Remove all waiting</button>');
+  countsEl.innerHTML = parts.join('');
+  document.getElementById('queue').hidden = !(q.running.length || q.waiting_count || q.failed.length);
+  const rows = [];
+  q.running.forEach((j) => rows.push(row('running', j, 'Working', steps(j) + ' ' + esc(j.message || j.phase),
+    ' data-since="' + esc(j.started_at) + '">', '')));
+  q.waiting.forEach((j, i) => rows.push(row('waiting', j,
+    '<span class="qpos">#' + (i + 1) + '</span>waiting',
+    esc(j.message || (j.needs.length ? j.needs.map((n) => NEEDS[n] || n).join(' · ') : j.archived ? '' : 'download')), '>',
+    '<button type="button" class="btn" data-act="remove">Remove</button>')));
+  if (q.waiting_count > q.waiting.length) {
+    rows.push('<div class="qmore">+ ' + (q.waiting_count - q.waiting.length) + ' more waiting · '
+      + '<button type="button" class="btn" data-act="all-waiting">Show all</button></div>');
+  } else if (allWaiting && q.waiting_count > 8) {
+    rows.push('<div class="qmore"><button type="button" class="btn" data-act="few-waiting">Show fewer</button></div>');
+  }
+  q.failed.forEach((j) => rows.push(row('error', j, 'Failed', esc(j.error || 'failed'),
+    '>' + esc(when(j.finished_at)),
+    '<button type="button" class="btn" data-act="retry">Retry</button>'
+    + '<button type="button" class="btn" data-act="dismiss">Dismiss</button>')));
+  rowsEl.innerHTML = rows.join('');
+  tick();
+}
+function tick() {
+  rowsEl.querySelectorAll('.qtime[data-since]').forEach((el) => {
+    const since = Date.parse(el.dataset.since);
+    el.textContent = Number.isNaN(since) ? '' : clock((Date.now() - since) / 1000);
   });
 }
-document.getElementById('backfill-audio').onclick = async () => {
-  const btn = document.getElementById('backfill-audio');
-  const box = document.getElementById('backfill-status');
-  btn.disabled = true;
-  box.className = '';
-  box.textContent = 'queueing…';
-  try {
-    const res = await fetch('/api/backfill-audio', {method: 'POST'});
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || res.statusText);
-    box.className = data.queued ? '' : 'done';
-    box.textContent = data.queued
-      ? 'queued ' + data.queued + ' MP3 audio job(s)'
-      : 'every archived video already has MP3 audio';
+setInterval(tick, 1000);
+document.getElementById('queue').addEventListener('click', async (e) => {
+  const button = e.target.closest('button[data-act]');
+  const line = e.target.closest('.qrow');
+  if (button && button.dataset.act.endsWith('-waiting') && button.dataset.act !== 'clear-waiting') {
+    allWaiting = button.dataset.act === 'all-waiting';
     paintQueue();
-  } catch (err) {
-    box.className = 'error';
-    box.textContent = err.message;
+    return;
   }
-  btn.disabled = false;
-};
+  if (!button) {
+    if (line && line.classList.contains('error') && e.target.closest('.qdetail')) {
+      const id = line.dataset.job;
+      expanded.has(id) ? expanded.delete(id) : expanded.add(id);
+      line.classList.toggle('expanded');
+    }
+    return;
+  }
+  button.disabled = true;
+  const id = line ? encodeURIComponent(line.dataset.job) : '';
+  try {
+    if (button.dataset.act === 'clear') await post('/api/jobs/clear-waiting');
+    if (button.dataset.act === 'remove') await post('/api/jobs/' + id + '/remove');
+    if (button.dataset.act === 'dismiss') await post('/api/jobs/' + id + '/dismiss');
+    if (button.dataset.act === 'retry') {
+      const data = await post('/api/get', {url: line.dataset.url});
+      if (data.status === 'complete') await post('/api/jobs/' + id + '/dismiss');
+    }
+  } catch (err) {
+    status.replaceChildren();
+    note(err.message, 'error');
+  }
+  paintQueue();
+});
+document.addEventListener('click', async (e) => {
+  const button = e.target.closest('#update-archive');
+  if (!button) return;
+  button.disabled = true;
+  const out = document.getElementById('update-status');
+  out.textContent = 'queueing…';
+  try {
+    const data = await post('/api/update-archive');
+    out.textContent = data.queued ? 'queued ' + data.queued : 'already queued';
+  } catch (err) {
+    out.textContent = err.message;
+    button.disabled = false;
+  }
+  paintQueue();
+});
+async function refreshArchive() {
+  const res = await fetch(window.location.pathname + window.location.search, {cache: 'no-store'});
+  if (!res.ok) return;
+  const page = new DOMParser().parseFromString(await res.text(), 'text/html');
+  for (const id of ['archive-count', 'archive-health', 'archive-list']) {
+    const fresh = page.getElementById(id), old = document.getElementById(id);
+    if (fresh && old) old.replaceWith(fresh);
+  }
+  localizeTimes(document.getElementById('archive-list'));
+}
+async function paintQueue() {
+  const res = await fetch('/api/jobs' + (allWaiting ? '?waiting=1000' : ''), {cache: 'no-store'});
+  if (!res.ok) throw new Error(res.statusText);
+  const q = await res.json();
+  render(q);
+  // A job starting, finishing, or being added or removed changes what the archive list shows.
+  const open = q.running.map((j) => j.job_id).join(',') + '|' + q.waiting_count;
+  if (openSeen !== null && open !== openSeen) refreshArchive();
+  openSeen = open;
+  return Boolean(q.running.length || q.waiting_count);
+}
 (async function loop() {
-  const n = await paintQueue().catch(() => 0);
-  setTimeout(loop, n ? 800 : 2500);
+  const busy = await paintQueue().catch(() => false);
+  setTimeout(loop, document.hidden ? 15000 : busy ? 1000 : 5000);
 })();
-localizeTimes();
 """
     return _page("ytarchive", body, js)
 
@@ -535,11 +764,9 @@ def creator_html(
     sort: str = "recent",
     total_count: int,
     data_dir: Path,
+    busy: frozenset = frozenset(),
 ) -> bytes:
     sort = normalize_video_sort(sort)
-    cards = "".join(_video_card_html(item, data_dir) for item in items)
-    if not cards:
-        cards = f'<p class="empty">No videos match “{_esc(query)}”.</p>'
     identity = (
         f'<input type="hidden" name="channel_id" value="{_esc(channel_id)}">'
         if channel_id
@@ -560,6 +787,7 @@ def creator_html(
         if query
         else f'<strong>{total_count}</strong> videos'
     )
+    empty = f"No videos match “{_esc(query)}”."
     body = f"""
 <header>
   <div><a href="/">← archive</a></div>
@@ -579,20 +807,10 @@ def creator_html(
       <select name="sort" onchange="this.form.submit()">{sort_options}</select>
     </label>
   </form>
-  <div class="list">{cards}</div>
+  {_video_list_html(items, empty, show_creator=False, busy=busy)}
 </main>
 """
-    js = r"""
-document.querySelectorAll('time[data-local]').forEach((el) => {
-  const date = new Date(el.dateTime);
-  if (!Number.isNaN(date.getTime())) {
-    el.textContent = new Intl.DateTimeFormat(undefined, {
-      dateStyle: 'medium', timeStyle: 'short',
-    }).format(date);
-  }
-});
-"""
-    return _page(f"{creator_name} · ytarchive", body, js)
+    return _page(f"{creator_name} · ytarchive", body, LOCAL_TIMES_JS)
 
 
 def browse_creator_html(source: str = "") -> bytes:
@@ -610,7 +828,7 @@ def browse_creator_html(source: str = "") -> bytes:
 </header>
 <main id="creator-picker" hidden>
   <h2 id="creator-title"></h2>
-  <p><a id="creator-youtube" target="_blank" rel="noopener">Open on YouTube</a></p>
+  <p><a id="creator-youtube" target="_blank" rel="noopener noreferrer">Open on YouTube</a></p>
   <p id="creator-warning" role="status"></p>
   <p>Saved and queued videos are skipped. Live, upcoming, and known restricted items cannot be selected.</p>
   <div class="creator-actions">
@@ -640,11 +858,90 @@ def browse_creator_html(source: str = "") -> bytes:
     )
 
 
-def detail_html(info: dict, data_dir: Path) -> bytes:
+def add_html(url: str, title: str, authorized: bool) -> bytes:
+    """The bookmarklet's pop-up (docs/bookmarklet.md). Only a matching key queues anything."""
+    if not authorized:
+        body = """
+<main class="add error">
+  <h1>Not queued: bookmarklet key doesn’t match</h1>
+  <p>Drag a fresh <strong>+ ytarchive</strong> button from the
+  <a href="/" target="_blank">archive page</a> to your bookmarks bar and delete the old one.</p>
+</main>
+"""
+        return _page("ytarchive", body)
+    title = re.sub(r"^\(\d+\)\s*", "", title).removesuffix(" - YouTube").strip()
+    body = f"""
+<main class="add" id="add" data-url="{_esc(url)}">
+  <h1 id="add-status">Queuing…</h1>
+  <p class="add-title">{_esc(title or url)}</p>
+  <p class="meta" id="add-detail"></p>
+  <p class="meta"><a href="/" target="_blank">archive and download queue</a></p>
+</main>
+"""
+    js = r"""
+const box = document.getElementById('add');
+const heading = document.getElementById('add-status');
+const detail = document.getElementById('add-detail');
+(async () => {
+  try {
+    const res = await fetch('/api/get', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({url: box.dataset.url}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    if (data.browse_url) {
+      window.resizeTo(Math.min(screen.availWidth, 1280), screen.availHeight);
+      location.replace(data.browse_url);
+      return;
+    }
+    box.classList.add('done');
+    heading.textContent = data.status === 'complete' ? 'Already archived'
+      : data.existing ? 'Already in the queue' : 'Queued';
+    detail.textContent = (data.title || data.video_id) + ' · this window closes itself';
+    setTimeout(() => window.close(), 1500);
+  } catch (err) {
+    box.classList.add('error');
+    heading.textContent = 'Not queued';
+    detail.textContent = err.message;
+  }
+})();
+"""
+    return _page("ytarchive", body, js)
+
+
+def _facts_html(info: dict, creator_link: str, shots: int) -> str:
+    """The video's key facts on one line, values first in weight (docs/browsing.md)."""
+    vid = info["video_id"]
+    facts = [creator_link]
+    if _clock(info.get("duration")):
+        facts.append(f'<span><b>{_esc(_clock(info.get("duration")))}</b></span>')
+    if info.get("width") and info.get("height"):
+        extra = " · ".join(
+            str(part) for part in (
+                f'{round(float(info["fps"]))} fps' if info.get("fps") else "",
+                str(info.get("vcodec") or "").split(".")[0],
+            ) if part
+        )
+        facts.append(f'<span><b>{int(info["width"])}×{int(info["height"])}</b>{_esc(extra)}</span>')
+    if _size(info.get("file_size")):
+        facts.append(f'<span><b>{_esc(_size(info.get("file_size")))}</b></span>')
+    if shots:
+        facts.append(f"<span><b>{shots}</b>shots</span>")
+    if info.get("upload_date"):
+        facts.append(f'<span>uploaded <b>{_esc(_upload_date(info["upload_date"]))}</b></span>')
+    if info.get("downloaded_at"):
+        facts.append(f'<span>got <b>{_time_html(info["downloaded_at"])}</b></span>')
+    facts.append(f"<span><code>{_esc(vid)}</code></span>")
+    facts.append(f'<a href="{_esc(watch_url(vid))}" target="_blank" rel="noopener noreferrer">YouTube</a>')
+    return f'<div class="facts">{"".join(facts)}</div>'
+
+
+def detail_html(info: dict, data_dir: Path, job: dict | None = None) -> bytes:
     vid = info["video_id"]
     title = info.get("title") or vid
     duration = info.get("duration")
-    dur = f"{int(duration) // 60}:{int(duration) % 60:02d}" if duration else ""
     video = find_video_file(data_dir, vid)
     transcript_file = transcript_json_path(data_dir, vid)
     captions_file = transcript_vtt_path(data_dir, vid)
@@ -661,10 +958,7 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
         except (OSError, json.JSONDecodeError):
             has_transcript = False
     sheets = framesheet_paths(data_dir, vid)
-    shot_recs = []
-    sj = shots_json_path(data_dir, vid)
-    if sj.exists():
-        shot_recs = json.loads(sj.read_text(encoding="utf-8")).get("shots", [])
+    shot_recs = (read_shots_json(data_dir, vid) or {}).get("shots", [])
     kept = [r for r in shot_recs if r.get("file") and r.get("kept") is not False]
     # Each kept shot's start is a marker on the player's scale; its id is the shot image's file,
     # so the page can light that image while the shot plays.
@@ -682,11 +976,23 @@ def detail_html(info: dict, data_dir: Path) -> bytes:
         else creator_name
     )
     parts = [
-        f'<header><div><a href="/">← archive</a></div>',
+        '<header><div><a href="/">← archive</a></div>',
         f"<h1>{_esc(title)}</h1>",
-        f'<div class="meta">{creator_link} · {dur} · {vid} · '
-        f'<a href="{watch_url(vid)}">YouTube</a></div></header><main>',
+        _facts_html(info, creator_link, len(kept)),
     ]
+    if job:
+        doing = job.get("message") or ("waiting in the queue" if job.get("status") == "queued" else job.get("phase"))
+        parts.append(
+            f'<div class="banner"><strong>Being updated now</strong>{_esc(doing)} · '
+            'this page shows the files as they are; reload when the '
+            '<a href="/#queue">download queue</a> says it is done.</div>'
+        )
+    if info.get("description"):
+        parts.append(
+            '<details class="description"><summary>Description</summary>'
+            f'<div class="text">{_esc(info["description"])}</div></details>'
+        )
+    parts.append("</header><main>")
     if video:
         markers_attr = _esc(json.dumps(shot_markers, separators=(",", ":")))
         dur_attr = f' data-duration="{duration}"' if duration else ""
@@ -716,14 +1022,18 @@ shift-click a shot to open its PNG · ? lists every key</p>
         )
     else:
         soundtrack_bits.append('<h2>MP3 audio</h2>')
+    no_audio = info.get("audio_stream") is False
+    can_dump = video and not mp3.is_file() and not no_audio
+    if no_audio and not mp3.is_file():
+        soundtrack_bits.append('<p class="meta">This video has no audio track, so there is no MP3.</p>')
     row = ['<div class="row">']
-    if video and not mp3.is_file():
-        row.append('<button type="button" id="dump-audio">create MP3 audio</button>')
+    if can_dump:
+        row.append('<button type="button" class="btn" id="dump-audio">Create MP3 audio</button>')
     row.append(
-        '<button type="button" id="open-mp3-folder">open MP3 folder</button>'
+        '<button type="button" class="btn" id="open-mp3-folder">Open MP3 folder</button>'
     )
     row.append("</div>")
-    if video and not mp3.is_file():
+    if can_dump:
         row.append('<div id="audio-status"></div>')
     soundtrack_bits.extend(row)
     soundtrack_bits.append("</div>")
@@ -819,6 +1129,8 @@ shift-click a shot to open its PNG · ? lists every key</p>
 """
     )
     parts.append(soundtrack_html)
+    if video and not sheets:
+        parts.append('<p class="sheet-label">No framesheet yet — the next job for this video makes one.</p>')
     for n, sheet in enumerate(sheets, start=1):
         label = (
             f"Squished framesheet {n}/{len(sheets)}"
@@ -826,14 +1138,14 @@ shift-click a shot to open its PNG · ? lists every key</p>
             else "Squished framesheet"
         )
         parts.append(
-            f'<p class="meta">{_esc(label)}</p>'
+            f'<p class="sheet-label">{_esc(label)}</p>'
             f'<a href="{_esc(media_url(data_dir, sheet))}" target="_blank" rel="noopener">'
             f'<img class="sheet" src="{_esc(media_url(data_dir, sheet))}" alt="{_esc(label)}"></a>'
         )
     labeled = all_labeled_path(data_dir, vid)
     if labeled.is_file():
         parts.append(
-            f'<p class="meta">All detections (kept + dropped)</p>'
+            f'<p class="sheet-label">All detections (kept + dropped)</p>'
             f'<a href="{_esc(media_url(data_dir, labeled))}" target="_blank" rel="noopener">'
             f'<img class="sheet" src="{_esc(media_url(data_dir, labeled))}" alt="all shots labeled"></a>'
         )
@@ -853,26 +1165,55 @@ shift-click a shot to open its PNG · ? lists every key</p>
         )
     if figs:
         parts.append(
-            f'<p class="meta">Shot images — click to play from that moment</p>'
+            f'<p class="sheet-label">Shot images — click to play from that moment</p>'
             f'<div class="shots">{"".join(figs)}</div>'
         )
     parts.append(
-        f"""
+        """
 <div class="backup">
-  <p>backup — redo a piece if it came out wrong</p>
-  <button type="button" id="reget-png">reget png</button>
-  <button type="button" id="reget-video">reget video</button>
+  <h2>Redo</h2>
+  <p>If a piece came out wrong: rebuild the shots and framesheet from the local video, or download the video again.</p>
+  <button type="button" class="btn" id="reget-png">Rebuild shots</button>
+  <button type="button" class="btn" id="reget-video">Download again</button>
   <div id="reget-status"></div>
 </div>
 """
     )
     parts.append("</main>")
-    reget_js = r"""
+    reget_js = LOCAL_TIMES_JS + r"""
 const vid = """ + json.dumps(vid) + r""";
+const STEP_NAMES = {download: 'downloading', shots: 'making shots', audio: 'making MP3 audio', queued: 'waiting in the queue'};
+async function post(path, body) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+async function watchJob(jobId, status) {
+  for (;;) {
+    const res = await fetch('/api/job/' + encodeURIComponent(jobId), {cache: 'no-store'});
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || res.statusText);
+    if (j.status === 'done') {
+      status.className = 'done';
+      status.textContent = (j.message || 'done') + ' — reloading';
+      location.reload();
+      return true;
+    }
+    if (j.status === 'error') throw new Error(j.error || 'failed');
+    const pct = j.progress != null ? Math.floor(j.progress * 100) + '% · ' : '';
+    status.textContent = (STEP_NAMES[j.phase] || j.phase) + ' · ' + pct + (j.message || '');
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+}
 async function reget(kind) {
   const ok = confirm(kind === 'video'
-    ? 'Re-download this video from YouTube and rebuild the framesheet?'
-    : 'Rebuild shot PNGs and framesheet from the local video?');
+    ? 'Download this video from YouTube again and rebuild its shots and framesheet?'
+    : 'Rebuild the shot images and framesheet from the local video?');
   if (!ok) return;
   const png = document.getElementById('reget-png');
   const video = document.getElementById('reget-video');
@@ -884,32 +1225,8 @@ async function reget(kind) {
     ? {url: vid, force_video: true, force_shots: true}
     : {url: vid, force_shots: true};
   try {
-    const res = await fetch('/api/get', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || res.statusText);
-    for (;;) {
-      const jres = await fetch('/api/job/' + data.job_id);
-      const j = await jres.json();
-      const tail = (j.log || []).slice(-4).join('\n');
-      status.textContent = (j.phase || j.status) + (tail ? '\n' + tail : '');
-      if (j.status === 'done') {
-        status.className = 'done';
-        status.textContent = 'done — reloading';
-        location.reload();
-        return;
-      }
-      if (j.status === 'error') {
-        status.className = 'error';
-        status.textContent = j.error || 'failed';
-        png.disabled = video.disabled = false;
-        return;
-      }
-      await new Promise(r => setTimeout(r, 800));
-    }
+    const data = await post('/api/get', body);
+    await watchJob(data.job_id, status);
   } catch (err) {
     status.className = 'error';
     status.textContent = err.message;
@@ -925,32 +1242,9 @@ if (dumpBtn) dumpBtn.onclick = async () => {
   status.className = '';
   status.textContent = 'starting…';
   try {
-    const res = await fetch('/api/get', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({url: vid}),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || res.statusText);
-    for (;;) {
-      const jres = await fetch('/api/job/' + data.job_id);
-      const j = await jres.json();
-      const tail = (j.log || []).slice(-4).join('\n');
-      status.textContent = (j.phase || j.status) + (tail ? '\n' + tail : '');
-      if (j.status === 'done') {
-        status.className = 'done';
-        status.textContent = 'done — reloading';
-        location.reload();
-        return;
-      }
-      if (j.status === 'error') {
-        status.className = 'error';
-        status.textContent = j.error || 'failed';
-        dumpBtn.disabled = false;
-        return;
-      }
-      await new Promise(r => setTimeout(r, 800));
-    }
+    const data = await post('/api/get', {url: vid});
+    if (data.status === 'complete') { location.reload(); return; }
+    await watchJob(data.job_id, status);
   } catch (err) {
     status.className = 'error';
     status.textContent = err.message;
@@ -1083,9 +1377,9 @@ function segmentHtml(segment, matched, hidden) {
   return '<div class="segment' + (matched ? ' match' : '') + '"'
     + (hidden ? ' hidden' : '') + ' data-index="' + segment.index + '" data-start="'
     + Number(segment.start) + '" data-end="' + Number(segment.end) + '">'
-    + '<div><span class="segment-time">' + clock(segment.start) + '</span>'
-    + '<button type="button" class="segment-speaker" title="assign or group speaker">'
-    + html(segment.speaker || 'Unassigned') + '</button></div>'
+    + '<span class="segment-time">' + clock(segment.start) + '</span>'
+    + '<button type="button" class="segment-speaker" title="assign or group speaker: '
+    + html(segment.speaker || 'Unassigned') + '">' + html(segment.speaker || 'Unassigned') + '</button>'
     + '<div class="segment-text">' + words + '</div></div>';
 }
 
@@ -1245,14 +1539,36 @@ if (transcriptReady) loadTranscript().catch(err => {
     )
 
 
+def _byte_range(header: str | None, size: int):
+    """(start, end) for a single "bytes=" range, "unsatisfiable", or None to send it all."""
+    match = re.fullmatch(r"bytes=(\d*)-(\d*)", (header or "").strip())
+    if not match or not any(match.groups()):
+        return None
+    first, last = match.groups()
+    if not first:
+        length = int(last)
+        if length == 0 or size == 0:
+            return "unsatisfiable"
+        return max(0, size - length), size - 1
+    start = int(first)
+    end = min(int(last), size - 1) if last else size - 1
+    if start >= size or start > end:
+        return "unsatisfiable"
+    return start, end
+
+
 def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
     creators = CreatorBrowser(data_dir, queue)
+    key = bookmarklet_key(data_dir).encode("ascii")
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             print(f"{self.address_string()} {fmt % args}", flush=True)
 
         def do_GET(self):
+            # A DNS-rebinding page reaches us under its own Host name; it gets nothing.
+            if not _is_local_host(self.headers.get("Host") or ""):
+                return self._json({"error": "untrusted Host header"}, 403)
             parsed = urlparse(self.path)
             path = unquote(parsed.path)
             if path == "/browse":
@@ -1267,7 +1583,25 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 q = (params.get("q") or [""])[0].strip()
                 sort = normalize_video_sort((params.get("sort") or ["recent"])[0])
                 return self._bytes(
-                    home_html(list_items(data_dir, q, sort), q, data_dir, sort)
+                    home_html(
+                        list_items(data_dir, q, sort), q, data_dir, sort,
+                        bookmarklet=key.decode("ascii"),
+                        health=db.archive_needs_summary(data_dir),
+                        busy=frozenset(db.open_video_ids(data_dir)),
+                        total=db.count_videos(data_dir),
+                    )
+                )
+            if path == "/add":
+                params = parse_qs(parsed.query)
+                given = (params.get("key") or [""])[0].encode("utf-8")
+                authorized = bool(key) and hmac.compare_digest(given, key)
+                return self._bytes(
+                    add_html(
+                        (params.get("url") or [""])[0].strip()[:2048],
+                        (params.get("title") or [""])[0].strip()[:300],
+                        authorized,
+                    ),
+                    200 if authorized else 403,
                 )
             if path == "/creator":
                 params = parse_qs(parsed.query)
@@ -1309,6 +1643,7 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                         sort=sort,
                         total_count=len(all_items),
                         data_dir=data_dir,
+                        busy=frozenset(db.open_video_ids(data_dir)),
                     )
                 )
             if path == "/api/list":
@@ -1317,9 +1652,12 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 sort = normalize_video_sort((params.get("sort") or ["recent"])[0])
                 return self._json(list_items(data_dir, q, sort))
             if path == "/api/jobs":
-                from .db import list_jobs
-
-                return self._json(list_jobs(data_dir))
+                params = parse_qs(parsed.query)
+                try:
+                    limit = min(1000, int((params.get("waiting") or [db.WAITING_SHOWN])[0]))
+                except ValueError:
+                    limit = db.WAITING_SHOWN
+                return self._json(db.queue_overview(data_dir, limit))
             if path.startswith("/api/job/"):
                 job = queue.get(path.split("/", 3)[-1])
                 if not job:
@@ -1350,9 +1688,8 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 folder = video_dir(data_dir, video_id)
                 if not folder.is_dir():
                     return self._bytes(_page("missing", f"<main><p>No archive for {_esc(video_id)}</p></main>"), 404)
-                with video_lock(video_id):
-                    info = load_archive_info(data_dir, video_id)
-                    return self._bytes(detail_html(info, data_dir))
+                info = load_archive_info(data_dir, video_id)
+                return self._bytes(detail_html(info, data_dir, db.find_open_job(data_dir, video_id)))
             if path.startswith("/media/"):
                 return self._media(path[len("/media/"):])
             if path.startswith("/static/"):
@@ -1385,8 +1722,25 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                     return self._json(result, 202)
                 except ValueError as exc:
                     return self._json({"error": str(exc)}, 400)
-            if parsed.path == "/api/backfill-audio":
-                return self._backfill_audio()
+            if parsed.path == "/api/update-archive":
+                return self._update_archive()
+            if parsed.path == "/api/jobs/clear-waiting":
+                if self._read_json() is None:
+                    return
+                return self._json({"removed": db.remove_all_waiting_jobs(data_dir)})
+            match = re.fullmatch(r"/api/jobs/([0-9a-f]{1,64})/(remove|dismiss)", parsed.path)
+            if match:
+                if self._read_json() is None:
+                    return
+                job_id, action = match.groups()
+                done = (
+                    db.remove_waiting_job(data_dir, job_id)
+                    if action == "remove"
+                    else db.dismiss_failed_job(data_dir, job_id)
+                )
+                if not done:
+                    return self._json({"error": f"that job is no longer {'waiting' if action == 'remove' else 'failed'}"}, 409)
+                return self._json({"ok": True})
             if parsed.path == "/api/transcribe":
                 return self._transcribe()
             if parsed.path == "/api/transcript/speaker":
@@ -1425,7 +1779,8 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 job = queue.submit(url, force_video=force_video, force_shots=force_shots)
             except ValueError as exc:
                 return self._json({"error": str(exc)}, 400)
-            return self._json(queue.snapshot(job), 202)
+            queued = job.get("status") != "complete" and not job.get("existing")
+            return self._json(queue.snapshot(job), 202 if queued else 200)
 
         def _transcribe(self):
             payload = self._read_json()
@@ -1483,15 +1838,15 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
             except (ValueError, OSError, json.JSONDecodeError) as exc:
                 return self._json({"error": str(exc)}, 400)
 
-        def _backfill_audio(self):
+        def _update_archive(self):
+            """Queue every archived video a plain job would still change (docs/browsing.md)."""
+            if self._read_json() is None:
+                return
             queued = []
-            for video_id in list_archived_ids(data_dir):
-                if not find_video_file(data_dir, video_id):
-                    continue
-                if soundtrack_path(data_dir, video_id).is_file():
-                    continue
+            for video_id in db.archive_needs_summary(data_dir)["videos"]:
                 job = queue.submit(video_id)
-                queued.append(job["video_id"])
+                if job.get("status") != "complete" and not job.get("existing"):
+                    queued.append(video_id)
             return self._json({"queued": len(queued), "video_ids": queued}, 202 if queued else 200)
 
         def _open_folder(self):
@@ -1571,15 +1926,15 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 return self.send_error(404)
             ctype = mimetypes.guess_type(full.name)[0] or "application/octet-stream"
             size = full.stat().st_size
-            rng = self.headers.get("Range")
-            if rng and rng.startswith("bytes="):
-                start_s, _, end_s = rng[6:].partition("-")
-                start = int(start_s or 0)
-                end = int(end_s) if end_s else size - 1
-                end = min(end, size - 1)
-                if start > end or start < 0:
-                    self.send_error(416)
-                    return
+            rng = _byte_range(self.headers.get("Range"), size)
+            if rng == "unsatisfiable":
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            if rng:
+                start, end = rng
                 self.send_response(206)
                 self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
                 self.send_header("Content-Length", str(end - start + 1))

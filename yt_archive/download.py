@@ -11,6 +11,13 @@ from pathlib import Path
 
 from .paths import VIDEO_EXTS, archive_json_path, find_video_file, video_dir, watch_url
 
+PROGRESS_MARK = "ytarchive-progress"
+PROGRESS_TEMPLATE = (
+    "download:" + PROGRESS_MARK + " %(progress.status)s %(progress.downloaded_bytes)s"
+    " %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s"
+    " %(progress.eta)s %(info.vcodec)s"
+)
+
 
 def yt_dlp_bin() -> str:
     found = shutil.which("yt-dlp")
@@ -19,7 +26,9 @@ def yt_dlp_bin() -> str:
     return found
 
 
-def download(video_id: str, data_dir: Path, log=print, force: bool = False) -> Path:
+def download(
+    video_id: str, data_dir: Path, log=print, force: bool = False, progress=None
+) -> Path:
     """Download one video into data/<id>/. Returns the video file path.
 
     Firefox cookies are required: anonymous YouTube downloads 403 after ~10 MB.
@@ -37,6 +46,7 @@ def download(video_id: str, data_dir: Path, log=print, force: bool = False) -> P
 
     cmd = [
         yt_dlp_bin(),
+        "--ignore-config",
         "--cookies-from-browser", "firefox",
         # Highest resolution available, any codec. Do not prefer mp4 — that
         # can pick 1080p AVC over 4K VP9/AV1. Merge without re-encode.
@@ -49,6 +59,8 @@ def download(video_id: str, data_dir: Path, log=print, force: bool = False) -> P
         "--no-playlist",
         "-o", str(dest / "%(title)s-%(id)s.%(ext)s"),
         "--print", "after_move:downloaded %(resolution)s %(format_id)s %(ext)s",
+        "--progress", "--newline", "--progress-delta", "1",
+        "--progress-template", PROGRESS_TEMPLATE,
         watch_url(video_id),
     ]
     log("yt-dlp starting (best video+audio, firefox cookies)")
@@ -60,6 +72,11 @@ def download(video_id: str, data_dir: Path, log=print, force: bool = False) -> P
     for raw in proc.stdout:
         line = raw.rstrip()
         if not line:
+            continue
+        report = parse_progress(line)
+        if report is not None:
+            if progress:
+                progress(*report)
             continue
         lines.append(line)
         log(line)
@@ -73,6 +90,46 @@ def download(video_id: str, data_dir: Path, log=print, force: bool = False) -> P
     write_archive_json(data_dir, video_id, video)
     _log_resolution(video, log)
     return video
+
+
+def parse_progress(line: str) -> tuple[float | None, str] | None:
+    """(fraction, message) from one PROGRESS_TEMPLATE line, or None for other output."""
+    if not line.startswith(PROGRESS_MARK + " "):
+        return None
+    fields = line.split()[1:8]
+    fields += ["NA"] * (7 - len(fields))
+    status, done, total, estimate, speed, eta, vcodec = fields
+    done_b, total_b = _number(done), _number(total) or _number(estimate)
+    stream = "audio" if vcodec == "none" else "video" if vcodec != "NA" else ""
+    if status == "finished":
+        return 1.0, f"{stream} stream downloaded".strip().capitalize()
+    fraction = done_b / total_b if done_b is not None and total_b else None
+    parts = [f"downloading {stream}".strip()]
+    if done_b is not None:
+        parts.append(_mb(done_b) + (f" of {_mb(total_b)}" if total_b else ""))
+    if _number(speed):
+        parts.append(f"{_mb(_number(speed))}/s")
+    if _number(eta) is not None and fraction is not None and fraction < 1:
+        parts.append(f"{_eta(_number(eta))} left")
+    return fraction, " · ".join(parts)
+
+
+def _number(text: str) -> float | None:
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def _mb(size: float) -> str:
+    return f"{size / 1e9:.2f} GB" if size >= 1e9 else f"{size / 1e6:.1f} MB"
+
+
+def _eta(seconds: float) -> str:
+    total = int(seconds)
+    hours, rest = divmod(total, 3600)
+    minutes, secs = divmod(rest, 60)
+    return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes}:{secs:02d}"
 
 
 def _remove_videos(dest: Path, log) -> None:
@@ -136,6 +193,11 @@ def write_archive_json(data_dir: Path, video_id: str, video: Path, extra: dict |
             "duration": raw.get("duration"),
             "upload_date": raw.get("upload_date"),
             "description": (raw.get("description") or "")[:2000],
+            "width": raw.get("width"),
+            "height": raw.get("height"),
+            "fps": raw.get("fps"),
+            "vcodec": raw.get("vcodec"),
+            "acodec": raw.get("acodec"),
         }
         break
     payload = {

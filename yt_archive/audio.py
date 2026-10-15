@@ -38,6 +38,7 @@ def dump_soundtrack(
         return dest
     if not has_audio_stream(video):
         log("no audio stream — skipping soundtrack")
+        write_archive_json(data_dir, video_id, video, extra={"audio_stream": False})
         return None
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".part")
@@ -66,5 +67,7 @@ def dump_soundtrack(
             tmp.unlink()
         raise
     log(f"soundtrack {dest.name} ({dest.stat().st_size / 1e6:.1f} MB)")
-    write_archive_json(data_dir, video_id, video, extra={"soundtrack": dest.name})
+    write_archive_json(
+        data_dir, video_id, video, extra={"soundtrack": dest.name, "audio_stream": True}
+    )
     return dest

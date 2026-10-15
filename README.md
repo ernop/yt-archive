@@ -7,12 +7,21 @@ videos, Shorts, and past streams. Search and select a batch, or **Get all
 available**; saved and already queued videos are skipped. See
 [creator browsing](docs/browsing.md#browse-a-creator-on-youtube).
 
+Drag the home page's **+ ytarchive** button to your bookmarks bar, then click
+it on any YouTube video to queue it without leaving the page. See
+[the bookmarklet](docs/bookmarklet.md).
+
 Pairs with [matthoom](https://github.com/ernop/matthoom). Matthoom holds YouTube **watch history** (Takeout) and a gallery that can mark videos to archive. This service does the other half: **the file on disk** and **the shot images**.
 
 ```sh
 ./yt get <url-or-id>
 ./yt serve          # http://127.0.0.1:8765/
 ```
+
+The home page shows the download queue live (what is downloading, waiting, or
+failed, with progress) above the archive list, and offers
+one button to bring older videos up to the current pipeline. See
+[browsing](docs/browsing.md#download-queue-home-page).
 
 Each video is one folder. The original file is left untouched; derived shots live beside it:
 
@@ -21,7 +30,8 @@ data/<id>/
   <title>-<id>.mkv
   *.info.json  *.webp  archive.json
   _condensed/
-    framesheet.png
+    framesheet.png                      # framesheet-1.png, -2.png … past 250 shots
+    preview.jpg                         # small copy of sheet 1 for the archive list
     soundtrack.mp3
     transcript.json                     # optional, explicit local Whisper run
     transcript.vtt                      # selectable captions

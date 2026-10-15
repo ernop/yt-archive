@@ -4,13 +4,14 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from .paths import (
+    card_thumb_path,
     find_video_file,
-    framesheet_paths,
     list_archived_ids,
     load_archive_info,
     media_url,
@@ -21,6 +22,7 @@ from .paths import (
 )
 
 DB_NAME = "ytarchive.sqlite"
+WAITING_SHOWN = 8
 
 VIDEO_SORT_ORDERS = {
     "recent": "downloaded_at DESC, video_id COLLATE NOCASE ASC",
@@ -47,7 +49,8 @@ CREATE TABLE IF NOT EXISTS videos (
   has_video INTEGER NOT NULL DEFAULT 0,
   has_framesheet INTEGER NOT NULL DEFAULT 0,
   has_soundtrack INTEGER NOT NULL DEFAULT 0,
-  has_transcript INTEGER NOT NULL DEFAULT 0
+  has_transcript INTEGER NOT NULL DEFAULT 0,
+  needs TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS videos_by_time ON videos(downloaded_at DESC);
 
@@ -63,8 +66,13 @@ CREATE TABLE IF NOT EXISTS jobs (
   force_shots INTEGER NOT NULL DEFAULT 0,
   error TEXT NOT NULL DEFAULT '',
   log TEXT NOT NULL DEFAULT '[]',
+  title TEXT NOT NULL DEFAULT '',
+  progress REAL,
+  message TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  started_at TEXT NOT NULL DEFAULT '',
+  finished_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS jobs_by_status ON jobs(status, created_at);
 
@@ -116,32 +124,48 @@ def db_path(data_dir: Path) -> Path:
     return Path(data_dir) / DB_NAME
 
 
+_ready: set[Path] = set()
+_ready_lock = threading.Lock()
+
+
 def connect(data_dir: Path) -> sqlite3.Connection:
     path = db_path(data_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
+    fresh = path.resolve() not in _ready or not path.exists()
     conn = sqlite3.connect(path, timeout=10)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.executescript(SCHEMA)
-    _migrate(conn)
+    if fresh:
+        with _ready_lock:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.executescript(SCHEMA)
+            _migrate(conn)
+            _ready.add(path.resolve())
     return conn
 
 
+_MIGRATIONS = {
+    "videos": (
+        ("has_soundtrack", "INTEGER NOT NULL DEFAULT 0"),
+        ("has_transcript", "INTEGER NOT NULL DEFAULT 0"),
+        ("needs", "TEXT NOT NULL DEFAULT ''"),
+    ),
+    "jobs": (
+        ("audio", "TEXT NOT NULL DEFAULT 'pending'"),
+        ("title", "TEXT NOT NULL DEFAULT ''"),
+        ("progress", "REAL"),
+        ("message", "TEXT NOT NULL DEFAULT ''"),
+        ("started_at", "TEXT NOT NULL DEFAULT ''"),
+        ("finished_at", "TEXT NOT NULL DEFAULT ''"),
+    ),
+}
+
+
 def _migrate(conn: sqlite3.Connection) -> None:
-    vcols = {row[1] for row in conn.execute("PRAGMA table_info(videos)")}
-    if "has_soundtrack" not in vcols:
-        conn.execute(
-            "ALTER TABLE videos ADD COLUMN has_soundtrack INTEGER NOT NULL DEFAULT 0"
-        )
-    if "has_transcript" not in vcols:
-        conn.execute(
-            "ALTER TABLE videos ADD COLUMN has_transcript INTEGER NOT NULL DEFAULT 0"
-        )
-    jcols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
-    if "audio" not in jcols:
-        conn.execute(
-            "ALTER TABLE jobs ADD COLUMN audio TEXT NOT NULL DEFAULT 'pending'"
-        )
+    for table, columns in _MIGRATIONS.items():
+        have = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for name, decl in columns:
+            if name not in have:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
     conn.commit()
 
 
@@ -166,7 +190,21 @@ def _row_from_info(info: dict) -> dict:
         "has_framesheet": 1 if info.get("has_framesheet") else 0,
         "has_soundtrack": 1 if info.get("has_soundtrack") else 0,
         "has_transcript": 1 if info.get("has_transcript") else 0,
+        "needs": ",".join(info.get("needs") or []),
     }
+
+
+_VIDEO_COLUMNS = (
+    "video_id", "title", "channel", "channel_id", "duration", "upload_date",
+    "description", "video_file", "file_size", "downloaded_at", "shots_detected",
+    "shots_kept", "has_video", "has_framesheet", "has_soundtrack", "has_transcript", "needs",
+)
+_UPSERT_VIDEO = (
+    f"INSERT INTO videos ({', '.join(_VIDEO_COLUMNS)}) "
+    f"VALUES ({', '.join(':' + c for c in _VIDEO_COLUMNS)}) "
+    "ON CONFLICT(video_id) DO UPDATE SET "
+    + ", ".join(f"{c}=excluded.{c}" for c in _VIDEO_COLUMNS[1:])
+)
 
 
 def upsert(data_dir: Path, video_id: str | None = None, info: dict | None = None) -> None:
@@ -177,38 +215,7 @@ def upsert(data_dir: Path, video_id: str | None = None, info: dict | None = None
     row = _row_from_info(info)
     conn = connect(data_dir)
     try:
-        conn.execute(
-            """
-            INSERT INTO videos (
-              video_id, title, channel, channel_id, duration, upload_date,
-              description, video_file, file_size, downloaded_at,
-              shots_detected, shots_kept, has_video, has_framesheet, has_soundtrack,
-              has_transcript
-            ) VALUES (
-              :video_id, :title, :channel, :channel_id, :duration, :upload_date,
-              :description, :video_file, :file_size, :downloaded_at,
-              :shots_detected, :shots_kept, :has_video, :has_framesheet,
-              :has_soundtrack, :has_transcript
-            )
-            ON CONFLICT(video_id) DO UPDATE SET
-              title=excluded.title,
-              channel=excluded.channel,
-              channel_id=excluded.channel_id,
-              duration=excluded.duration,
-              upload_date=excluded.upload_date,
-              description=excluded.description,
-              video_file=excluded.video_file,
-              file_size=excluded.file_size,
-              downloaded_at=excluded.downloaded_at,
-              shots_detected=excluded.shots_detected,
-              shots_kept=excluded.shots_kept,
-              has_video=excluded.has_video,
-              has_framesheet=excluded.has_framesheet,
-              has_soundtrack=excluded.has_soundtrack,
-              has_transcript=excluded.has_transcript
-            """,
-            row,
-        )
+        conn.execute(_UPSERT_VIDEO, row)
         conn.commit()
     finally:
         conn.close()
@@ -222,23 +229,7 @@ def rebuild(data_dir: Path) -> int:
         conn.execute("DELETE FROM transcripts")
         conn.execute("DELETE FROM transcript_segments")
         for video_id in ids:
-            row = _row_from_info(load_archive_info(data_dir, video_id))
-            conn.execute(
-                """
-                INSERT INTO videos (
-                  video_id, title, channel, channel_id, duration, upload_date,
-                  description, video_file, file_size, downloaded_at,
-                  shots_detected, shots_kept, has_video, has_framesheet, has_soundtrack,
-                  has_transcript
-                ) VALUES (
-                  :video_id, :title, :channel, :channel_id, :duration, :upload_date,
-                  :description, :video_file, :file_size, :downloaded_at,
-                  :shots_detected, :shots_kept, :has_video, :has_framesheet,
-                  :has_soundtrack, :has_transcript
-                )
-                """,
-                row,
-            )
+            conn.execute(_UPSERT_VIDEO, _row_from_info(load_archive_info(data_dir, video_id)))
             transcript_path = transcript_json_path(data_dir, video_id)
             if transcript_is_complete(data_dir, video_id):
                 try:
@@ -330,11 +321,38 @@ def list_creator_videos(
 def _decorate_video_rows(data_dir: Path, rows) -> list[dict]:
     items = [_public(row) for row in rows]
     for item in items:
-        if item["has_framesheet"]:
-            sheets = framesheet_paths(data_dir, item["video_id"])
-            if sheets:
-                item["thumb_url"] = media_url(data_dir, sheets[0])
+        thumb = card_thumb_path(data_dir, item["video_id"])
+        if thumb:
+            item["thumb_url"] = media_url(data_dir, thumb)
     return items
+
+
+def count_videos(data_dir: Path) -> int:
+    if not db_path(data_dir).is_file():
+        rebuild(data_dir)
+    conn = connect(data_dir)
+    try:
+        return conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def archive_needs_summary(data_dir: Path) -> dict:
+    """How many archived videos a plain job would still change, by kind of work."""
+    if not db_path(data_dir).is_file():
+        rebuild(data_dir)
+    conn = connect(data_dir)
+    try:
+        rows = conn.execute(
+            "SELECT video_id, needs FROM videos WHERE has_video=1 AND needs != ''"
+        ).fetchall()
+    finally:
+        conn.close()
+    counts: dict[str, int] = {}
+    for row in rows:
+        for need in row["needs"].split(","):
+            counts[need] = counts.get(need, 0) + 1
+    return {"videos": [row["video_id"] for row in rows], "counts": counts}
 
 
 def _public(row: sqlite3.Row) -> dict:
@@ -355,6 +373,7 @@ def _public(row: sqlite3.Row) -> dict:
         "has_framesheet": bool(row["has_framesheet"]),
         "has_soundtrack": bool(row["has_soundtrack"]),
         "has_transcript": bool(row["has_transcript"]),
+        "needs": [need for need in (row["needs"] or "").split(",") if need],
     }
 
 
@@ -476,33 +495,30 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _job_public(row: sqlite3.Row) -> dict:
-    try:
-        log = json.loads(row["log"] or "[]")
-    except json.JSONDecodeError:
-        log = [row["log"]] if row["log"] else []
+def _job_public(row: sqlite3.Row, *, with_log: bool = True) -> dict:
+    keys = row.keys()
     download = row["download"]
     shots = row["shots"]
     audio = row["audio"]
     status = row["status"]
-    if status == "done":
-        phase = "done"
-    elif status == "queued":
-        phase = "queued"
+    if status in ("done", "queued", "error", "dismissed"):
+        phase = status
     elif download == "running":
         phase = "download"
     elif shots == "running":
         phase = "shots"
     elif audio == "running":
         phase = "audio"
-    elif status == "error":
-        phase = "error"
     else:
         phase = status
-    return {
+    title = (row["video_title"] if "video_title" in keys else "") or row["title"] or ""
+    job = {
         "job_id": row["id"],
         "url": row["url"],
         "video_id": row["video_id"],
+        "title": title,
+        "archived": bool(row["video_archived"]) if "video_archived" in keys else False,
+        "needs": [n for n in ((row["video_needs"] if "video_needs" in keys else "") or "").split(",") if n],
         "status": status,
         "phase": phase,
         "download": download,
@@ -510,11 +526,33 @@ def _job_public(row: sqlite3.Row) -> dict:
         "audio": audio,
         "force_video": bool(row["force_video"]),
         "force_shots": bool(row["force_shots"]),
+        "progress": row["progress"],
+        "message": row["message"] or "",
         "error": row["error"] or "",
-        "log": log,
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "started_at": row["started_at"] or "",
+        "finished_at": row["finished_at"] or (
+            row["updated_at"] if status in ("done", "error") else ""
+        ),
     }
+    if status == "done" and not job["message"]:
+        job["message"] = _steps_summary(download, shots, audio)
+    if with_log:
+        try:
+            job["log"] = json.loads(row["log"] or "[]")
+        except json.JSONDecodeError:
+            job["log"] = [row["log"]] if row["log"] else []
+    return job
+
+
+def _steps_summary(download: str, shots: str, audio: str) -> str:
+    did = [
+        label
+        for state, label in ((download, "downloaded"), (shots, "shots"), (audio, "MP3 audio"))
+        if state == "done"
+    ]
+    return " · ".join(did) if did else "already complete"
 
 
 def insert_job(
@@ -524,6 +562,7 @@ def insert_job(
     *,
     force_video: bool = False,
     force_shots: bool = False,
+    title: str = "",
 ) -> dict:
     job_id = uuid.uuid4().hex[:12]
     now = _now()
@@ -533,10 +572,10 @@ def insert_job(
             """
             INSERT INTO jobs (
               id, url, video_id, status, download, shots,
-              force_video, force_shots, error, log, created_at, updated_at
-            ) VALUES (?, ?, ?, 'queued', 'pending', 'pending', ?, ?, '', '[]', ?, ?)
+              force_video, force_shots, error, log, title, created_at, updated_at
+            ) VALUES (?, ?, ?, 'queued', 'pending', 'pending', ?, ?, '', '[]', ?, ?, ?)
             """,
-            (job_id, url, video_id, int(force_video), int(force_shots), now, now),
+            (job_id, url, video_id, int(force_video), int(force_shots), title, now, now),
         )
         conn.commit()
     finally:
@@ -547,14 +586,21 @@ def insert_job(
 def get_job(data_dir: Path, job_id: str) -> dict | None:
     conn = connect(data_dir)
     try:
-        row = conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+        row = conn.execute(
+            "SELECT j.*, v.title AS video_title, v.has_video AS video_archived, v.needs AS video_needs FROM jobs j "
+            "LEFT JOIN videos v ON v.video_id=j.video_id WHERE j.id=?",
+            (job_id,),
+        ).fetchone()
         return _job_public(row) if row else None
     finally:
         conn.close()
 
 
-def enqueue_missing_videos(data_dir: Path, video_ids: list[str]) -> dict:
+def enqueue_missing_videos(
+    data_dir: Path, video_ids: list[str], titles: dict[str, str] | None = None
+) -> dict:
     """Atomically queue a creator selection, skipping saved and open videos."""
+    titles = titles or {}
     conn = connect(data_dir)
     queued, skipped = [], []
     try:
@@ -569,9 +615,10 @@ def enqueue_missing_videos(data_dir: Path, video_ids: list[str]) -> dict:
                 continue
             conn.execute(
                 """INSERT INTO jobs (id, url, video_id, status, download, shots,
-                   force_video, force_shots, error, log, created_at, updated_at)
-                   VALUES (?, ?, ?, 'queued', 'pending', 'pending', 0, 0, '', '[]', ?, ?)""",
-                (uuid.uuid4().hex[:12], watch_url(video_id), video_id, now, now),
+                   force_video, force_shots, error, log, title, created_at, updated_at)
+                   VALUES (?, ?, ?, 'queued', 'pending', 'pending', 0, 0, '', '[]', ?, ?, ?)""",
+                (uuid.uuid4().hex[:12], watch_url(video_id), video_id,
+                 str(titles.get(video_id) or "")[:500], now, now),
             )
             queued.append(video_id)
         conn.commit()
@@ -586,6 +633,7 @@ def enqueue_missing_videos(data_dir: Path, video_ids: list[str]) -> dict:
 def update_job(data_dir: Path, job_id: str, **fields) -> dict | None:
     allowed = {
         "status", "download", "shots", "audio", "force_video", "force_shots", "error",
+        "progress", "message", "finished_at",
     }
     sets = []
     params: list = []
@@ -610,6 +658,37 @@ def update_job(data_dir: Path, job_id: str, **fields) -> dict | None:
     return get_job(data_dir, job_id)
 
 
+def set_job_progress(data_dir: Path, job_id: str, progress: float | None, message: str) -> None:
+    if progress is not None:
+        progress = max(0.0, min(1.0, float(progress)))
+    conn = connect(data_dir)
+    try:
+        conn.execute(
+            "UPDATE jobs SET progress=?, message=?, updated_at=? WHERE id=?",
+            (progress, str(message)[:300], _now(), job_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def finish_job(data_dir: Path, job_id: str, *, error: str = "", message: str = "") -> None:
+    now = _now()
+    conn = connect(data_dir)
+    try:
+        conn.execute(
+            """
+            UPDATE jobs SET status=?, error=?, message=?, progress=NULL,
+              finished_at=?, updated_at=?
+            WHERE id=?
+            """,
+            ("error" if error else "done", error, message, now, now, job_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def defer_job(data_dir: Path, job_id: str) -> None:
     """Put a claimed job at the back while its video's source is busy."""
     now = _now()
@@ -617,12 +696,47 @@ def defer_job(data_dir: Path, job_id: str) -> None:
     try:
         conn.execute(
             """
-            UPDATE jobs SET status='queued', created_at=?, updated_at=?
+            UPDATE jobs SET status='queued', started_at='', created_at=?, updated_at=?
             WHERE id=? AND status='running'
             """,
             (now, now, job_id),
         )
         conn.commit()
+    finally:
+        conn.close()
+
+
+def remove_waiting_job(data_dir: Path, job_id: str) -> bool:
+    conn = connect(data_dir)
+    try:
+        removed = conn.execute(
+            "DELETE FROM jobs WHERE id=? AND status='queued'", (job_id,)
+        ).rowcount
+        conn.commit()
+        return bool(removed)
+    finally:
+        conn.close()
+
+
+def remove_all_waiting_jobs(data_dir: Path) -> int:
+    conn = connect(data_dir)
+    try:
+        removed = conn.execute("DELETE FROM jobs WHERE status='queued'").rowcount
+        conn.commit()
+        return removed
+    finally:
+        conn.close()
+
+
+def dismiss_failed_job(data_dir: Path, job_id: str) -> bool:
+    conn = connect(data_dir)
+    try:
+        changed = conn.execute(
+            "UPDATE jobs SET status='dismissed', updated_at=? WHERE id=? AND status='error'",
+            (_now(), job_id),
+        ).rowcount
+        conn.commit()
+        return bool(changed)
     finally:
         conn.close()
 
@@ -640,7 +754,7 @@ def append_job_log(data_dir: Path, job_id: str, line: str) -> None:
         log.append(str(line))
         conn.execute(
             "UPDATE jobs SET log=?, updated_at=? WHERE id=?",
-            (json.dumps(log), _now(), job_id),
+            (json.dumps(log[-200:]), _now(), job_id),
         )
         conn.commit()
     finally:
@@ -650,20 +764,29 @@ def append_job_log(data_dir: Path, job_id: str, line: str) -> None:
 def claim_next_job(data_dir: Path) -> dict | None:
     conn = connect(data_dir)
     try:
+        conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
-            "SELECT * FROM jobs WHERE status='queued' ORDER BY created_at ASC LIMIT 1"
+            "SELECT id FROM jobs WHERE status='queued' ORDER BY created_at ASC LIMIT 1"
         ).fetchone()
         if not row:
+            conn.commit()
             return None
-        conn.execute(
-            "UPDATE jobs SET status='running', updated_at=? WHERE id=?",
-            (_now(), row["id"]),
-        )
+        now = _now()
+        changed = conn.execute(
+            """
+            UPDATE jobs SET status='running', progress=NULL, message='starting',
+              started_at=?, updated_at=?
+            WHERE id=? AND status='queued'
+            """,
+            (now, now, row["id"]),
+        ).rowcount
         conn.commit()
-        row = conn.execute("SELECT * FROM jobs WHERE id=?", (row["id"],)).fetchone()
-        return _job_public(row)
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
+    return get_job(data_dir, row["id"]) if changed else None
 
 
 def find_open_job(data_dir: Path, video_id: str) -> dict | None:
@@ -683,29 +806,65 @@ def find_open_job(data_dir: Path, video_id: str) -> dict | None:
 
 
 def list_jobs(data_dir: Path) -> list[dict]:
+    """Every open (running or waiting) job, running first, then in queue order."""
     conn = connect(data_dir)
     try:
-        open_rows = conn.execute(
+        rows = conn.execute(
             """
-            SELECT * FROM jobs
-            WHERE status IN ('queued', 'running')
-            ORDER BY created_at ASC
-            """
-        ).fetchall()
-        recent = conn.execute(
-            """
-            SELECT * FROM jobs
-            WHERE status IN ('done', 'error')
-            ORDER BY updated_at DESC
-            LIMIT 30
+            SELECT j.*, v.title AS video_title, v.has_video AS video_archived, v.needs AS video_needs FROM jobs j
+            LEFT JOIN videos v ON v.video_id=j.video_id
+            WHERE j.status IN ('queued', 'running')
+            ORDER BY j.status='queued', j.created_at ASC
             """
         ).fetchall()
-        seen = {r["id"] for r in open_rows}
-        out = [_job_public(r) for r in open_rows]
-        out.extend(_job_public(r) for r in recent if r["id"] not in seen)
-        return out
+        return [_job_public(row, with_log=False) for row in rows]
     finally:
         conn.close()
+
+
+def open_video_ids(data_dir: Path) -> set[str]:
+    conn = connect(data_dir)
+    try:
+        return {row[0] for row in conn.execute(
+            "SELECT video_id FROM jobs WHERE status IN ('queued', 'running')"
+        )}
+    finally:
+        conn.close()
+
+
+def queue_overview(data_dir: Path, waiting_limit: int = WAITING_SHOWN) -> dict:
+    """The home page's download queue: what runs, what waits, and what failed.
+
+    Finished jobs are left out; the archive list shows their result. A failure stays
+    until dismissed or until a later job for the same video exists.
+    """
+    conn = connect(data_dir)
+    try:
+        select = "SELECT j.*, v.title AS video_title, v.has_video AS video_archived, v.needs AS video_needs FROM jobs j LEFT JOIN videos v ON v.video_id=j.video_id"
+        running = conn.execute(
+            f"{select} WHERE j.status='running' ORDER BY j.started_at ASC"
+        ).fetchall()
+        waiting_count = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE status='queued'"
+        ).fetchone()[0]
+        waiting = conn.execute(
+            f"{select} WHERE j.status='queued' ORDER BY j.created_at ASC LIMIT ?",
+            (max(0, waiting_limit),),
+        ).fetchall()
+        failed = conn.execute(
+            f"""{select} WHERE j.status='error' AND NOT EXISTS (
+                  SELECT 1 FROM jobs k WHERE k.video_id=j.video_id AND k.created_at > j.created_at
+                    AND k.status IN ('queued', 'running', 'done', 'error', 'dismissed'))
+                ORDER BY j.updated_at DESC"""
+        ).fetchall()
+    finally:
+        conn.close()
+    return {
+        "running": [_job_public(row, with_log=False) for row in running],
+        "waiting": [_job_public(row, with_log=False) for row in waiting],
+        "waiting_count": waiting_count,
+        "failed": [_job_public(row, with_log=False) for row in failed],
+    }
 
 
 def has_queued_jobs(data_dir: Path) -> bool:
@@ -720,7 +879,8 @@ def has_queued_jobs(data_dir: Path) -> bool:
 
 
 def recover_jobs(data_dir: Path) -> int:
-    """Interrupted running jobs become queued again; redo the section that died."""
+    """Interrupted running jobs become queued again. The job re-reads the files, so a
+    half-made framesheet or sheet split is redone without forcing a fresh CLIP pass."""
     conn = connect(data_dir)
     try:
         rows = conn.execute("SELECT * FROM jobs WHERE status='running'").fetchall()
@@ -729,8 +889,8 @@ def recover_jobs(data_dir: Path) -> int:
             conn.execute(
                 """
                 UPDATE jobs SET
-                  status='queued',
-                  force_shots=CASE WHEN shots='running' THEN 1 ELSE force_shots END,
+                  status='queued', started_at='', progress=NULL,
+                  message='restarted after the service stopped',
                   download=CASE WHEN download='running' THEN 'pending' ELSE download END,
                   shots=CASE WHEN shots='running' THEN 'pending' ELSE shots END,
                   audio=CASE WHEN audio='running' THEN 'pending' ELSE audio END,

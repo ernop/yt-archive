@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import tempfile
 import unicodedata
 from datetime import datetime, timezone
@@ -22,6 +23,18 @@ URL_ID_RES = [
 ]
 
 VIDEO_EXTS = (".mkv", ".mp4", ".webm", ".mov")
+# yt-dlp's single-format pieces ("<title>-<id>.f399.mp4") before it merges them.
+FORMAT_PART_RE = re.compile(r"\.f\d+(-\d+)?\.[A-Za-z0-9]+$")
+THUMB_EXTS = (".webp", ".jpg", ".jpeg", ".png")
+
+# What a video still needs before it matches the current pipeline, in the order a job does it.
+NEEDS = {
+    "shots": "no framesheet",
+    "reshoot": "old shot detection",
+    "resplit": "framesheet to split",
+    "preview": "no list thumbnail",
+    "audio": "no MP3 audio",
+}
 
 
 def default_data_dir() -> Path:
@@ -81,6 +94,79 @@ def soundtrack_path(data_dir: Path, video_id: str) -> Path:
     return condensed_dir(data_dir, video_id) / "soundtrack.mp3"
 
 
+def preview_path(data_dir: Path, video_id: str) -> Path:
+    """Small JPEG of the first framesheet, for list rows."""
+    return condensed_dir(data_dir, video_id) / "preview.jpg"
+
+
+def youtube_thumb_path(data_dir: Path, video_id: str) -> Path | None:
+    """The thumbnail yt-dlp saved beside the original (--write-thumbnail)."""
+    folder = video_dir(data_dir, video_id)
+    if not folder.is_dir():
+        return None
+    for p in sorted(folder.iterdir()):
+        if p.is_file() and p.suffix.lower() in THUMB_EXTS:
+            return p
+    return None
+
+
+def preview_is_fresh(data_dir: Path, video_id: str) -> bool:
+    preview = preview_path(data_dir, video_id)
+    sheets = framesheet_paths(data_dir, video_id)
+    if not preview.is_file() or not sheets:
+        return False
+    return preview.stat().st_mtime_ns >= sheets[0].stat().st_mtime_ns
+
+
+def card_thumb_path(data_dir: Path, video_id: str) -> Path | None:
+    """Never a full framesheet: those run to hundreds of MB."""
+    if preview_is_fresh(data_dir, video_id):
+        return preview_path(data_dir, video_id)
+    return youtube_thumb_path(data_dir, video_id)
+
+
+def shots_are_current(shots: dict) -> bool:
+    """shots.json written by the settled 2 fps CLIP last-kept method (docs/framesheets.md)."""
+    return shots.get("compare") == "last-kept" and shots.get("sample") == "change"
+
+
+def read_shots_json(data_dir: Path, video_id: str) -> dict:
+    path = shots_json_path(data_dir, video_id)
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def archive_needs(data_dir: Path, video_id: str, archive: dict | None = None) -> list[str]:
+    """Keys of NEEDS that a plain job for this video would do. Empty when up to date."""
+    if find_video_file(data_dir, video_id) is None:
+        return []
+    from .framesheet import _sheet_chunk_sizes
+
+    needs = []
+    sheets = framesheet_paths(data_dir, video_id)
+    shots = read_shots_json(data_dir, video_id)
+    if not sheets or not shots:
+        needs.append("shots")
+    elif not shots_are_current(shots):
+        needs.append("reshoot")
+    elif len(sheets) != len(_sheet_chunk_sizes(int(shots.get("shots_kept") or 0))) or not all(
+        png_is_complete(sheet) for sheet in sheets
+    ):
+        needs.append("resplit")
+    elif not preview_is_fresh(data_dir, video_id):
+        needs.append("preview")
+    if archive is None:
+        try:
+            archive = json.loads(archive_json_path(data_dir, video_id).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            archive = {}
+    if not soundtrack_path(data_dir, video_id).is_file() and archive.get("audio_stream") is not False:
+        needs.append("audio")
+    return needs
+
+
 def transcript_json_path(data_dir: Path, video_id: str) -> Path:
     return condensed_dir(data_dir, video_id) / "transcript.json"
 
@@ -117,6 +203,18 @@ def restrict_filename(text: str, *, fallback: str = "untitled", max_len: int = 8
 
 
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def png_is_complete(path: Path) -> bool:
+    """A PNG file ends with its IEND chunk; one cut short by a stopped write does not."""
+    try:
+        with path.open("rb") as handle:
+            head = handle.read(8)
+            handle.seek(-12, os.SEEK_END)
+            tail = handle.read(12)
+    except OSError:
+        return False
+    return head == PNG_MAGIC and tail[4:8] == b"IEND"
 
 
 def is_complete_png(raw: bytes) -> bool:
@@ -175,6 +273,23 @@ def write_grab_png(folder: Path, t: float, title: str, raw: bytes) -> Path:
             pass
 
 
+def bookmarklet_key(data_dir: Path) -> str:
+    """The secret the bookmarklet carries (docs/bookmarklet.md). Created once, mode 0600."""
+    path = Path(data_dir) / "bookmarklet.key"
+    if not path.is_file():
+        fd, tmp = tempfile.mkstemp(prefix=".bookmarklet-", suffix=".part", dir=data_dir)
+        try:
+            with os.fdopen(fd, "w", encoding="ascii") as fh:
+                fh.write(secrets.token_urlsafe(24) + "\n")
+            try:
+                os.link(tmp, path)
+            except FileExistsError:
+                pass
+        finally:
+            os.unlink(tmp)
+    return path.read_text(encoding="ascii").strip()
+
+
 def file_cache_key(path: Path) -> str:
     """URL cache key: changes iff the file's bytes could have changed."""
     st = path.stat()
@@ -201,7 +316,7 @@ def find_video_file(data_dir: Path, video_id: str) -> Path | None:
         return None
     matches = [
         p for p in folder.iterdir()
-        if p.is_file() and p.suffix.lower() in VIDEO_EXTS
+        if p.is_file() and p.suffix.lower() in VIDEO_EXTS and not FORMAT_PART_RE.search(p.name)
     ]
     if not matches:
         return None
@@ -223,6 +338,7 @@ def load_archive_info(data_dir: Path, video_id: str) -> dict:
     info = {"video_id": video_id}
     if path.exists():
         info.update(json.loads(path.read_text(encoding="utf-8")))
+    archive = dict(info)
     folder = video_dir(data_dir, video_id)
     stamp = None
     if info.get("downloaded_at"):
@@ -237,6 +353,7 @@ def load_archive_info(data_dir: Path, video_id: str) -> dict:
     info["has_soundtrack"] = soundtrack_path(data_dir, video_id).is_file()
     info["has_transcript"] = transcript_is_complete(data_dir, video_id)
     info["shot_files"] = sorted(p.name for p in shots_dir(data_dir, video_id).glob("*.png"))
+    info["needs"] = archive_needs(data_dir, video_id, archive)
     return info
 
 

@@ -10,16 +10,26 @@
 #creator-status.error, #creator-warning { color: #f88; }
 #creator-status.done { color: #8d8; }
 #creator-warning:empty { display: none; }
-#creator-items { display: grid; gap: .65rem; }
-.creator-item { display: grid; grid-template-columns: auto 160px minmax(0, 1fr);
-  gap: 1rem; align-items: center; padding: .75rem; border: 1px solid #555; border-radius: 6px; }
-.creator-item:has(input:checked) { border-color: #fff; background: #181818; }
+#creator-count { font-weight: 700; }
+#creator-items { border: 1px solid #555; border-radius: 8px; overflow: hidden; }
+#creator-items > p { margin: 0; padding: .6rem .8rem; }
+.creator-item { display: grid; grid-template-columns: auto 7rem minmax(0, 1fr) 5rem 8rem 7.5rem;
+  gap: .9rem; align-items: center; padding: .3rem .8rem .3rem .6rem; border-top: 1px solid #262626;
+  white-space: nowrap; }
+.creator-item:first-child { border-top: 0; }
+.creator-item > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.creator-item:has(input:checked) { background: #1d1d1d; box-shadow: inset 4px 0 #fff; }
 .creator-item input { width: 1.25rem; height: 1.25rem; accent-color: #c4302b; }
-.creator-item img { display: block; width: 160px; aspect-ratio: 16/9; object-fit: cover; }
-.creator-item label { display: block; color: #fff; font-weight: 700; cursor: pointer; overflow-wrap: anywhere; }
-.creator-item .meta { margin-top: .4rem; }
-.creator-item a { display: inline-block; margin-top: .3rem; }
-@media (max-width: 600px) {
-  .creator-item { grid-template-columns: auto 90px minmax(0, 1fr); gap: .6rem; padding: .5rem; }
-  .creator-item img { width: 90px; }
+.creator-item img { display: block; width: 7rem; aspect-ratio: 16/9; object-fit: cover; border-radius: 3px; background: #111; }
+.creator-item label { color: #fff; font-weight: 700; cursor: pointer; }
+.creator-item .length { font: 700 1rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums; text-align: right; }
+.creator-item .state { font-weight: 700; font-size: .9rem; }
+.creator-item .state.saved { color: #8d8; }
+.creator-item .state.unavailable { color: #f88; }
+.creator-item a { text-align: right; }
+@media (max-width: 760px) {
+  .creator-item { grid-template-columns: auto 5rem minmax(0, 1fr) 4rem 5rem; gap: .6rem; }
+  .creator-item img { width: 5rem; }
+  .creator-item a { display: none; }
 }

@@ -22,3 +22,22 @@ Code: `yt_archive/download.py`.
 
 Use the official standalone `yt-dlp` on `PATH` (`~/.local/bin/yt-dlp`,
 self-updates with `yt-dlp -U`). Distro packages lag.
+
+## Progress and config (settled 2026-10-14)
+
+- `--ignore-config` — a user-level yt-dlp config cannot change the locked
+  recipe above.
+- `--progress --newline --progress-delta 1 --progress-template
+  "download:ytarchive-progress …"` — one machine-readable line per second
+  (status, bytes done, total or estimate, speed, ETA, vcodec).
+  `download.parse_progress()` turns it into the queue panel's fraction and
+  message (`downloading video · 58.0 MB of 129.9 MB · 4.2 MB/s · 0:20 left`).
+  Those lines are not written to the job log; everything else yt-dlp prints is.
+- `archive.json` also keeps the downloaded format's `width`, `height`, `fps`,
+  `vcodec`, `acodec` for the video page.
+- yt-dlp's unmerged single-format files (`<title>-<id>.f399.mp4`) are never
+  taken for the finished video, so a job that stopped mid-merge downloads again.
+
+Keep `yt-dlp` current (`yt-dlp -U`); an outdated copy prints a
+"To suppress this warning, add --no-update" warning on every run, and YouTube
+changes break old versions.

@@ -172,8 +172,7 @@ class CreatorBrowser:
             item["touched"] = time.monotonic()
             result = {**self._summary(item), "items": [dict(row) for row in item["items"]]}
         if result["status"] == "done":
-            open_ids = {job["video_id"] for job in db.list_jobs(self.data_dir)
-                        if job["status"] in {"queued", "running"}}
+            open_ids = db.open_video_ids(self.data_dir)
             for row in result["items"]:
                 row["archived"] = find_video_file(self.data_dir, row["video_id"]) is not None
                 row["queued"] = row["video_id"] in open_ids
@@ -193,4 +192,5 @@ class CreatorBrowser:
                     not isinstance(vid, str) or vid not in eligible for vid in video_ids):
                 raise ValueError("Select available videos from this creator's list.")
             selected = list(dict.fromkeys(video_ids))
-        return self.queue.submit_many(selected)
+        titles = {row["video_id"]: row["title"] for row in listing["items"]}
+        return self.queue.submit_many(selected, titles)
