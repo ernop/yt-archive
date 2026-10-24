@@ -20,7 +20,7 @@ history and `to_archive` marks. This process owns the files and the ML venv
 | [docs/setup.md](docs/setup.md) | New-machine install, `.venv`, the media player copy, live service |
 | [docs/download.md](docs/download.md) | yt-dlp flags, cookies, JS runtime — settled, do not reinvent |
 | [docs/framesheets.md](docs/framesheets.md) | Shot pipeline, thresholds, rejected approaches |
-| [docs/browsing.md](docs/browsing.md) | Download queue panel, archive status and update, single-line list rows, order and sort, creator pages, text contrast, the video page and player |
+| [docs/browsing.md](docs/browsing.md) | Download queue panel, archive status and update, single-line list rows, order and sort, creator pages, the YouTube picker for creators and playlists (and which lists use your account), the hourly YouTube request budget, text contrast, the video page and player |
 | [docs/bookmarklet.md](docs/bookmarklet.md) | The **+ ytarchive** bookmarklet: queue the YouTube page you're on, its key, why a pop-up |
 | [docs/transcription.md](docs/transcription.md) | Explicit local Whisper jobs, timed transcript UI, captions, speakers |
 
@@ -34,8 +34,12 @@ The main path is the live service, not the CLI.
 `yt-archive.service` (user unit) owns `127.0.0.1:8765`. Open
 `http://127.0.0.1:8765/` — or `http://ytarchive.localhost` on boxes with
 the Caddy `*.localhost` proxy. Paste one video URL or a pile of them; each
-becomes a queued job. Creator homepages / handles open a picker for selected
-or all available uploads (see [docs/browsing.md](docs/browsing.md)).
+becomes a queued job. Creator homepages, handles, and playlist links open the
+`/browse` picker: sections, playlists, filters, one-by-one review, and bulk
+get (see [docs/browsing.md](docs/browsing.md#browse-youtube)). Everything
+this repo asks of YouTube stays inside the hourly budgets in
+`yt_archive/budget.py`; listings send cookies only for the user's own Watch
+later, Liked videos, and private playlists.
 The **+ ytarchive** bookmarklet on that page queues the YouTube page you are
 on in one click ([docs/bookmarklet.md](docs/bookmarklet.md)).
 Jobs run one at a time: download, then shots, then

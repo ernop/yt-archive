@@ -38,6 +38,16 @@ self-updates with `yt-dlp -U`). Distro packages lag.
 - yt-dlp's unmerged single-format files (`<title>-<id>.f399.mp4`) are never
   taken for the finished video, so a job that stopped mid-merge downloads again.
 
+## Hourly budget (settled 2026-10-20)
+
+Each download that runs yt-dlp first takes one unit of the 150-an-hour
+download budget (half of YouTube's guest limit, see
+[browsing.md](browsing.md#youtube-request-budget)); with none left it waits and
+the queue row says until when. A video already on disk costs nothing. Listing
+creators and playlists has its own budget and sends the cookies only for the
+user's own Watch later, Liked videos, and private playlists
+([browsing.md](browsing.md#listing-is-read-only-the-account-only-for-the-users-own-lists)).
+
 Keep `yt-dlp` current (`yt-dlp -U`); an outdated copy prints a
 "To suppress this warning, add --no-update" warning on every run, and YouTube
 changes break old versions.

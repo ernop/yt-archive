@@ -18,7 +18,7 @@ _ID = r"([A-Za-z0-9_-]{11})"
 URL_ID_RES = [
     re.compile(rf"youtu\.be/{_ID}"),
     re.compile(rf"youtube(?:-nocookie)?\.com/watch\?(?:[^#]*&)?v={_ID}"),
-    re.compile(rf"youtube(?:-nocookie)?\.com/(?:shorts|embed|live|v)/{_ID}"),
+    re.compile(rf"youtube(?:-nocookie)?\.com/(?:shorts|embed|live|v)/(?!videoseries\b){_ID}"),
     VIDEO_ID_RE,
 ]
 

@@ -2,10 +2,15 @@
 
 A local YouTube archive: paste a URL, download the video, and get a contact sheet of its distinct shots. Browse and play everything already saved.
 
-Paste a creator's YouTube homepage, `@handle`, or username to browse their
-videos, Shorts, and past streams. Search and select a batch, or **Get all
-available**; saved and already queued videos are skipped. See
-[creator browsing](docs/browsing.md#browse-a-creator-on-youtube).
+Paste a creator's YouTube homepage, `@handle`, or a playlist link to go
+through all of its videos: Videos, Shorts, Live, and the creator's playlists,
+with filters for length and upload age. Get them all, a filtered part, a
+hand-picked selection, or go one by one; saved and already queued videos are
+skipped. Your own Watch later, Liked videos, and private playlists work too.
+Lists are read without your YouTube account, except those, which only your
+account can see; lists are kept until you refresh them and held to an hourly
+request budget. See
+[browsing YouTube](docs/browsing.md#browse-youtube).
 
 Drag the home page's **+ ytarchive** button to your bookmarks bar, then click
 it on any YouTube video to queue it without leaving the page. See

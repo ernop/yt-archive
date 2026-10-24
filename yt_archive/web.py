@@ -11,8 +11,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
-from . import db
-from .creators import CreatorBrowser, creator_url
+from . import budget, db
+from .budget import BudgetExceeded
+from .creators import CreatorBrowser, browse_url, playlist_browse_url
 from .db import list_creator_videos, normalize_video_sort
 from .jobs import JobQueue
 from .paths import (
@@ -494,14 +495,14 @@ def home_html(
     body = f"""
 <header>
   <h1><a href="/">ytarchive</a></h1>
-  <div class="sub">Paste video links to get them, or a creator’s homepage / @handle to choose their videos.</div>
+  <div class="sub">Paste video links to get them, or a creator’s homepage, @handle, or playlist link to choose from all of its videos.</div>
   <form class="get" id="get-form">
     <input name="url" id="url" type="text" autofocus
-      aria-label="Video links or YouTube creator"
-      placeholder="video links, creator homepage, or @username"
+      aria-label="Video links, YouTube creator, or playlist"
+      placeholder="video links, creator homepage, @handle, or playlist link"
       autocomplete="off">
     <button type="submit" id="go">Get</button>
-    <button type="button" id="browse-creator">Browse creator</button>
+    <button type="button" id="browse-creator">Browse</button>
   </form>
   <div id="status" role="status" aria-live="polite"></div>
   <div id="creator-results"></div>
@@ -547,7 +548,8 @@ function note(text, kind, href) {
   status.append(row);
 }
 document.getElementById('browse-creator').onclick = () => {
-  if (urlBox.value.trim()) window.location.assign('/browse?' + new URLSearchParams({source: urlBox.value.trim()}));
+  const source = urlBox.value.trim().split(/\s+/)[0];
+  window.location.assign(source ? '/browse?' + new URLSearchParams({source}) : '/browse');
 };
 const bookmarklet = document.getElementById('bookmarklet');
 if (bookmarklet) {
@@ -600,6 +602,7 @@ form.addEventListener('submit', async (e) => {
       if (data.status === 'complete') note('Already archived and up to date: ' + name, 'done', '/v/' + data.video_id);
       else if (data.existing) note('Already in the queue: ' + name);
       else note('Added to the queue: ' + name);
+      if (data.playlist_browse_url) note('That link is from a playlist. Choose more from the playlist →', '', data.playlist_browse_url);
     } catch (err) {
       note(url + ' — ' + err.message, 'error');
     }
@@ -814,45 +817,110 @@ def creator_html(
 
 
 def browse_creator_html(source: str = "") -> bytes:
+    """The picker (docs/browsing.md, "Browse YouTube"); static/creators.js fills it in."""
     body = f"""
 <header>
   <p><a href="/">← archive and download queue</a></p>
-  <h1>Browse a YouTube creator</h1>
-  <p>See their videos, Shorts, and past streams. Pick a few or get all available items.</p>
+  <h1>Browse YouTube</h1>
+  <p class="sub">Paste a creator’s homepage or @handle to go through their videos, Shorts, live streams,
+  and playlists, or paste a playlist link. Only the list is read; nothing downloads until you choose.
+  Your <a href="{_esc(browse_url('https://www.youtube.com/playlist?list=WL'))}">Watch later</a>,
+  <a href="{_esc(browse_url('https://www.youtube.com/playlist?list=LL'))}">Liked videos</a>,
+  and private playlists are read with your YouTube account.</p>
   <form class="get" id="creator-form">
-    <input id="creator-source" aria-label="YouTube creator" value="{_esc(source)}"
-      placeholder="YouTube homepage, @handle, username, or channel ID" required autocomplete="off">
+    <input id="creator-source" aria-label="YouTube creator or playlist" value="{_esc(source)}"
+      placeholder="creator homepage, @handle, channel ID, or playlist link" required autocomplete="off">
     <button id="creator-load" type="submit">Browse</button>
   </form>
   <div id="creator-status" role="status" aria-live="polite"></div>
 </header>
-<main id="creator-picker" hidden>
-  <h2 id="creator-title"></h2>
-  <p><a id="creator-youtube" target="_blank" rel="noopener noreferrer">Open on YouTube</a></p>
+<main id="creator-picker" data-downloads-per-hour="{budget.LIMITS['download']}" hidden>
+  <div class="pick-head">
+    <h2 id="creator-title"></h2>
+    <span id="creator-kind" class="pick-kind"></span>
+    <a id="creator-owner" hidden></a>
+    <a id="creator-youtube" target="_blank" rel="noopener noreferrer">open on YouTube ↗</a>
+    <span id="creator-listed"></span>
+    <button id="creator-refresh" type="button" class="btn">Refresh list</button>
+  </div>
   <p id="creator-warning" role="status"></p>
-  <p>Saved and queued videos are skipped. Live, upcoming, and known restricted items cannot be selected.</p>
-  <div class="creator-actions">
-    <button id="creator-get-selected" type="button" class="primary" disabled>Get selected (0)</button>
-    <button id="creator-get-all" type="button" disabled>Get all available (0)</button>
-    <span id="creator-selected-count" aria-live="polite"></span>
-  </div>
-  <p class="meta">Get all includes the full list, even items hidden by your filter. Select all matching works across every page.</p>
-  <div class="creator-actions">
-    <input id="creator-filter" type="search" aria-label="Filter creator videos" placeholder="Filter titles or video IDs…">
-    <button id="creator-select" type="button">Select all matching</button>
-    <button id="creator-clear" type="button">Clear selection</button>
-  </div>
-  <p id="creator-count" aria-live="polite"></p>
-  <div id="creator-items"></div>
-  <nav class="creator-actions" aria-label="Creator video pages">
-    <button id="creator-prev" type="button">Previous</button>
-    <span id="creator-page"></span>
-    <button id="creator-next" type="button">Next</button>
-  </nav>
+  <nav id="creator-tabs" class="pick-tabs" aria-label="What to show"></nav>
+  <section id="creator-videos" hidden>
+    <div class="pick-tools">
+      <input id="creator-filter" type="search" aria-label="Filter by title or video ID"
+        placeholder="filter titles or video IDs…" autocomplete="off">
+      <label class="pick-field"><span>Length</span><select id="creator-length">
+        <option value="">any length</option>
+        <option value="-60">under 1 min</option>
+        <option value="60-300">1–5 min</option>
+        <option value="300-1200">5–20 min</option>
+        <option value="1200-3600">20–60 min</option>
+        <option value="3600-">over 1 hour</option>
+      </select></label>
+      <label class="pick-field"><span>Uploaded</span><select id="creator-age">
+        <option value="">any time</option>
+        <option value="-7">past week</option>
+        <option value="-31">past month</option>
+        <option value="-92">past 3 months</option>
+        <option value="-366">past year</option>
+        <option value="366-">over a year ago</option>
+      </select></label>
+      <label class="pick-field"><span>Sort</span><select id="creator-sort">
+        <option value="">YouTube’s order</option>
+        <option value="new">newest first</option>
+        <option value="old">oldest first</option>
+        <option value="long">longest first</option>
+        <option value="short">shortest first</option>
+        <option value="views">most viewed</option>
+        <option value="title">title A–Z</option>
+      </select></label>
+      <label class="pick-check"><input id="creator-hide" type="checkbox"> hide saved and queued</label>
+    </div>
+    <div class="pick-bar">
+      <span class="pick-sel"><strong id="creator-selected-count">0</strong> selected<span id="creator-offview"></span></span>
+      <button id="creator-get-selected" type="button" class="primary">Get selected</button>
+      <button id="creator-get-shown" type="button">Get all shown</button>
+      <button id="creator-one-start" type="button">Go one by one</button>
+      <span class="pick-gap"></span>
+      <button id="creator-select-shown" type="button">Select all shown</button>
+      <span class="pick-first"><button id="creator-select-first" type="button">Select first</button>
+        <input id="creator-first" type="number" min="1" max="99999" value="10" aria-label="How many to select"></span>
+      <button id="creator-clear" type="button">Clear</button>
+    </div>
+    <p id="creator-count" class="pick-count"></p>
+    <div id="creator-items" class="pick-list"></div>
+    <nav class="pick-pager" aria-label="Pages">
+      <button id="creator-prev" type="button">← previous</button>
+      <span id="creator-page"></span>
+      <button id="creator-next" type="button">next →</button>
+    </nav>
+    <p class="pick-keys"><kbd>j</kbd> <kbd>k</kbd> or arrows move · <kbd>x</kbd> or <kbd>space</kbd> selects ·
+      shift-click or <kbd>shift</kbd>+<kbd>x</kbd> selects a range · <kbd>o</kbd> opens on YouTube</p>
+  </section>
+  <section id="creator-one" class="pick-one" hidden>
+    <img id="creator-one-thumb" alt="" referrerpolicy="no-referrer">
+    <div class="one-info">
+      <div class="one-pos"><strong id="creator-one-index"></strong> of <strong id="creator-one-total"></strong>
+        <span id="creator-one-chosen"></span></div>
+      <h3 id="creator-one-title"></h3>
+      <div id="creator-one-facts" class="one-facts"></div>
+      <div class="one-actions">
+        <button id="creator-one-choose" type="button" class="primary">Choose <kbd>y</kbd></button>
+        <button id="creator-one-skip" type="button">Skip <kbd>n</kbd></button>
+        <button id="creator-one-back" type="button">Back <kbd>b</kbd></button>
+        <button id="creator-one-done" type="button">Back to the list <kbd>esc</kbd></button>
+      </div>
+      <a id="creator-one-youtube" target="_blank" rel="noopener noreferrer">watch on YouTube ↗</a>
+    </div>
+  </section>
+  <section id="creator-playlists" hidden>
+    <p id="creator-playlists-status" role="status"></p>
+    <div id="creator-playlist-items" class="pick-list"></div>
+  </section>
 </main>
 """
     return _page(
-        "Browse creator · ytarchive", body,
+        "Browse YouTube · ytarchive", body,
         extra_head=f'<link rel="stylesheet" href="{_static_url("creators.css")}">',
         extra_tail=f'<script src="{_static_url("creators.js")}"></script>',
     )
@@ -1576,7 +1644,7 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
             if path.startswith("/api/creators/"):
                 listing = creators.get(path.removeprefix("/api/creators/"))
                 if not listing:
-                    return self._json({"error": "Preview expired or service restarted. Browse the creator again."}, 404)
+                    return self._json({"error": "This list is no longer kept. Browse it again."}, 404)
                 return self._json(listing)
             if path == "/":
                 params = parse_qs(parsed.query)
@@ -1705,9 +1773,14 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 if payload is None:
                     return
                 try:
-                    return self._json(creators.start(payload.get("source")), 202)
+                    if "refresh" in payload and not isinstance(payload["refresh"], bool):
+                        raise ValueError("refresh must be a boolean")
+                    listing = creators.start(payload.get("source"), refresh=payload.get("refresh", False))
+                    return self._json(listing, 202 if listing["status"] == "loading" else 200)
                 except ValueError as exc:
                     return self._json({"error": str(exc)}, 400)
+                except BudgetExceeded as exc:
+                    return self._json({"error": str(exc), "retry_at": exc.free_at}, 429)
             if parsed.path.startswith("/api/creators/") and parsed.path.endswith("/get"):
                 payload = self._read_json(max_bytes=1024 * 1024)
                 if payload is None:
@@ -1774,13 +1847,15 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 except ValueError:
                     if force_video or force_shots:
                         raise
-                    source = creator_url(url)
-                    return self._json({"browse_url": "/browse?" + urlencode({"source": source})})
+                    return self._json({"browse_url": browse_url(url)})
                 job = queue.submit(url, force_video=force_video, force_shots=force_shots)
             except ValueError as exc:
                 return self._json({"error": str(exc)}, 400)
             queued = job.get("status") != "complete" and not job.get("existing")
-            return self._json(queue.snapshot(job), 202 if queued else 200)
+            result = queue.snapshot(job)
+            if playlist_browse_url(url):
+                result["playlist_browse_url"] = playlist_browse_url(url)
+            return self._json(result, 202 if queued else 200)
 
         def _transcribe(self):
             payload = self._read_json()

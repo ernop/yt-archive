@@ -107,42 +107,171 @@ Older archive records without one fall back to their exact channel name. The
 page keeps the creator identity in its URL so it can be bookmarked and shared
 locally.
 
-## Browse a creator on YouTube
+## Browse YouTube
 
-Paste a creator homepage, `@handle`, plain handle, or `UC…` channel ID into
-the home page's input. **Get** opens a picker for creators; individual video
-links still go straight into the download queue. **Browse creator** explicitly
-treats the input as a creator (useful for handles that are exactly 11 characters,
-which Get otherwise interprets as video IDs). Older `/user/name`, `/c/name`,
-and vanity homepage URLs work too. A creator's archived page links to the picker
-when its channel ID is known.
+The `/browse` picker goes through a creator's or a playlist's videos so they
+can be queued all at once, by section, by filter, or one by one, instead of
+pasting links one at a time. Code: `yt_archive/creators.py`,
+`static/creators.js`.
 
-The picker loads all listed videos, Shorts, and streams from the creator's
-homepage, including when the pasted URL ends in `/videos` or another channel
-tab. Loading only reads metadata; it does not download media. Large channels
-may take a few minutes. Known private/restricted items, live broadcasts, upcoming
-streams, and streams still processing are shown but cannot be selected.
-YouTube can still reject an apparently available item at download time; its
-normal queue error remains visible.
+### What to paste
 
-Each listed item is one row: checkbox, YouTube thumbnail, title, length,
-state (Available, Saved, Queued, or why it cannot be selected), and a link.
-Thumbnails load from YouTube's image server, which the page asks for with no
-referrer, as it does for every YouTube link on the site.
+- A creator: homepage (`youtube.com/@name`, `/channel/UC…`, `/user/name`,
+  `/c/name`, vanity URLs), `@handle`, plain handle, or `UC…` channel ID.
+- A playlist: `/playlist?list=…`, a watch link with `list=`,
+  `youtu.be/…?list=`, `embed/videoseries?list=`, or
+  `music.youtube.com/playlist?list=`. The user's own Watch later (`list=WL`),
+  Liked videos (`LL`), Liked music (`LM`) and private playlists work too (see
+  below); the picker page links Watch later and Liked videos directly.
+- A link ending in a channel tab opens that part: `/videos` → Videos,
+  `/shorts` → Shorts, `/streams` → Live, `/playlists` → the creator's
+  playlists.
 
-Filter by title or video ID, check individual items, or **Select all matching**
-across every page. Selections survive filtering and pagination; **Clear selection**
-clears them all. **Get selected** queues that selection. **Get all available**
-queues every eligible listed item regardless of the filter or current page.
-Saved and already queued videos are skipped, including on repeated requests.
-Downloads use the usual one-at-a-time video → framesheet → MP3 pipeline and
-survive leaving the page or restarting the service.
+On the home page, **Get** with one creator or playlist link opens the picker;
+with several links, each creator or playlist becomes a Browse link and videos
+are queued. A video link still goes straight into the queue; if it carried a
+`list=`, the status line adds a link to choose more from that playlist (not
+for Mixes, `list=RD…`, which YouTube makes up per viewer). **Browse** treats
+the input as a creator or playlist (for handles of exactly 11 characters,
+which Get reads as video IDs) and opens the empty picker when the input is
+empty. The bookmarklet on a creator or playlist page opens the picker too, and
+a creator's archived page links to it when its channel ID is known.
 
-Lookups are temporary previews, retained for up to an hour of inactivity, with
-at most 16 previews and two simultaneous lookups. A restart clears previews;
-browse again to refresh. A partial lookup is explicitly labeled incomplete,
-so "all" refers only to the returned list. Lookup failures can be retried with
-Browse. No video limit is passed to yt-dlp; the UI shows 100 items per page.
+### Listing is read-only; the account only for the user's own lists
+
+yt-dlp lists with `--flat-playlist --lazy-playlist --dump-json`: metadata
+only, one line per item as pages arrive, so the page shows the count found
+and requests made while it loads. Listing sends **no cookies**, so YouTube
+does not see the user's account while browsing creators, their playlists,
+and public or unlisted playlists. Downloads use the Firefox cookies
+([download.md](download.md)). yt-dlp does not list YouTube "course"
+playlists.
+
+Lists YouTube shows only to the signed-in user are read **with the same
+Firefox cookies**, automatically (settled 2026-10-23):
+
+- Watch later, Liked videos, and Liked music (`list=WL`, `LL`, `LM`) use the
+  account from the first request; asking for them without it would be wasted.
+- A private playlist: YouTube answers "The playlist does not exist" to anyone
+  but its owner, the same as for a playlist that really does not exist. That
+  answer to a playlist listed without the account is asked once more with it.
+  A playlist missing either way therefore costs one request as the user, and
+  its failure is then remembered like any other.
+- A kept list that was read with the account is refreshed with it.
+
+The loading line and the picker header say "with your YouTube account" for
+these lists. Why: nothing is sent as the user without their consent, and they
+approved the account for their own lists only. Those requests
+tell YouTube nothing it does not already know (the lists are the user's own,
+and every download already goes out with the cookies), while which other
+creators the user browses stays unseen. Both tries are paid from the listing
+budget below.
+
+A creator's list holds every tab yt-dlp reads from the homepage: Videos,
+Shorts, and Live (past streams). Upload dates come from YouTube's "3 weeks
+ago" text (`youtubetab:approximate_date`), so they are shown that coarsely
+(`3 wk`, `2 yr`) and only drive the Uploaded filter and date sorts. Shorts
+have no length or date in a listing. Live, upcoming, still-processing, and
+known private or members-only items are listed but cannot be chosen. YouTube
+can still refuse an item at download time; the queue shows that error.
+
+### Kept lists
+
+A finished list is kept in SQLite (`youtube_listings`) until **Refresh list**.
+Reloads, other tabs, other links to the same creator (a handle or its channel
+ID), and service restarts reuse it and ask YouTube nothing; `listed 3 h ago`
+shows its age. A creator's list only changes when they upload, so asking
+again is a deliberate act. The 60 most recently used lists are kept.
+
+- One fetch per list at a time; a second tab waits for the same fetch. At most
+  two lists load at once.
+- A failed list is shown again, not fetched again, for 10 minutes; **Try
+  again** fetches it. A failed refresh keeps the old list and says why.
+- A list cut short (budget, 20-minute limit, YouTube errors) is kept with an
+  "Incomplete" warning, and "all" means all that was listed.
+
+### The picker
+
+- **Header**: title, kind (creator, playlist, playlists), the owner for a
+  playlist (links to the owner's picker), YouTube link, list age, **Refresh
+  list**.
+- **Tabs** for a creator: Videos, Shorts, Live, All, each with its count, and
+  Playlists. Playlists lists the creator's playlists on first click (its own
+  kept list, with its own Refresh); each opens in the picker, and Back returns
+  to the creator from the kept list.
+- **Filters**: title or video ID; Length (under 1 min, 1–5, 5–20, 20–60 min,
+  over 1 hour); Uploaded (past week, month, 3 months, year, over a year ago);
+  Sort (YouTube's order, newest, oldest, longest, shortest, most viewed,
+  title); hide saved and queued. Items without a length or date drop out
+  while that filter is on. The tab and filters are kept in the URL.
+- **Rows**, 100 per page, one line each: checkbox, position in the current
+  view, thumbnail, title, channel (playlists only, where videos come from
+  many channels), length, views, uploaded, status, YouTube link. Status is
+  empty for items that can be chosen; otherwise **Saved** (links to the
+  archive page), **Queued**, or why it cannot be chosen (Live now, Not ready
+  yet, Restricted, Unavailable).
+- **Selecting**: click a row or its checkbox; shift-click selects the range
+  from the last click; **Select all shown** (every page of the current view);
+  **Select first N** (in the current order); **Clear**. Keys: `j`/`k` or
+  arrows move, `x` or space selects, `shift`+`x` selects a range, `o` opens on
+  YouTube. The selection holds across tabs, filters, and pages and survives
+  reloading the tab; the bar says how many selected items the current view
+  does not show.
+- **Go one by one** shows each choosable video of the current view, in its
+  order, large: thumbnail, title, length, views, age. **Choose** (`y`),
+  **Skip** (`n` or →, also unselects), **Back** (`b` or ←), **Back to the
+  list** (Esc). It starts at the first one not selected yet and ends with
+  **Get N selected**.
+- **Get selected** queues the selection; **Get all shown** queues every
+  choosable item of the current view (tab and filters, all pages). More than
+  50 asks first, saying when the download budget spreads them over hours.
+  Saved and queued videos are skipped, also on repeats. Downloads are the
+  usual one-at-a-time video → framesheet → MP3 jobs and survive leaving the
+  page and restarts.
+- Thumbnails load lazily from YouTube's image server with no referrer, as for
+  every YouTube link on the site.
+
+### YouTube request budget
+
+yt-dlp's wiki puts YouTube's limits for a guest session at about 1000
+webpage/API requests and 300 videos an hour (accounts get about four times
+that). Two hard budgets sit at half the guest figures, counted in SQLite
+(`youtube_requests`) over a rolling hour and shared by the service and the
+CLI (`yt_archive/budget.py`):
+
+| Budget | Per hour | Counted |
+|--------|----------|---------|
+| listing | 500 requests | every request yt-dlp makes while listing |
+| download | 150 videos | every download that runs yt-dlp |
+
+- **Listing** runs yt-dlp with `--sleep-requests 0.75`; it prints
+  `[youtube:tab] Sleeping …` before every request after the first, and each
+  is paid for at that line, before the request goes out. When the budget is
+  spent, yt-dlp is stopped and the list keeps what had arrived. Starting a
+  list pays for its first request; with nothing left the page says when the
+  budget frees (HTTP 429), and a refresh keeps the old list. At about 25 items
+  per request, one hour lists creators up to about 12,000 items.
+- **Downloads** wait for a free unit; the queue row then reads `waiting:
+  this hour's YouTube budget of 150 downloads is used up · next download at
+  14:05`. Videos already on disk cost nothing. This also stops a failing queue
+  (expired cookies, say) from hammering YouTube.
+- Tabs, reloads, polling, and selections never reach YouTube; only listing a
+  link that is not kept, Refresh, Try again, and downloads do.
+
+### API
+
+```bash
+# Open a list (kept, or fetched once). 202 while loading; 429 + retry_at when the
+# budget is spent; "refresh": true asks YouTube again.
+curl -s -X POST localhost:8765/api/creators -H 'Content-Type: application/json' \
+  -d '{"source": "https://www.youtube.com/@name"}'
+# Status and items: video_id, title, duration, views, timestamp, section,
+# position, channel, unavailable, archived, queued.
+curl -s localhost:8765/api/creators/<lookup_id>
+# Queue some, or {"all": true} for every choosable item.
+curl -s -X POST localhost:8765/api/creators/<lookup_id>/get -H 'Content-Type: application/json' \
+  -d '{"video_ids": ["dQw4w9WgXcQ"]}'
+```
 
 ## Text contrast
 
@@ -159,7 +288,7 @@ text was difficult to read.
 ## Rows are single lines
 
 Every list or table row on the site is one line: download queue, archive
-list, creator picker, transcript segments (time, speaker, text side by side).
+list, YouTube picker, transcript segments (time, speaker, text side by side).
 Extra detail goes inline, behind a click (a failed job's full error), or on
 the video page; it is never stacked as a second line inside a row.
 

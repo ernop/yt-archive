@@ -9,6 +9,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import budget
 from .paths import VIDEO_EXTS, archive_json_path, find_video_file, video_dir, watch_url
 
 PROGRESS_MARK = "ytarchive-progress"
@@ -41,6 +42,20 @@ def download(
     if existing and not force:
         log(f"already have {existing.name}")
         return existing
+    told = []
+
+    def waiting(at: float) -> None:
+        message = (
+            f"waiting: this hour's YouTube budget of {budget.LIMITS['download']} downloads "
+            f"is used up · next download at {budget.clock(at)}"
+        )
+        if progress:
+            progress(None, message)
+        if not told:
+            told.append(at)
+            log(message)
+
+    budget.wait_and_take(data_dir, "download", waiting)
     if force:
         _remove_videos(dest, log)
 

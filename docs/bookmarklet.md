@@ -12,9 +12,9 @@ YouTube:
 - A small pop-up window opens on this archive (`/add`), says **Queued** with
   the video's title and id, and closes itself after 1.5 s. Playback on
   YouTube is not interrupted.
-- On a creator homepage or `@handle` page, the pop-up instead becomes the
-  creator picker ([browsing.md](browsing.md#browse-a-creator-on-youtube)) and
-  stays open.
+- On a creator homepage, `@handle`, or playlist page, the pop-up instead
+  becomes the picker ([browsing.md](browsing.md#browse-youtube)) and stays
+  open. On a video playing inside a playlist it queues just that video.
 - Anything the archive cannot use (YouTube's home feed, a non-YouTube page)
   leaves the pop-up open with the reason. Nothing is queued.
 - Clicking it again on the same video does not queue a second job; the
