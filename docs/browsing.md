@@ -41,6 +41,8 @@ the server page.
 Pasting a link to a video that is already archived and up to date queues
 nothing; the status line says "Already archived and up to date" with a link.
 Pasting one that is already in the queue says so and reuses that job.
+A link to a tweet with a video queues it the same way
+([download.md](download.md#x-tweets-settled-2026-10-25)).
 
 ## Archive status
 
@@ -243,6 +245,7 @@ CLI (`yt_archive/budget.py`):
 |--------|----------|---------|
 | listing | 500 requests | every request yt-dlp makes while listing |
 | download | 150 videos | every download that runs yt-dlp |
+| x-download | 60 tweets | every tweet download, X's own budget ([download.md](download.md#x-tweets-settled-2026-10-25)) |
 
 - **Listing** runs yt-dlp with `--sleep-requests 0.75`; it prints
   `[youtube:tab] Sleeping …` before every request after the first, and each
@@ -297,7 +300,8 @@ the video page; it is never stacked as a second line inside a row.
 Under the title, one line of facts: creator, length, resolution with fps and
 codec (for videos downloaded or processed since October 2026), file size,
 shot count, upload date, when it was gotten, the video ID, and a YouTube
-link. The YouTube description follows, collapsed. If a job for the video is
+link (an X link for a tweet's video). The description (a tweet's text)
+follows, collapsed. If a job for the video is
 waiting or running, a banner says so; the page does not wait for the job and
 shows the files as they are. A video without an audio track says so instead
 of offering **Create MP3 audio**. **Redo** at the bottom rebuilds the shots

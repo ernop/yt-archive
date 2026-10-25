@@ -19,12 +19,12 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     get_p = sub.add_parser("get", help="download a video, extract shot images, dump soundtrack")
-    get_p.add_argument("target", help="YouTube URL or 11-char id")
+    get_p.add_argument("target", help="YouTube or X (tweet) URL, or archive id")
     get_p.add_argument("--sim", type=float, default=0.85, help="CLIP last-kept change threshold (default 0.85)")
     get_p.add_argument("--skip-shots", action="store_true", help="download only")
 
     shots_p = sub.add_parser("shots", help="extract shot images from an already-downloaded video")
-    shots_p.add_argument("target", help="YouTube URL or 11-char id")
+    shots_p.add_argument("target", help="YouTube or X (tweet) URL, or archive id")
     shots_p.add_argument("--sim", type=float, default=0.85, help="CLIP last-kept change threshold (default 0.85)")
     shots_p.add_argument(
         "--all-sheet",
@@ -33,12 +33,12 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     audio_p = sub.add_parser("audio", help="create MP3 audio from an already-downloaded video")
-    audio_p.add_argument("target", help="YouTube URL or 11-char id")
+    audio_p.add_argument("target", help="YouTube or X (tweet) URL, or archive id")
 
     transcribe_p = sub.add_parser(
         "transcribe", help="explicitly run local Whisper on an existing MP3"
     )
-    transcribe_p.add_argument("target", help="YouTube URL or 11-char id")
+    transcribe_p.add_argument("target", help="YouTube or X (tweet) URL, or archive id")
     transcribe_p.add_argument("--model", choices=MODELS, default="large-v3")
     transcribe_p.add_argument("--language", default="", help="ISO code; blank auto-detects")
     transcribe_p.add_argument("--beam-size", type=int, default=5)

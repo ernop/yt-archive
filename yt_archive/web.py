@@ -33,6 +33,7 @@ from .paths import (
     parse_video_id,
     read_shots_json,
     shots_dir,
+    site_name,
     soundtrack_path,
     transcript_is_complete,
     transcript_json_path,
@@ -476,7 +477,8 @@ def home_html(
     sort = normalize_video_sort(sort)
     bookmarklet_html = (
         f'<p class="bookmarklet">Or drag <a id="bookmarklet" href="#" data-key="{_esc(bookmarklet)}">'
-        "+ ytarchive</a> to your bookmarks bar and click it on any YouTube video or creator page.</p>"
+        "+ ytarchive</a> to your bookmarks bar and click it on any YouTube video or creator page, "
+        "or a tweet with a video.</p>"
         if bookmarklet
         else ""
     )
@@ -495,7 +497,7 @@ def home_html(
     body = f"""
 <header>
   <h1><a href="/">ytarchive</a></h1>
-  <div class="sub">Paste video links to get them, or a creator’s homepage, @handle, or playlist link to choose from all of its videos.</div>
+  <div class="sub">Paste video links (YouTube, or tweets on X) to get them, or a YouTube creator’s homepage, @handle, or playlist link to choose from all of its videos.</div>
   <form class="get" id="get-form">
     <input name="url" id="url" type="text" autofocus
       aria-label="Video links, YouTube creator, or playlist"
@@ -563,7 +565,7 @@ if (bookmarklet) {
   bookmarklet.onclick = (e) => {
     e.preventDefault();
     status.replaceChildren();
-    note('Drag that button to your bookmarks bar, then click it on a YouTube page.');
+    note('Drag that button to your bookmarks bar, then click it on a YouTube page or a tweet.');
   };
 }
 async function post(path, body) {
@@ -937,7 +939,7 @@ def add_html(url: str, title: str, authorized: bool) -> bytes:
 </main>
 """
         return _page("ytarchive", body)
-    title = re.sub(r"^\(\d+\)\s*", "", title).removesuffix(" - YouTube").strip()
+    title = re.sub(r"^\(\d+\)\s*", "", title).removesuffix(" - YouTube").removesuffix(" / X").strip()
     body = f"""
 <main class="add" id="add" data-url="{_esc(url)}">
   <h1 id="add-status">Queuing…</h1>
@@ -1002,7 +1004,9 @@ def _facts_html(info: dict, creator_link: str, shots: int) -> str:
     if info.get("downloaded_at"):
         facts.append(f'<span>got <b>{_time_html(info["downloaded_at"])}</b></span>')
     facts.append(f"<span><code>{_esc(vid)}</code></span>")
-    facts.append(f'<a href="{_esc(watch_url(vid))}" target="_blank" rel="noopener noreferrer">YouTube</a>')
+    facts.append(
+        f'<a href="{_esc(watch_url(vid))}" target="_blank" rel="noopener noreferrer">{site_name(vid)}</a>'
+    )
     return f'<div class="facts">{"".join(facts)}</div>'
 
 
@@ -1250,6 +1254,7 @@ shift-click a shot to open its PNG · ? lists every key</p>
     parts.append("</main>")
     reget_js = LOCAL_TIMES_JS + r"""
 const vid = """ + json.dumps(vid) + r""";
+const site = """ + json.dumps(site_name(vid)) + r""";
 const STEP_NAMES = {download: 'downloading', shots: 'making shots', audio: 'making MP3 audio', queued: 'waiting in the queue'};
 async function post(path, body) {
   const res = await fetch(path, {
@@ -1280,7 +1285,7 @@ async function watchJob(jobId, status) {
 }
 async function reget(kind) {
   const ok = confirm(kind === 'video'
-    ? 'Download this video from YouTube again and rebuild its shots and framesheet?'
+    ? 'Download this video from ' + site + ' again and rebuild its shots and framesheet?'
     : 'Rebuild the shot images and framesheet from the local video?');
   if (!ok) return;
   const png = document.getElementById('reget-png');

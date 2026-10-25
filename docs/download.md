@@ -4,6 +4,9 @@ Parent: [agents.md](../agents.md). Settled 2026-08. Do not reinvent.
 
 Code: `yt_archive/download.py`.
 
+Tweets on X take the same recipe except where
+[X tweets](#x-tweets-settled-2026-10-25) says otherwise.
+
 ## Flags (locked)
 
 - **Highest resolution, any codec:**
@@ -51,3 +54,47 @@ user's own Watch later, Liked videos, and private playlists
 Keep `yt-dlp` current (`yt-dlp -U`); an outdated copy prints a
 "To suppress this warning, add --no-update" warning on every run, and YouTube
 changes break old versions.
+
+## X tweets (settled 2026-10-25)
+
+A video in a tweet goes through the same pipeline as a YouTube video (download,
+shots, MP3, transcript on request). Paste the tweet's link (`x.com` or
+`twitter.com`, any `/status/<id>` form) into the home page, click the
+bookmarklet on the tweet, or run `./yt get <tweet link>`.
+
+- **Archive id `x-<tweet id>`**, folder `data/x-<tweet id>/`. Tweet ids of 10
+  to 19 digits are accepted (every tweet that can carry a video has 18 or
+  more), so an archive id is never 11 characters and never taken for a YouTube
+  id. Some YouTube ids start with `x-` too; they stay YouTube ids.
+- **No account.** X is read without the user's X login: no cookies, ever
+  (`SITE_ARGS` in `download.py`). Firefox's cookies would make every download a
+  request made as the user. Tweets X shows only to signed-in accounts (sensitive
+  media, protected accounts) fail with "X shows this tweet only to signed-in
+  accounts". Using an account needs the user's explicit approval first.
+- **Only X's extractors** (`--use-extractors twitter.*`). For a tweet with no
+  video of its own, yt-dlp follows the tweet's first link; restricted, the job
+  fails with "This tweet has no video of its own; it links to <url>" instead of
+  fetching from YouTube or another site outside that site's budget.
+- **First video only** (`--playlist-items 1`, `--no-write-playlist-metafiles`),
+  so one folder holds one video. A tweet with several videos keeps its first. A
+  quoted tweet's video counts when the tweet has none of its own.
+- **Same format recipe.** X offers HLS video-only streams with separate audio,
+  and progressive MP4s labelled `http-256`, `http-832`, `http-2176`. The labels
+  are tiers, not bitrates: on 2026-10-25 a 716×538 `http-2176` MP4 was
+  6,359,453 bytes and the merged `hls-628` + 128k audio 6,356,661 bytes, the
+  same encode. The locked `-f` / `-S` pick the HLS pair at the top resolution.
+- **File name** `<uploader>-<media id>.mp4`: yt-dlp's `id` for a tweet's video
+  is the media id; the tweet id is its `display_id`. Non-ASCII tweet text drops
+  out under `--restrict-filenames`.
+- **Metadata.** `archive.json` takes the title (`<display name> - <tweet
+  text>`), `channel` (the display name), duration, upload date, size, and codec
+  from the info JSON, and `url` is the tweet. `channel_id` stays empty: creator
+  pages link a channel id to YouTube, and an X user id is not one, so the
+  creator link groups tweets by display name. The video page links to the tweet
+  on X.
+- **Budget: 60 tweet downloads an hour** (`x-download` in `yt_archive/budget.py`),
+  counted like the YouTube budgets
+  ([browsing.md](browsing.md#youtube-request-budget)). X publishes no limit for
+  reading without an account; each tweet costs yt-dlp two X API requests (a
+  guest token, then the tweet), and the video itself comes from X's CDN. A tweet
+  already on disk costs nothing.

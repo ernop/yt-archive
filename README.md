@@ -12,8 +12,12 @@ account can see; lists are kept until you refresh them and held to an hourly
 request budget. See
 [browsing YouTube](docs/browsing.md#browse-youtube).
 
+Videos in tweets work too: paste an `x.com` or `twitter.com` link to a tweet
+with a video and it is archived like a YouTube video, read without any X
+account. See [X tweets](docs/download.md#x-tweets-settled-2026-10-25).
+
 Drag the home page's **+ ytarchive** button to your bookmarks bar, then click
-it on any YouTube video to queue it without leaving the page. See
+it on any YouTube video or tweet to queue it without leaving the page. See
 [the bookmarklet](docs/bookmarklet.md).
 
 Pairs with [matthoom](https://github.com/ernop/matthoom). Matthoom holds YouTube **watch history** (Takeout) and a gallery that can mark videos to archive. This service does the other half: **the file on disk** and **the shot images**.
@@ -28,7 +32,7 @@ failed, with progress) above the archive list, and offers
 one button to bring older videos up to the current pipeline. See
 [browsing](docs/browsing.md#download-queue-home-page).
 
-Each video is one folder. The original file is left untouched; derived shots live beside it:
+Each video is one folder (`data/x-<tweet id>/` for a tweet's video). The original file is left untouched; derived shots live beside it:
 
 ```
 data/<id>/

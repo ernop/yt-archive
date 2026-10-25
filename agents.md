@@ -5,8 +5,9 @@ Start here.
 ## What this is
 
 Local YouTube archive: download a video, build a squash contact sheet of its
-distinct shots, browse and play the result. Public GitHub intro:
-[README.md](README.md).
+distinct shots, browse and play the result. Videos in tweets on X go through
+the same pipeline ([docs/download.md](docs/download.md#x-tweets-settled-2026-10-25)).
+Public GitHub intro: [README.md](README.md).
 
 Sibling of [matthoom](https://github.com/ernop/matthoom). Matthoom owns watch
 history and `to_archive` marks. This process owns the files and the ML venv
@@ -18,10 +19,10 @@ history and `to_archive` marks. This process owns the files and the ML venv
 |-----|------------|
 | [README.md](README.md) | Public GitHub intro — what this is, how to invoke it |
 | [docs/setup.md](docs/setup.md) | New-machine install, `.venv`, the media player copy, live service |
-| [docs/download.md](docs/download.md) | yt-dlp flags, cookies, JS runtime — settled, do not reinvent |
+| [docs/download.md](docs/download.md) | yt-dlp flags, cookies, JS runtime; X tweets (`x-<tweet id>`, no account, own budget) — settled, do not reinvent |
 | [docs/framesheets.md](docs/framesheets.md) | Shot pipeline, thresholds, rejected approaches |
 | [docs/browsing.md](docs/browsing.md) | Download queue panel, archive status and update, single-line list rows, order and sort, creator pages, the YouTube picker for creators and playlists (and which lists use your account), the hourly YouTube request budget, text contrast, the video page and player |
-| [docs/bookmarklet.md](docs/bookmarklet.md) | The **+ ytarchive** bookmarklet: queue the YouTube page you're on, its key, why a pop-up |
+| [docs/bookmarklet.md](docs/bookmarklet.md) | The **+ ytarchive** bookmarklet: queue the YouTube page or tweet you're on, its key, why a pop-up |
 | [docs/transcription.md](docs/transcription.md) | Explicit local Whisper jobs, timed transcript UI, captions, speakers |
 
 Every durable note in this repo is in that list or linked from one of those
@@ -120,7 +121,10 @@ archive, only replaceable.
 
 - Originals stay untouched. Derived work goes in `_condensed/`.
 - Filenames: `[A-Za-z0-9._-]` only. yt-dlp uses `--restrict-filenames`.
-  YouTube ids (`[A-Za-z0-9_-]`, case-sensitive) pass through unchanged.
+  YouTube ids (`[A-Za-z0-9_-]`, case-sensitive) pass through unchanged; a
+  tweet's video is `x-<tweet id>` (never 11 characters, so never a YouTube id).
+- X is read without the user's X account. Never add cookies or a login to X
+  downloads without the user's explicit approval.
 - Shot and download recipes are settled. Read [docs/download.md](docs/download.md)
   and [docs/framesheets.md](docs/framesheets.md) before changing either.
   Do not reintroduce the rejected approaches.

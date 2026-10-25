@@ -1,5 +1,6 @@
-"""Hard hourly budgets for what this machine asks of YouTube (docs/browsing.md,
-"YouTube request budget"). Counted in SQLite, so restarts and the CLI share them."""
+"""Hard hourly budgets for what this machine asks of YouTube and X (docs/browsing.md,
+"YouTube request budget"; docs/download.md, "X tweets"). Counted in SQLite, so restarts and
+the CLI share them."""
 from __future__ import annotations
 
 import time
@@ -11,8 +12,12 @@ from . import db
 WINDOW = 3600
 # yt-dlp's wiki puts YouTube's limits for a guest session at ~1000 webpage/API requests and
 # ~300 videos an hour (accounts get about four times that). Each budget is half a guest limit.
-LIMITS = {"listing": 500, "download": 150}
-NOUNS = {"listing": "listing requests", "download": "video downloads"}
+# X publishes no limit for reading without an account. A tweet costs yt-dlp two X API
+# requests (guest token, then the tweet), so 60 an hour stays far below what one person
+# browsing x.com sends.
+LIMITS = {"listing": 500, "download": 150, "x-download": 60}
+NOUNS = {"listing": "listing requests", "download": "video downloads", "x-download": "video downloads"}
+SITES = {"listing": "YouTube", "download": "YouTube", "x-download": "X"}
 
 
 class BudgetExceeded(RuntimeError):
@@ -20,7 +25,7 @@ class BudgetExceeded(RuntimeError):
         self.kind = kind
         self.free_at = free_at
         super().__init__(
-            f"This hour's YouTube budget of {LIMITS[kind]} {NOUNS[kind]} is used up. "
+            f"This hour's {SITES[kind]} budget of {LIMITS[kind]} {NOUNS[kind]} is used up. "
             f"Try again after {clock(free_at)}."
         )
 

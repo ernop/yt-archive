@@ -1,4 +1,4 @@
-"""Archive layout. One directory per YouTube id; originals stay untouched."""
+"""Archive layout. One directory per video (YouTube id, or x-<tweet id>); originals stay untouched."""
 from __future__ import annotations
 
 import hashlib
@@ -21,6 +21,13 @@ URL_ID_RES = [
     re.compile(rf"youtube(?:-nocookie)?\.com/(?:shorts|embed|live|v)/(?!videoseries\b){_ID}"),
     VIDEO_ID_RE,
 ]
+# A tweet's video is archived as "x-<tweet id>" (docs/download.md, "X tweets"). Ten digits or
+# more, so an archive id is never 11 characters and never taken for a YouTube id.
+TWEET_ID_RE = re.compile(r"^x-\d{10,19}$")
+TWEET_URL_RE = re.compile(
+    r"(?:^|[/.])(?:x|twitter)\.com/(?:(?:i/web|[A-Za-z0-9_]+)/status|statuses)/(\d{10,19})(?!\d)",
+    re.IGNORECASE,
+)
 
 VIDEO_EXTS = (".mkv", ".mp4", ".webm", ".mov")
 # yt-dlp's single-format pieces ("<title>-<id>.f399.mp4") before it merges them.
@@ -52,10 +59,25 @@ def parse_video_id(url_or_id: str) -> str:
         match = pat.search(text)
         if match:
             return match.group(1) if match.lastindex else match.group(0)
-    raise ValueError(f"Not a YouTube url or 11-char id: {url_or_id!r}")
+    tweet = TWEET_URL_RE.search(text)
+    if tweet:
+        return "x-" + tweet.group(1)
+    if TWEET_ID_RE.fullmatch(text):
+        return text
+    raise ValueError(f"Not a YouTube or X (tweet) url, or an archive id: {url_or_id!r}")
+
+
+def is_tweet(video_id: str) -> bool:
+    return bool(TWEET_ID_RE.fullmatch(video_id))
+
+
+def site_name(video_id: str) -> str:
+    return "X" if is_tweet(video_id) else "YouTube"
 
 
 def watch_url(video_id: str) -> str:
+    if is_tweet(video_id):
+        return f"https://x.com/i/status/{video_id.removeprefix('x-')}"
     return f"https://www.youtube.com/watch?v={video_id}"
 
 
@@ -329,7 +351,7 @@ def list_archived_ids(data_dir: Path) -> list[str]:
         return []
     return sorted(
         p.name for p in data_dir.iterdir()
-        if p.is_dir() and VIDEO_ID_RE.fullmatch(p.name)
+        if p.is_dir() and (VIDEO_ID_RE.fullmatch(p.name) or TWEET_ID_RE.fullmatch(p.name))
     )
 
 

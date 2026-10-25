@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -10,7 +11,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import budget
-from .paths import VIDEO_EXTS, archive_json_path, find_video_file, video_dir, watch_url
+from .paths import (
+    VIDEO_EXTS,
+    archive_json_path,
+    find_video_file,
+    is_tweet,
+    site_name,
+    video_dir,
+    watch_url,
+)
 
 PROGRESS_MARK = "ytarchive-progress"
 PROGRESS_TEMPLATE = (
@@ -18,6 +27,14 @@ PROGRESS_TEMPLATE = (
     " %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s"
     " %(progress.eta)s %(info.vcodec)s"
 )
+# X is read without the user's account: never give it cookies. Only X's extractors run,
+# so a tweet that just links elsewhere fails instead of fetching that site outside its
+# budget. One video per folder: a tweet with several keeps its first.
+SITE_ARGS = {
+    "YouTube": ["--cookies-from-browser", "firefox"],
+    "X": ["--use-extractors", "twitter.*", "--playlist-items", "1", "--no-write-playlist-metafiles"],
+}
+_LINKS_ELSEWHERE_RE = re.compile(r"No suitable extractor.* found for URL (\S+)")
 
 
 def yt_dlp_bin() -> str:
@@ -32,9 +49,9 @@ def download(
 ) -> Path:
     """Download one video into data/<id>/. Returns the video file path.
 
-    Firefox cookies are required: anonymous YouTube downloads 403 after ~10 MB.
-    Deno (yt-dlp default) solves JS challenges. --restrict-filenames keeps
-    names in [A-Za-z0-9._-].
+    YouTube needs Firefox cookies: anonymous YouTube downloads 403 after ~10 MB.
+    Deno (yt-dlp default) solves JS challenges. A tweet (x-<tweet id>) is read
+    without any account. --restrict-filenames keeps names in [A-Za-z0-9._-].
     """
     dest = video_dir(data_dir, video_id)
     dest.mkdir(parents=True, exist_ok=True)
@@ -42,11 +59,13 @@ def download(
     if existing and not force:
         log(f"already have {existing.name}")
         return existing
+    site = site_name(video_id)
+    kind = "x-download" if site == "X" else "download"
     told = []
 
     def waiting(at: float) -> None:
         message = (
-            f"waiting: this hour's YouTube budget of {budget.LIMITS['download']} downloads "
+            f"waiting: this hour's {site} budget of {budget.LIMITS[kind]} downloads "
             f"is used up · next download at {budget.clock(at)}"
         )
         if progress:
@@ -55,14 +74,14 @@ def download(
             told.append(at)
             log(message)
 
-    budget.wait_and_take(data_dir, "download", waiting)
+    budget.wait_and_take(data_dir, kind, waiting)
     if force:
         _remove_videos(dest, log)
 
     cmd = [
         yt_dlp_bin(),
         "--ignore-config",
-        "--cookies-from-browser", "firefox",
+        *SITE_ARGS[site],
         # Highest resolution available, any codec. Do not prefer mp4 — that
         # can pick 1080p AVC over 4K VP9/AV1. Merge without re-encode.
         "-f", "bv*+ba/b",
@@ -78,7 +97,7 @@ def download(
         "--progress-template", PROGRESS_TEMPLATE,
         watch_url(video_id),
     ]
-    log("yt-dlp starting (best video+audio, firefox cookies)")
+    log(f"yt-dlp starting (best video+audio, {'no account' if site == 'X' else 'firefox cookies'})")
     proc = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
     )
@@ -97,7 +116,7 @@ def download(
         log(line)
     if proc.wait() != 0:
         _cleanup_empty(dest)
-        raise RuntimeError(_yt_dlp_failure(lines))
+        raise RuntimeError(_yt_dlp_failure(lines, site))
     log("download finished")
     video = find_video_file(data_dir, video_id)
     if not video:
@@ -165,13 +184,18 @@ def _cleanup_empty(dest: Path) -> None:
         pass
 
 
-def _yt_dlp_failure(lines: list[str]) -> str:
+def _yt_dlp_failure(lines: list[str], site: str = "YouTube") -> str:
     blob = "\n".join(lines)
     if "drm protected" in blob.lower():
         return (
             "YouTube marked this title DRM-protected (Movies / rental / purchase). "
             "No downloadable video stream — only storyboard images. Cannot archive it."
         )
+    if site == "X" and "account credentials" in blob:
+        return "X shows this tweet only to signed-in accounts, and the archive reads X without your account."
+    elsewhere = _LINKS_ELSEWHERE_RE.search(blob) if site == "X" else None
+    if elsewhere:
+        return f"This tweet has no video of its own; it links to {elsewhere.group(1)}"
     for line in reversed(lines):
         if line.startswith("ERROR:"):
             return line.removeprefix("ERROR:").strip()
@@ -204,7 +228,8 @@ def write_archive_json(data_dir: Path, video_id: str, video: Path, extra: dict |
             "url": raw.get("webpage_url") or watch_url(video_id),
             "title": raw.get("title"),
             "channel": raw.get("channel") or raw.get("uploader"),
-            "channel_id": raw.get("channel_id"),
+            # Creator pages link channel_id to YouTube; an X user id is not a channel there.
+            "channel_id": "" if is_tweet(video_id) else raw.get("channel_id"),
             "duration": raw.get("duration"),
             "upload_date": raw.get("upload_date"),
             "description": (raw.get("description") or "")[:2000],
