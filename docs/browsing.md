@@ -312,7 +312,9 @@ from the local file or downloads the video again.
 The video and the MP3 audio play in the shared media player, of which this
 repo keeps a copy ([setup.md](setup.md#media-player)), so every project plays
 media the same way; it replaced this site's own player in October 2026. `?` on
-the page lists every key. What the video page adds:
+the page lists every key. `R` or the repeat button (October 27, 2026) plays the
+video or the MP3 again from the start each time it ends; each player has its
+own, and a new page opens with it off. What the video page adds:
 
 - Every kept shot is a marker on the seek scale, named by its image
   (`Shot 0041`). The image of the shot that is playing is outlined in red.

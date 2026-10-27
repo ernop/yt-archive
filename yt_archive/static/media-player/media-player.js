@@ -20,7 +20,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, function (root) {
     'use strict';
 
-    const VERSION = '1.1.1';
+    const VERSION = '1.2.0';
 
     const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
     // Notch intervals in tenths of a second, so divisibility stays in integers: 0.1 s to 12 h.
@@ -30,6 +30,7 @@
     const MINOR_MIN_PX = 8;           // unlabeled notches closer together than this are left out
     const MINOR_PER_MAJOR_MAX = 10;
     const JUMP_SECONDS = 15;          // a seek at least this long is a jump that Backspace undoes
+    const REPEAT_EDGE_SECONDS = 2;    // with repeat on, a seek from this close to the end to this close to the start is the repeat
     const RESUME_MIN_SECONDS = 120;   // shorter media always start at the beginning
     const RESUME_EDGE_SECONDS = 5;    // this close to either end counts as not started, or finished
     const RESUME_SAVE_MS = 5000;
@@ -63,6 +64,8 @@
             + '<circle class="mp-stroke" cx="12" cy="13" r="3.5"/></svg>',
         wide: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="mp-stroke" d="M2 6h20v12H2z'
             + 'M6 12h12M6 12l2.5-2.5M6 12l2.5 2.5M18 12l-2.5-2.5M18 12l-2.5 2.5"/></svg>',
+        repeat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="mp-stroke" d="M4 12v-2a3 3 0 0 1 3-3h12'
+            + 'M16 4l3 3-3 3M20 12v2a3 3 0 0 1-3 3H5M8 20l-3-3 3-3"/></svg>',
     };
 
     // ---------------------------------------------------------------- pure helpers
@@ -218,6 +221,12 @@
         return t < duration / 2 ? duration - t : t + (duration - t) / 2;
     }
 
+    /** Whether a seek from `from` to `to` in media `duration` seconds long is repeat starting it
+        again, from its last seconds to its first, rather than a jump. */
+    function startsAgain(from, to, duration) {
+        return duration > 0 && from >= duration - REPEAT_EDGE_SECONDS && to <= REPEAT_EDGE_SECONDS;
+    }
+
     /** The seconds a player has skip buttons for, smallest first: a list or "5 30". Without any
         usable amount, 5 and 30. */
     function skipAmounts(value) {
@@ -279,7 +288,7 @@
     // players that cannot (CAPABILITIES, Player.capabilities). Letters are matched lowercase, with
     // Shift as its own flag, so Shift+J and J are different keys. A `once` entry ignores the
     // repeats of a held key: holding S saves one frame, holding Space does not flicker.
-    const CAPABILITIES = ['video', 'captions', 'pip', 'markers', 'items', 'wide', 'sound', 'frames'];
+    const CAPABILITIES = ['video', 'captions', 'pip', 'markers', 'items', 'wide', 'sound', 'frames', 'repeat'];
     const letter = (e, keys, shift) => keys.includes(e.key) && e.key.length === 1 && e.shiftKey === shift;
     const KEYS = [
         { keys: 'Space, K', once: true, help: 'Play or pause', scope: 'page',
@@ -314,6 +323,8 @@
         { keys: '< >, [ ]', help: 'Slower or faster', scope: 'page',
             match: (e) => e.key.length === 1 && '<>[]'.includes(e.key),
             run: (p, e) => p.bumpSpeed(e.key === '<' || e.key === '[' ? -1 : 1) },
+        { keys: 'R', once: true, help: 'Repeat on or off', scope: 'page', needs: ['repeat'],
+            match: (e) => letter(e, 'r', false), run: (p) => p.toggleRepeat() },
         { keys: 'Up, Down', help: 'Volume up or down 5%', scope: 'focus', needs: ['sound'],
             match: (e) => e.key === 'ArrowUp' || e.key === 'ArrowDown',
             run: (p, e) => p.nudgeVolume(e.key === 'ArrowUp' ? VOLUME_STEP : -VOLUME_STEP) },
@@ -653,6 +664,8 @@
 
             this.resumeBtn = textButton('mp-resume', '', 'Resume where you left off');
             this.resumeBtn.hidden = true;
+            this.repeatBtn = iconButton('mp-repeat', 'repeat', 'Repeat (R)');
+            this.repeatBtn.hidden = true;
             this.ccBtn = textButton('mp-cc', 'CC', 'Captions (C)');
             this.ccBtn.hidden = true;
             this.frameBtn = iconButton('mp-frame', 'camera', 'Save this frame as a picture (S)');
@@ -668,7 +681,8 @@
 
             this.grow = this.isVideo ? el('span', 'mp-grow') : this.flashEl;
             controls.append(this.prevItemBtn, this.playBtn, this.nextItemBtn, skips, half, speed, volume, this.legend,
-                this.grow, this.resumeBtn, this.ccBtn, this.frameBtn, this.wideBtn, this.pipBtn, this.fullBtn, this.helpBtn);
+                this.grow, this.resumeBtn, this.repeatBtn, this.ccBtn, this.frameBtn, this.wideBtn, this.pipBtn,
+                this.fullBtn, this.helpBtn);
             return controls;
         }
 
@@ -764,6 +778,11 @@
             on(media, 'ended', () => {
                 this.paintPlayState();
                 this.savePosition();
+                // An element with loop starts again by itself and never ends. A source cannot, so it
+                // starts again here, after the page's own handlers for the end have run.
+                if (media.loop) {
+                    queueMicrotask(() => this.startAgain());
+                }
             });
             on(media, 'timeupdate', () => {
                 if (!media.seeking) {
@@ -804,6 +823,10 @@
                 this.renderMarkers();
                 this.paintAll();
             });
+            if (this.isElement) {
+                // The loop property reflects the attribute, so this sees a page script setting either.
+                new MutationObserver(() => this.paintRepeat()).observe(media, { attributeFilter: ['loop'] });
+            }
             const sources = this.isElement ? media.querySelectorAll('source') : [];
             if (sources.length) {
                 // With <source> children the element reports nothing; the last source's error means none loaded.
@@ -829,6 +852,7 @@
                 media.muted = media.volume === 0;
             });
             on(this.resumeBtn, 'click', () => this.resume());
+            on(this.repeatBtn, 'click', () => this.toggleRepeat());
             on(this.prevItemBtn, 'click', () => this.stepItem(-1));
             on(this.nextItemBtn, 'click', () => this.stepItem(1));
             on(this.halfBackBtn, 'click', () => this.halfJump(-1));
@@ -978,13 +1002,15 @@
         }
 
         // Any seek of JUMP_SECONDS or more, whoever made it (keys, a click on the scale, a page
-        // script setting currentTime), records where it left from; Backspace returns there.
+        // script setting currentTime), records where it left from; Backspace returns there. Repeat
+        // starting the media again is no jump: Backspace keeps the spot it had.
         noteSeek() {
             if (this.dragging) {
                 return;
             }
             const to = this.media.currentTime;
-            if (Math.abs(to - this.settled) >= JUMP_SECONDS) {
+            if (Math.abs(to - this.settled) >= JUMP_SECONDS
+                && !(this.media.loop && startsAgain(this.settled, to, this.duration()))) {
                 this.jumpFrom = this.settled;
             }
             this.settled = to;
@@ -1123,6 +1149,33 @@
             store.set('wide', wide ? '1' : '0');
             live.forEach((player) => player.paintWide());
             this.notify('wide', { wide });
+        }
+
+        /** Every media element can repeat, and so can a source with loop (MediaPlayer.Source has it). */
+        repeatSupported() {
+            return 'loop' in this.media;
+        }
+
+        /** Repeat on or off: the media's loop, so it starts again from the start when it reaches
+            the end. Not remembered: each page view starts with the page's loop. */
+        toggleRepeat(on) {
+            if (!this.repeatSupported()) {
+                return;
+            }
+            const repeat = on === undefined ? !this.media.loop : Boolean(on);
+            this.media.loop = repeat;
+            this.paintRepeat();
+            this.flash(repeat ? 'Repeat on' : 'Repeat off');
+            this.notify('repeat', { repeat });
+        }
+
+        /** Plays media that ended with repeat on again from the start, unless repeat went off or the
+            page started playing something in its own handler for the end. */
+        startAgain() {
+            if (this.media.loop && this.media.paused) {
+                this.seek(0);
+                this.play();
+            }
         }
 
         /** Previous and next items (the parts of a book, the files of a list): `previous` and `next`
@@ -1294,6 +1347,7 @@
                 wide: this.wide,
                 sound: this.sound,
                 frames: this.isVideo && (this.isElement || Boolean(this.frameSaver)),
+                repeat: this.repeatSupported(),
             };
         }
 
@@ -1518,6 +1572,7 @@
             this.paintSpeed();
             this.paintVolume();
             this.paintCaptions();
+            this.paintRepeat();
             this.paintItems();
             this.pipBtn.hidden = !this.pipSupported();
         }
@@ -1619,6 +1674,11 @@
             if (track) {
                 this.ccBtn.setAttribute('aria-pressed', String(track.mode === 'showing'));
             }
+        }
+
+        paintRepeat() {
+            this.repeatBtn.hidden = !this.repeatSupported();
+            this.repeatBtn.setAttribute('aria-pressed', String(Boolean(this.media.loop)));
         }
 
         paintItems() {
@@ -1910,8 +1970,18 @@
         player has sound: false; readyState, buffered, error and textTracks when it has them)
         and calls emit() with the media element's event names: loadedmetadata, durationchange,
         play, playing, pause, ended, timeupdate, seeking, seeked, waiting, canplay, progress,
-        ratechange, volumechange, error, loadstart, emptied. Spec: SPEC.md, "Sources". */
+        ratechange, volumechange, error, loadstart, emptied. This class keeps loop, which repeat
+        switches; the player starts the source again when it ends with loop on. Spec: SPEC.md,
+        "Sources". */
     const Source = typeof EventTarget === 'undefined' ? null : class Source extends EventTarget {
+        get loop() {
+            return Boolean(this.looping);
+        }
+
+        set loop(on) {
+            this.looping = Boolean(on);
+        }
+
         get buffered() {
             return null;
         }
@@ -1973,6 +2043,7 @@
         adjacentMarker,
         lastAtOrBefore,
         halfJumpTarget,
+        startsAgain,
         skipAmounts,
         frameFileName,
         stepSpeed,

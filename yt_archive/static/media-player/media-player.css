@@ -471,7 +471,8 @@
 }
 
 .mp-cc[aria-pressed="true"],
-.mp-wide[aria-pressed="true"] {
+.mp-wide[aria-pressed="true"],
+.mp-repeat[aria-pressed="true"] {
     color: var(--mp-accent-text);
     background: var(--mp-accent);
     border-color: var(--mp-accent);
