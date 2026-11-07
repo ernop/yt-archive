@@ -1,6 +1,6 @@
 # Bookmarklet: queue from YouTube or X
 
-Parent: [agents.md](../agents.md).
+Parent: [AGENTS.md](../AGENTS.md).
 
 ## What it does
 

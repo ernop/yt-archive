@@ -1,6 +1,6 @@
 # Shot images and framesheet
 
-Parent: [agents.md](../agents.md). Settled 2026-08-18. Do not reinvent.
+Parent: [AGENTS.md](../AGENTS.md). Settled 2026-08-18. Do not reinvent.
 
 Code: `yt_archive/framesheet.py`. Everything local (HF cache
 `~/.cache/huggingface`, ~600 MB CLIP). The pinned weights load from that cache

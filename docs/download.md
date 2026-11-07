@@ -1,6 +1,6 @@
 # Download (yt-dlp)
 
-Parent: [agents.md](../agents.md). Settled 2026-08. Do not reinvent.
+Parent: [AGENTS.md](../AGENTS.md). Settled 2026-08. Do not reinvent.
 
 Code: `yt_archive/download.py`.
 

@@ -1,6 +1,6 @@
 # Browsing the archive
 
-Parent: [agents.md](../agents.md).
+Parent: [AGENTS.md](../AGENTS.md).
 
 ## Download queue (home page)
 

@@ -1,6 +1,6 @@
 # Local transcription and captions
 
-Parent: [agents.md](../agents.md).
+Parent: [AGENTS.md](../AGENTS.md).
 
 ## Product behavior
 
