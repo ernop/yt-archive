@@ -110,15 +110,50 @@ archive, only replaceable.
 
 `YT_ARCHIVE_DATA` overrides the data root. Default is `./data`.
 
-## Session commands
+## Finishing a change: commit, push, restart (settled 2026-11-09)
 
-- **pstatus** — report unpublished work; do not commit, push, or deploy unless asked.
-- **ppush** — if uncommitted diffs are one coherent finished change, commit and push. Otherwise report and stop.
-- **pdeploy** — ppush, then restart the written live target: user unit
-  `yt-archive.service` (`127.0.0.1:8765`).
-  `systemctl --user restart yt-archive.service`.
-  If that unit is not installed, **stop and ask**. Do not guess another host
-  or start a second copy on a new port.
+This archive is local: one user, one machine, a service on `127.0.0.1`. A
+finished change is therefore shipped without asking; the user should not have
+to say "commit and push". When the work is done and verified:
+
+1. Run the tests: `.venv/bin/python -m unittest discover -s tests`.
+2. Commit only this task's changes, one commit per coherent change, and push.
+   Uncommitted work from another chat that is finished (tested, documented,
+   in use) gets its own commits too; work that looks half-done is left alone
+   and mentioned in the report.
+3. If the change touches what the service runs (`yt_archive/`), restart
+   `yt-archive.service`. A restart re-queues the running job, which then
+   redoes its current step, and starts a running transcript over; queued jobs
+   survive. So first wait until nothing is running:
+   `sqlite3 -readonly data/ytarchive.sqlite "SELECT count(*) FROM jobs WHERE status='running' UNION ALL SELECT count(*) FROM work_jobs WHERE status='running'"`
+   prints `0` twice. If the running job will take long, report the restart
+   as pending instead of waiting. Then
+   `systemctl --user restart yt-archive.service`, and check that a page showing
+   the change answers (the service takes up to half a minute to come up).
+   Docs-only and test-only changes need no restart. If the unit is not
+   installed, stop and ask; do not guess another host or start a second copy
+   on a new port.
+4. Report in a line or two, for example: "Done: committed, pushed, and
+   restarted. The MP3 download is now named `Artist_-_Title-<id>.mp3`. Try it
+   on any video page, e.g. http://127.0.0.1:8765/v/<id>." Link the page where
+   the change shows.
+
+Before pushing, check that nothing committed names private repos, private
+paths, other machines' layout, or what the user archives (test fixtures use
+made-up names): this repo is public.
+
+Stop and ask instead of shipping when:
+
+- tests fail, or the change could not be verified;
+- the work is exploratory or half-done, or the user said to hold it;
+- it deletes or rewrites archive data, changes the `data/` layout, or changes
+  the settled download or shot recipes;
+- it sends a new kind of request to YouTube or X, or sends the user's login or
+  anything about the user anywhere new.
+
+Session commands still work on request: **pstatus** reports unpublished work
+and changes nothing; **ppush** commits and pushes finished work without a
+restart; **pdeploy** is ppush plus step 3.
 
 ## Rules
 
