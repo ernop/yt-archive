@@ -5,6 +5,10 @@
      sim to the last kept sample is < sim_threshold (default 0.85).
      Last-kept, not previous-0.5s: a slow push-in that changes the look
      still fires. No lookback into earlier history.
+     Detail mode (per video, opt-in) also embeds a 3x3 grid of overlapping
+     crops and fires when any crop's sim to the same crop of the last kept
+     sample is < DETAIL_SIM, so small on-screen changes (notes, captions)
+     count.
   3. The kept sample IS the tile (the frame where the look changed).
   4. Survivors tile into near-square squash grids. Up to 250 shots stay
      together. Above 250, balanced sheets cap at MAX_SHEET_TILES (200)
@@ -41,6 +45,8 @@ GAP = 4
 BATCH = 32
 SAMPLE_FPS = 2
 DEFAULT_SIM = 0.85
+DETAIL_GRID = 3
+DETAIL_SIM = 0.85
 LABEL_H = 36
 ALL_TILE = 360
 MAX_SHEET_TILES = 200
@@ -61,12 +67,16 @@ def make_shots(
     write_all_sheet: bool = False,
     log=print,
     progress=None,
+    detail: bool | None = None,
 ) -> dict:
+    """detail=None keeps whatever the video's previous shots.json chose."""
     import torch
     import open_clip
     from PIL import Image
 
     progress = progress or _no_progress
+    if detail is None:
+        detail = bool(read_shots_json(data_dir, video_id).get("detail"))
     cond = condensed_dir(data_dir, video_id)
     dest_shots = shots_dir(data_dir, video_id)
     dest_shots.mkdir(parents=True, exist_ok=True)
@@ -85,10 +95,13 @@ def make_shots(
         if not thumbs:
             raise RuntimeError(f"no frames sampled from {video}")
         progress(None, "loading the CLIP model")
-        embs = _embed_all(thumbs, torch, open_clip, Image, progress)
-        keep_idx, sim_at = _keep_last(embs, sim_threshold)
+        embs, crop_embs = _embed_all(
+            thumbs, torch, open_clip, Image, progress, grid=DETAIL_GRID if detail else 0
+        )
+        keep_idx, sim_at = _keep_last(embs, sim_threshold, crop_embs, DETAIL_SIM)
         duration = len(thumbs) / SAMPLE_FPS
-        log(f"{len(thumbs)} samples, {len(keep_idx)} shots at sim<{sim_threshold} vs last kept")
+        rule = f"sim<{sim_threshold}" + (f" or any crop<{DETAIL_SIM}" if detail else "")
+        log(f"{len(thumbs)} samples, {len(keep_idx)} shots at {rule} vs last kept")
         progress(None, f"saving {len(keep_idx)} shot images")
 
         for j, i in enumerate(keep_idx):
@@ -134,6 +147,7 @@ def make_shots(
         "compare": "last-kept",
         "sample": "change",
         "sample_fps": SAMPLE_FPS,
+        **({"detail": True, "detail_grid": DETAIL_GRID, "detail_sim": DETAIL_SIM} if detail else {}),
         "shots_detected": len(records),
         "shots_kept": len(kept_imgs),
         "framesheet": sheet_names[0],
@@ -334,15 +348,31 @@ def _clock(seconds: float) -> str:
     return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes}:{secs:02d}"
 
 
-def _keep_last(embs, threshold: float) -> tuple[list[int], list[float | None]]:
+def _keep_last(
+    embs, threshold: float, crop_embs=None, crop_threshold: float = DETAIL_SIM
+) -> tuple[list[int], list[float | None]]:
     keep = [0]
     sims: list[float | None] = [None]
     for i in range(1, len(embs)):
         sim = float((embs[i] * embs[keep[-1]]).sum())
-        if sim < threshold:
+        fired = sim < threshold
+        if not fired and crop_embs is not None:
+            fired = float((crop_embs[i] * crop_embs[keep[-1]]).sum(-1).min()) < crop_threshold
+        if fired:
             keep.append(i)
             sims.append(sim)
     return keep, sims
+
+
+def _grid_crops(im, grid: int):
+    """grid x grid crops, each 2/(grid+1) of the frame, overlapping by half."""
+    w, h = im.size
+    cw, ch = w * 2 // (grid + 1), h * 2 // (grid + 1)
+    return [
+        im.crop((c * cw // 2, r * ch // 2, c * cw // 2 + cw, r * ch // 2 + ch))
+        for r in range(grid)
+        for c in range(grid)
+    ]
 
 
 def _load_clip(open_clip):
@@ -363,20 +393,28 @@ def _load_clip(open_clip):
     return open_clip.create_model_and_transforms("ViT-B-32", pretrained="laion2b_s34b_b79k")
 
 
-def _embed_all(files: list[Path], torch, open_clip, Image, progress=_no_progress):
+def _embed_all(files: list[Path], torch, open_clip, Image, progress=_no_progress, grid: int = 0):
+    """Whole-frame embeddings, plus (frames x grid² x dim) crop embeddings when grid > 0."""
     model, _, preprocess = _load_clip(open_clip)
     model.eval()
-    embs = []
+    per = 1 + grid * grid
+    embs, crop_embs = [], []
     with torch.no_grad():
         for i in range(0, len(files), BATCH):
-            batch = torch.stack(
-                [preprocess(Image.open(f).convert("RGB")) for f in files[i:i + BATCH]]
-            )
-            encoded = model.encode_image(batch)
-            embs.append(encoded / encoded.norm(dim=-1, keepdim=True))
+            images = []
+            for f in files[i:i + BATCH]:
+                im = Image.open(f).convert("RGB")
+                images.append(im)
+                if grid:
+                    images.extend(_grid_crops(im, grid))
+            encoded = model.encode_image(torch.stack([preprocess(im) for im in images]))
+            encoded = (encoded / encoded.norm(dim=-1, keepdim=True)).view(-1, per, encoded.shape[-1])
+            embs.append(encoded[:, 0])
+            if grid:
+                crop_embs.append(encoded[:, 1:])
             done = min(len(files), i + BATCH)
             progress(done / len(files), f"comparing frames {done} / {len(files)}")
-    return torch.cat(embs)
+    return torch.cat(embs), torch.cat(crop_embs) if grid else None
 
 
 def _layout_grid(imgs):

@@ -36,6 +36,27 @@ Clicking a shot seeks to that sample (`t0`).
 Raise `--sim` toward 0.90 to split more (near-repeats stay); lower toward
 0.80 to keep only harder look changes.
 
+## Detail mode for small on-screen changes (settled 2026-11-08)
+
+Some videos change only a small part of the picture: a singer flashes a
+box of sheet music that changes every few seconds while she, the mic and
+the room stay put. Whole-frame CLIP calls that one shot. Raising `--sim`
+does not fix it: on `MmmYlc8CSKk` (28 note-box changes, measured by pixel
+diff inside the box) whole-frame 0.97 caught 18 with 20 junk shots, and
+0.98 caught 25 with 41 junk shots. Small changes sit in the same 0.96–0.98 band
+as head movement.
+
+`./yt shots <id> --detail` also embeds a **3×3 grid of overlapping crops**
+(each half the frame each way, stride a quarter) and starts a shot when the
+whole frame is `< 0.85` to the last kept sample **or any crop** is `< 0.85`
+to the same crop of the last kept sample. On `MmmYlc8CSKk` that caught
+28/28 with 0 extra (a 3×5 grid at 0.85 added one extra; 0.90 added 5–8).
+
+- Opt-in per video: ten CLIP passes per sample, about 10× slower.
+- Remembered: `shots.json` records `"detail": true` (+ `detail_grid`,
+  `detail_sim`). Any later shot run for the video (an update, "reget png",
+  `./yt shots` without the flag) keeps it; `--no-detail` turns it off.
+
 ## Balanced sheet sizes (settled 2026-08-30)
 
 Long videos (a 3-hour game ≈ thousands of kept shots) must not make one

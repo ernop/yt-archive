@@ -5,6 +5,8 @@ import unittest
 from yt_archive.framesheet import (
     MAX_SHEET_TILES,
     SINGLE_SHEET_TILES,
+    _grid_crops,
+    _keep_last,
     _sheet_chunk_sizes,
 )
 
@@ -32,6 +34,24 @@ class FramesheetSizingTests(unittest.TestCase):
             self.assertEqual(sum(chunks), total)
             self.assertLessEqual(max(chunks), MAX_SHEET_TILES)
             self.assertLessEqual(max(chunks) - min(chunks), 1)
+
+
+class DetailModeTests(unittest.TestCase):
+    def test_a_small_region_change_fires_only_in_detail_mode(self):
+        import torch
+
+        whole = torch.tensor([[1.0, 0.0]] * 4)
+        a, b = [1.0, 0.0], [0.0, 1.0]
+        crops = torch.tensor([[a, a], [a, a], [a, b], [a, b]])
+        self.assertEqual(_keep_last(whole, 0.85)[0], [0])
+        self.assertEqual(_keep_last(whole, 0.85, crops, 0.85)[0], [0, 2])
+
+    def test_three_by_three_crops_are_half_the_frame_each_way(self):
+        from PIL import Image
+
+        crops = _grid_crops(Image.new("RGB", (400, 800)), 3)
+        self.assertEqual(len(crops), 9)
+        self.assertEqual({c.size for c in crops}, {(200, 400)})
 
 
 if __name__ == "__main__":

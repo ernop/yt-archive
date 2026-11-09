@@ -27,6 +27,13 @@ def main(argv: list[str] | None = None) -> int:
     shots_p.add_argument("target", help="YouTube or X (tweet) URL, or archive id")
     shots_p.add_argument("--sim", type=float, default=0.85, help="CLIP last-kept change threshold (default 0.85)")
     shots_p.add_argument(
+        "--detail",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="also split on small changes (a 3x3 crop grid; ~10x slower). Remembered per video; "
+        "--no-detail turns it off. Default: keep the video's previous choice",
+    )
+    shots_p.add_argument(
         "--all-sheet",
         action="store_true",
         help="also write shots_all_labeled.png (every detection, numbered + timestamp)",
@@ -57,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "get":
         return _get(data_dir, args.target, args.sim, args.skip_shots)
     if args.cmd == "shots":
-        return _shots(data_dir, args.target, args.sim, args.all_sheet)
+        return _shots(data_dir, args.target, args.sim, args.all_sheet, args.detail)
     if args.cmd == "audio":
         return _audio(data_dir, args.target)
     if args.cmd == "transcribe":
@@ -103,15 +110,18 @@ def _get(data_dir: Path, target: str, sim: float, skip_shots: bool) -> int:
     return 0
 
 
-def _shots(data_dir: Path, target: str, sim: float, all_sheet: bool = False) -> int:
+def _shots(
+    data_dir: Path, target: str, sim: float, all_sheet: bool = False, detail: bool | None = None
+) -> int:
     video_id = parse_video_id(target)
     video = find_video_file(data_dir, video_id)
     if not video:
         raise SystemExit(f"no downloaded video for {video_id} in {data_dir}")
     summary = make_shots(
-        video, data_dir, video_id, sim_threshold=sim, layout="squash", write_all_sheet=all_sheet
+        video, data_dir, video_id, sim_threshold=sim, layout="squash",
+        write_all_sheet=all_sheet, detail=detail,
     )
-    keys = ["video_id", "shots_detected", "shots_kept", "compare", "sample"]
+    keys = ["video_id", "shots_detected", "shots_kept", "compare", "sample", "detail"]
     print(json.dumps({k: summary[k] for k in keys if k in summary}, indent=2))
     return 0
 

@@ -77,6 +77,7 @@ server when the unit is not in play.
 ./yt get <url-or-id>           # download + shots + MP3 audio
 ./yt get <url-or-id> --skip-shots
 ./yt shots <id>
+./yt shots <id> --detail       # also split on small changes (docs/framesheets.md)
 ./yt audio <id>                # create MP3 audio (video already on disk)
 ./yt transcribe <id>           # explicit local Whisper run
 ./yt list
