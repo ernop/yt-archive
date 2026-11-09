@@ -10,6 +10,7 @@ import unittest
 from html import unescape
 from pathlib import Path
 
+from yt_archive.paths import mp3_filename
 from yt_archive.web import STATIC_DIR, detail_html
 
 VIDEO_ID = "abcdefghijk"
@@ -59,6 +60,37 @@ class PlayerPageTests(unittest.TestCase):
         html = self.page()
         self.assertIn('src="/static/media-player/media-player.js?v=', html)
         self.assertIn('href="/static/media-player/media-player.css?v=', html)
+
+    def test_the_mp3_downloads_under_artist_title_and_id(self):
+        html = detail_html(
+            {"video_id": VIDEO_ID, "title": "Song Title, Part 2", "channel": "Example Artist - Topic"},
+            self.data,
+        ).decode()
+        self.assertIn(f'download="Example_Artist_-_Song_Title_Part_2-{VIDEO_ID}.mp3"', html)
+
+
+class Mp3FilenameTests(unittest.TestCase):
+    def test_names(self):
+        cases = [
+            ("Example Artist - Topic", "Song Title, Part 2", "Example_Artist_-_Song_Title_Part_2-abcdefghijk.mp3"),
+            ("Some Band", "Night Drive", "Some_Band_-_Night_Drive-abcdefghijk.mp3"),
+            ("Label Records", "Singer - Song Name", "Singer_-_Song_Name-abcdefghijk.mp3"),
+            ("Uploader9", "Uploader9 plays a song", "Uploader9_plays_a_song-abcdefghijk.mp3"),
+            ("Some One", "", "Some_One-abcdefghijk.mp3"),
+            ("", "Night Drive", "Night_Drive-abcdefghijk.mp3"),
+            ("日本", "日本語", "abcdefghijk.mp3"),
+            ("音樂 Example Music-精選", "Band Name【告別（Farewell）】",
+             "Example_Music_-_Band_Name_Farewell-abcdefghijk.mp3"),
+        ]
+        for channel, title, want in cases:
+            with self.subTest(title=title, channel=channel):
+                self.assertEqual(mp3_filename(VIDEO_ID, title, channel), want)
+
+    def test_tweet_titles_already_name_the_poster(self):
+        self.assertEqual(
+            mp3_filename("x-1111111111111111111", "Someone - 90% of this", "Someone"),
+            "Someone_-_90_of_this-x-1111111111111111111.mp3",
+        )
 
 
 class PlayerCopyTests(unittest.TestCase):

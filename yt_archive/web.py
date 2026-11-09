@@ -30,6 +30,7 @@ from .paths import (
     list_items,
     load_archive_info,
     media_url,
+    mp3_filename,
     parse_video_id,
     read_shots_json,
     shots_dir,
@@ -1089,9 +1090,11 @@ shift-click a shot to open its PNG · ? lists every key</p>
     mp3 = soundtrack_path(data_dir, vid)
     soundtrack_bits = ['<div class="soundtrack">']
     if mp3.is_file():
+        mp3_name = mp3_filename(vid, info.get("title") or "", info.get("channel") or "")
         soundtrack_bits.append(
             f'<h2>MP3 audio</h2>'
-            f'<p class="meta"><a href="{_esc(media_url(data_dir, mp3))}" download>download MP3 audio</a></p>'
+            f'<p class="meta"><a href="{_esc(media_url(data_dir, mp3))}" download="{_esc(mp3_name)}">'
+            'download MP3 audio</a></p>'
             f'<audio controls preload="metadata" src="{_esc(media_url(data_dir, mp3))}" data-media-player '
             f'data-title="{_esc(f"MP3 audio: {title}")}"></audio>'
         )

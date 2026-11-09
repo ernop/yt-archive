@@ -255,6 +255,18 @@ def grab_filename(t: float, title: str = "") -> str:
     return f"grab-{label}-{stamp}.png"
 
 
+def mp3_filename(video_id: str, title: str = "", channel: str = "") -> str:
+    """What "download MP3 audio" saves as: <artist>_-_<title>-<id>.mp3. The channel is the
+    artist unless the title already names one ("Artist - Song", or a tweet's "Name - text")."""
+    title = (title or "").strip()
+    artist = re.sub(r"\s+-\s+Topic$", "", (channel or "").strip())
+    if " - " in title or artist.casefold() in title.casefold():
+        artist = ""
+    parts = [restrict_filename(text, fallback="", max_len=120).strip("._-") for text in (artist, title)]
+    label = "_-_".join(p for p in parts if p)[:120].rstrip("._-")
+    return f"{label}-{video_id}.mp3" if label else f"{video_id}.mp3"
+
+
 def unique_grab_path(folder: Path, t: float, title: str = "") -> Path:
     dest = folder / grab_filename(t, title)
     if not dest.exists():

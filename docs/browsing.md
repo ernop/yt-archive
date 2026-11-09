@@ -359,6 +359,15 @@ shows the files as they are. A video without an audio track says so instead
 of offering **Create MP3 audio**. **Redo** at the bottom rebuilds the shots
 from the local file or downloads the video again.
 
+**download MP3 audio** saves the file as `<artist>_-_<title>-<id>.mp3`
+(November 9, 2026), not as the `soundtrack.mp3` it is on disk, so a pile of
+downloads stays readable in a music player or a Downloads folder. The artist
+is the channel, without the ` - Topic` YouTube adds to its auto-made artist
+channels; it is left out when the title already names one (`Artist - Song`,
+a tweet's `Name - text`) or contains the channel name. The name keeps to
+`[A-Za-z0-9._-]` like every filename here, so a title with no Latin letters
+leaves just `<id>.mp3`.
+
 ## Video and audio player
 
 The video and the MP3 audio play in the shared media player, of which this
