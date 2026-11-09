@@ -111,9 +111,10 @@ locally.
 
 ## Browse YouTube
 
-The `/browse` picker goes through a creator's or a playlist's videos so they
-can be queued all at once, by section, by filter, or one by one, instead of
-pasting links one at a time. Code: `yt_archive/creators.py`,
+The `/browse` picker goes through a creator's or a playlist's videos, or an X
+profile's ([below](#x-profiles-settled-2026-11-06)), so they can be queued all
+at once, by section, by filter, or one by one, instead of pasting links one at
+a time. Code: `yt_archive/creators.py`, `yt_archive/x_profiles.py`,
 `static/creators.js`.
 
 ### What to paste
@@ -128,6 +129,9 @@ pasting links one at a time. Code: `yt_archive/creators.py`,
 - A link ending in a channel tab opens that part: `/videos` → Videos,
   `/shorts` → Shorts, `/streams` → Live, `/playlists` → the creator's
   playlists.
+- An X profile: `x.com/name` or `twitter.com/name` (also `www.`, `mobile.`,
+  and the `/media`, `/with_replies`, `/highlights` tabs). A bare `@handle`
+  stays a YouTube handle; a tweet link is a single video for **Get**.
 
 On the home page, **Get** with one creator or playlist link opens the picker;
 with several links, each creator or playlist becomes a Browse link and videos
@@ -177,46 +181,88 @@ have no length or date in a listing. Live, upcoming, still-processing, and
 known private or members-only items are listed but cannot be chosen. YouTube
 can still refuse an item at download time; the queue shows that error.
 
+### X profiles (settled 2026-11-06)
+
+An X profile's list holds the videos of its **Media tab, newest first**: the
+first video of each of the profile's own tweets and replies, with its poster.
+Photos, GIFs, retweets, and quoted tweets are left out. Each row's title is
+the tweet's text; length, views, and the posting time (from the tweet ID, so
+exact) fill the other columns, and the row links to the tweet. X lists have no
+tabs; kept lists, Refresh, the filters, one by one, and Get work as for
+YouTube, and the videos download as tweets do
+([download.md](download.md#x-tweets-settled-2026-10-25)).
+
+- **Read with the user's X login, approved by the user (2026-11-06).** X shows
+  signed-out readers a profile sorted by likes and no Media tab, and its guest
+  API returns empty timelines for many accounts, so only a signed-in reader
+  gets a complete list in order. The listing therefore always uses the X
+  login from Firefox, and the loading line and header say "with your X
+  login". The approved cost: X sees the account open each listed profile's
+  Media tab, as when the user opens it on x.com, and there is a small risk
+  that X temporarily locks the account for automated reading. The budget
+  below keeps the reading slower than the user's own scrolling.
+- **How.** gallery-dl, installed as its own `uv` tool
+  ([setup.md](setup.md)), reads the tab and downloads nothing:
+  `--cookies-from-browser firefox/.x.com` loads only the x.com cookies,
+  `--config-ignore` skips any gallery-dl configuration, and `--print` writes
+  one JSON line per file found. yt-dlp cannot list X profiles.
+- **Requests.** About three to start (X's client keys, which gallery-dl
+  caches for three hours, and the profile), then one per page of up to 50
+  tweets, two seconds apart (`--sleep-request 2`). Each is paid from the `x-listing`
+  budget at gallery-dl's `Sleeping … (request)` log line, before it goes out;
+  a request sent without that line (a retry) is paid as soon as its answer is
+  logged. X's rate limit stops the listing instead of being waited out, and a
+  stopped list keeps what had arrived, marked Incomplete.
+- **Errors** say what happened in plain words: X locked the account, X's rate
+  limit, no such account, protected tweets, the account blocked the user, or
+  the Firefox login not working.
+- **Hidden tweets.** Tweets X marks sensitive are noted (`x_hidden_tweets`),
+  and their downloads go straight to the X login instead of first trying
+  without an account, which X would refuse. The confirmation for more than
+  50 counts them at the signed-in download budget.
+- Posters load lazily from X's image server (`pbs.twimg.com`, small size in
+  rows, medium one by one) with no referrer.
+
 ### Kept lists
 
 A finished list is kept in SQLite (`youtube_listings`) until **Refresh list**.
 Reloads, other tabs, other links to the same creator (a handle or its channel
-ID), and service restarts reuse it and ask YouTube nothing; `listed 3 h ago`
-shows its age. A creator's list only changes when they upload, so asking
+ID), and service restarts reuse it and ask YouTube or X nothing; `listed 3 h
+ago` shows its age. A creator's list only changes when they upload, so asking
 again is a deliberate act. The 60 most recently used lists are kept.
 
 - One fetch per list at a time; a second tab waits for the same fetch. At most
   two lists load at once.
 - A failed list is shown again, not fetched again, for 10 minutes; **Try
   again** fetches it. A failed refresh keeps the old list and says why.
-- A list cut short (budget, 20-minute limit, YouTube errors) is kept with an
-  "Incomplete" warning, and "all" means all that was listed.
+- A list cut short (budget, 20-minute limit, YouTube or X errors) is kept
+  with an "Incomplete" warning, and "all" means all that was listed.
 
 ### The picker
 
-- **Header**: title, kind (creator, playlist, playlists), the owner for a
-  playlist (links to the owner's picker), YouTube link, list age, **Refresh
-  list**.
+- **Header**: title, kind (creator, playlist, playlists, X profile), the
+  owner for a playlist (links to the owner's picker), YouTube or X link, list
+  age, **Refresh list**.
 - **Tabs** for a creator: Videos, Shorts, Live, All, each with its count, and
   Playlists. Playlists lists the creator's playlists on first click (its own
   kept list, with its own Refresh); each opens in the picker, and Back returns
   to the creator from the kept list.
 - **Filters**: title or video ID; Length (under 1 min, 1–5, 5–20, 20–60 min,
   over 1 hour); Uploaded (past week, month, 3 months, year, over a year ago);
-  Sort (YouTube's order, newest, oldest, longest, shortest, most viewed,
-  title); hide saved and queued. Items without a length or date drop out
+  Sort (as listed, newest, oldest, longest, shortest, most viewed, title);
+  hide saved and queued. Items without a length or date drop out
   while that filter is on. The tab and filters are kept in the URL.
 - **Rows**, 100 per page, one line each: checkbox, position in the current
   view, thumbnail, title, channel (playlists only, where videos come from
-  many channels), length, views, uploaded, status, YouTube link. Status is
+  many channels), length, views, uploaded, status, YouTube or X link. Status is
   empty for items that can be chosen; otherwise **Saved** (links to the
   archive page), **Queued**, or why it cannot be chosen (Live now, Not ready
   yet, Restricted, Unavailable).
 - **Selecting**: click a row or its checkbox; shift-click selects the range
   from the last click; **Select all shown** (every page of the current view);
   **Select first N** (in the current order); **Clear**. Keys: `j`/`k` or
-  arrows move, `x` or space selects, `shift`+`x` selects a range, `o` opens on
-  YouTube. The selection holds across tabs, filters, and pages and survives
+  arrows move, `x` or space selects, `shift`+`x` selects a range, `o` opens it
+  on YouTube or X. The selection holds across tabs, filters, and pages and survives
   reloading the tab; the bar says how many selected items the current view
   does not show.
 - **Go one by one** shows each choosable video of the current view, in its
@@ -246,6 +292,8 @@ CLI (`yt_archive/budget.py`):
 | listing | 500 requests | every request yt-dlp makes while listing |
 | download | 150 videos | every download that runs yt-dlp |
 | x-download | 60 tweets | every tweet download, X's own budget ([download.md](download.md#x-tweets-settled-2026-10-25)) |
+| x-account | 30 tweets | every tweet download with the user's X login, for a tweet X hides from readers without an account ([download.md](download.md#x-tweets-settled-2026-10-25)) |
+| x-listing | 60 requests | every request gallery-dl makes while listing an X profile with the user's X login ([X profiles](#x-profiles-settled-2026-11-06)) |
 
 - **Listing** runs yt-dlp with `--sleep-requests 0.75`; it prints
   `[youtube:tab] Sleeping …` before every request after the first, and each
@@ -258,8 +306,11 @@ CLI (`yt_archive/budget.py`):
   this hour's YouTube budget of 150 downloads is used up · next download at
   14:05`. Videos already on disk cost nothing. This also stops a failing queue
   (expired cookies, say) from hammering YouTube.
-- Tabs, reloads, polling, and selections never reach YouTube; only listing a
-  link that is not kept, Refresh, Try again, and downloads do.
+- **X listing** pays the same way, per request and before it is sent
+  ([X profiles](#x-profiles-settled-2026-11-06)). At up to 50 tweets per
+  request, one hour lists up to about 2,800 of a profile's newest media tweets.
+- Tabs, reloads, polling, and selections never reach YouTube or X; only
+  listing a link that is not kept, Refresh, Try again, and downloads do.
 
 ### API
 
@@ -269,7 +320,8 @@ CLI (`yt_archive/budget.py`):
 curl -s -X POST localhost:8765/api/creators -H 'Content-Type: application/json' \
   -d '{"source": "https://www.youtube.com/@name"}'
 # Status and items: video_id, title, duration, views, timestamp, section,
-# position, channel, unavailable, archived, queued.
+# position, channel, unavailable, archived, queued; X profile items
+# (source "https://x.com/name") add thumb and hidden.
 curl -s localhost:8765/api/creators/<lookup_id>
 # Queue some, or {"all": true} for every choosable item.
 curl -s -X POST localhost:8765/api/creators/<lookup_id>/get -H 'Content-Type: application/json' \
@@ -291,7 +343,7 @@ text was difficult to read.
 ## Rows are single lines
 
 Every list or table row on the site is one line: download queue, archive
-list, YouTube picker, transcript segments (time, speaker, text side by side).
+list, the YouTube and X picker, transcript segments (time, speaker, text side by side).
 Extra detail goes inline, behind a click (a failed job's full error), or on
 the video page; it is never stacked as a second line inside a row.
 

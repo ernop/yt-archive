@@ -13,11 +13,18 @@ request budget. See
 [browsing YouTube](docs/browsing.md#browse-youtube).
 
 Videos in tweets work too: paste an `x.com` or `twitter.com` link to a tweet
-with a video and it is archived like a YouTube video, read without any X
-account. See [X tweets](docs/download.md#x-tweets-settled-2026-10-25).
+with a video and it is archived like a YouTube video, read without your X
+account. A tweet X shows only to signed-in readers is asked again with your X
+login from Firefox. See [X tweets](docs/download.md#x-tweets-settled-2026-10-25).
+Paste an X profile link (`x.com/name`) to go through that profile's videos,
+newest first, in the same picker; X shows a profile's media only to signed-in
+readers, so it is listed with your X login from Firefox, through
+[gallery-dl](https://github.com/mikf/gallery-dl), on its own hourly budget. See
+[X profiles](docs/browsing.md#x-profiles-settled-2026-11-06).
 
 Drag the home page's **+ ytarchive** button to your bookmarks bar, then click
-it on any YouTube video or tweet to queue it without leaving the page. See
+it on any YouTube video or tweet to queue it without leaving the page, or on a
+creator, playlist, or X profile to open the picker. See
 [the bookmarklet](docs/bookmarklet.md).
 
 Pairs with [matthoom](https://github.com/ernop/matthoom). Matthoom holds YouTube **watch history** (Takeout) and a gallery that can mark videos to archive. This service does the other half: **the file on disk** and **the shot images**.

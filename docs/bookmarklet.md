@@ -12,9 +12,9 @@ home page — without leaving the page:
 - A small pop-up window opens on this archive (`/add`), says **Queued** with
   the video's title and id, and closes itself after 1.5 s. Playback on
   YouTube is not interrupted.
-- On a creator homepage, `@handle`, or playlist page, the pop-up instead
-  becomes the picker ([browsing.md](browsing.md#browse-youtube)) and stays
-  open. On a video playing inside a playlist it queues just that video.
+- On a creator homepage, `@handle`, or playlist page, or an X profile, the
+  pop-up instead becomes the picker ([browsing.md](browsing.md#browse-youtube))
+  and stays open. On a video playing inside a playlist it queues just that video.
 - Anything the archive cannot use (YouTube's home feed, any other site)
   leaves the pop-up open with the reason. Nothing is queued. A tweet without a
   video of its own is queued and then fails with the reason

@@ -14,10 +14,21 @@ WINDOW = 3600
 # ~300 videos an hour (accounts get about four times that). Each budget is half a guest limit.
 # X publishes no limit for reading without an account. A tweet costs yt-dlp two X API
 # requests (guest token, then the tweet), so 60 an hour stays far below what one person
-# browsing x.com sends.
-LIMITS = {"listing": 500, "download": 150, "x-download": 60}
-NOUNS = {"listing": "listing requests", "download": "video downloads", "x-download": "video downloads"}
-SITES = {"listing": "YouTube", "download": "YouTube", "x-download": "X"}
+# browsing x.com sends. A tweet X hides from readers without an account is asked again
+# with the user's X login: one request made as the user, at most 30 an hour, far below
+# what the account sends while the user scrolls X. Listing an X profile reads its Media tab
+# with that login too: about three requests to start, then one per page of up to 50 tweets,
+# two seconds apart. 60 an hour is less than the user's own scrolling through a profile on x.com.
+LIMITS = {"listing": 500, "download": 150, "x-download": 60, "x-account": 30, "x-listing": 60}
+NOUNS = {
+    "listing": "listing requests",
+    "download": "video downloads",
+    "x-download": "video downloads",
+    "x-account": "video downloads",
+    "x-listing": "listing requests",
+}
+SITES = {"listing": "YouTube", "download": "YouTube", "x-download": "X", "x-account": "X account",
+         "x-listing": "X"}
 
 
 class BudgetExceeded(RuntimeError):

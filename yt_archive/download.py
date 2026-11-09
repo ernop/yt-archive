@@ -10,7 +10,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import budget
+from . import budget, db
 from .paths import (
     VIDEO_EXTS,
     archive_json_path,
@@ -27,14 +27,18 @@ PROGRESS_TEMPLATE = (
     " %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s"
     " %(progress.eta)s %(info.vcodec)s"
 )
-# X is read without the user's account: never give it cookies. Only X's extractors run,
-# so a tweet that just links elsewhere fails instead of fetching that site outside its
-# budget. One video per folder: a tweet with several keeps its first.
+# X is read without the user's account. Only a tweet X hides from readers without one is
+# asked again with the user's X login from Firefox, on its own budget (approved 2026-11-06).
+# Only X's extractors run, so a tweet that just links elsewhere fails instead of fetching
+# that site outside its budget. One video per folder: a tweet with several keeps its first.
 SITE_ARGS = {
     "YouTube": ["--cookies-from-browser", "firefox"],
     "X": ["--use-extractors", "twitter.*", "--playlist-items", "1", "--no-write-playlist-metafiles"],
 }
 _LINKS_ELSEWHERE_RE = re.compile(r"No suitable extractor.* found for URL (\S+)")
+# yt-dlp's words when X will not show a tweet to a reader without an account: a login hint
+# (adult content, protected accounts), or "no video" for the bare tombstone X can send instead.
+_HIDDEN_FROM_GUESTS_RE = re.compile(r"account credentials|No video could be found in this tweet")
 
 
 def yt_dlp_bin() -> str:
@@ -51,7 +55,10 @@ def download(
 
     YouTube needs Firefox cookies: anonymous YouTube downloads 403 after ~10 MB.
     Deno (yt-dlp default) solves JS challenges. A tweet (x-<tweet id>) is read
-    without any account. --restrict-filenames keeps names in [A-Za-z0-9._-].
+    without an account; one X hides from such readers is asked again with the
+    user's X login from Firefox, and from then on asked with it straight away, as
+    are the tweets an X profile listing found marked sensitive. --restrict-filenames
+    keeps names ASCII, but % + = @ ~ stay in them.
     """
     dest = video_dir(data_dir, video_id)
     dest.mkdir(parents=True, exist_ok=True)
@@ -60,12 +67,44 @@ def download(
         log(f"already have {existing.name}")
         return existing
     site = site_name(video_id)
-    kind = "x-download" if site == "X" else "download"
+    signed_in = site == "X" and db.x_hidden(data_dir, video_id)
+    if signed_in:
+        log("X hides this tweet from readers without an account; asking with your X login from Firefox")
+    code, lines = _attempt(video_id, dest, data_dir, site, signed_in, force, log, progress)
+    if code != 0 and site == "X" and not signed_in and _HIDDEN_FROM_GUESTS_RE.search("\n".join(lines)):
+        db.mark_x_hidden(data_dir, [video_id])
+        log("X hides this tweet from readers without an account; asking again with your X login from Firefox")
+        code, lines = _attempt(video_id, dest, data_dir, site, True, False, log, progress)
+    if code != 0:
+        _cleanup_empty(dest)
+        raise RuntimeError(_yt_dlp_failure(lines, site))
+    log("download finished")
+    video = find_video_file(data_dir, video_id)
+    if not video:
+        raise FileNotFoundError(f"yt-dlp finished but no video in {dest}")
+    write_archive_json(data_dir, video_id, video)
+    _log_resolution(video, log)
+    return video
+
+
+def _attempt(video_id, dest, data_dir, site, account, force, log, progress) -> tuple[int, list[str]]:
+    """One yt-dlp run, paid for from its hourly budget before it starts."""
+    kind = "x-account" if account else "x-download" if site == "X" else "download"
+    budget.wait_and_take(data_dir, kind, _waiting(kind, log, progress))
+    if force:
+        _remove_videos(dest, log)
+    how = "your X login from Firefox" if account else "no account" if site == "X" else "firefox cookies"
+    log(f"yt-dlp starting (best video+audio, {how})")
+    return _run_yt_dlp(_yt_dlp_cmd(video_id, dest, site, account=account), log, progress)
+
+
+def _waiting(kind: str, log, progress):
+    """wait_and_take's callback: the wait goes in the queue row, and in the log once."""
     told = []
 
     def waiting(at: float) -> None:
         message = (
-            f"waiting: this hour's {site} budget of {budget.LIMITS[kind]} downloads "
+            f"waiting: this hour's {budget.SITES[kind]} budget of {budget.LIMITS[kind]} downloads "
             f"is used up · next download at {budget.clock(at)}"
         )
         if progress:
@@ -74,14 +113,15 @@ def download(
             told.append(at)
             log(message)
 
-    budget.wait_and_take(data_dir, kind, waiting)
-    if force:
-        _remove_videos(dest, log)
+    return waiting
 
-    cmd = [
+
+def _yt_dlp_cmd(video_id: str, dest: Path, site: str, account: bool = False) -> list[str]:
+    return [
         yt_dlp_bin(),
         "--ignore-config",
         *SITE_ARGS[site],
+        *(["--cookies-from-browser", "firefox"] if account else []),
         # Highest resolution available, any codec. Do not prefer mp4 — that
         # can pick 1080p AVC over 4K VP9/AV1. Merge without re-encode.
         "-f", "bv*+ba/b",
@@ -97,7 +137,10 @@ def download(
         "--progress-template", PROGRESS_TEMPLATE,
         watch_url(video_id),
     ]
-    log(f"yt-dlp starting (best video+audio, {'no account' if site == 'X' else 'firefox cookies'})")
+
+
+def _run_yt_dlp(cmd: list[str], log, progress) -> tuple[int, list[str]]:
+    """Run yt-dlp: progress lines go to progress(), the rest to log(). (exit code, logged lines)"""
     proc = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
     )
@@ -114,16 +157,7 @@ def download(
             continue
         lines.append(line)
         log(line)
-    if proc.wait() != 0:
-        _cleanup_empty(dest)
-        raise RuntimeError(_yt_dlp_failure(lines, site))
-    log("download finished")
-    video = find_video_file(data_dir, video_id)
-    if not video:
-        raise FileNotFoundError(f"yt-dlp finished but no video in {dest}")
-    write_archive_json(data_dir, video_id, video)
-    _log_resolution(video, log)
-    return video
+    return proc.wait(), lines
 
 
 def parse_progress(line: str) -> tuple[float | None, str] | None:
@@ -191,8 +225,17 @@ def _yt_dlp_failure(lines: list[str], site: str = "YouTube") -> str:
             "YouTube marked this title DRM-protected (Movies / rental / purchase). "
             "No downloadable video stream — only storyboard images. Cannot archive it."
         )
+    # download() has already asked X again with the user's X login when these appear.
     if site == "X" and "account credentials" in blob:
-        return "X shows this tweet only to signed-in accounts, and the archive reads X without your account."
+        return (
+            "X refused this tweet even with your X login from Firefox. Check that Firefox is "
+            "signed in to x.com and that your account can see the tweet there."
+        )
+    if site == "X" and "No video could be found in this tweet" in blob:
+        return (
+            "X sent no video for this tweet, even with your X login from Firefox: either it has "
+            "none, or Firefox is not signed in to x.com."
+        )
     elsewhere = _LINKS_ELSEWHERE_RE.search(blob) if site == "X" else None
     if elsewhere:
         return f"This tweet has no video of its own; it links to {elsewhere.group(1)}"

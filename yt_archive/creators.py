@@ -1,5 +1,6 @@
-"""Read-only YouTube listings, separate from the download queue: a creator's uploads, a
-creator's playlists, or one playlist (docs/browsing.md, "Browse YouTube")."""
+"""Read-only listings, separate from the download queue: a YouTube creator's uploads, a
+creator's playlists, one playlist (docs/browsing.md, "Browse YouTube"), or an X profile's
+videos (x_profiles.py)."""
 from __future__ import annotations
 
 import hashlib
@@ -12,7 +13,7 @@ import time
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, quote, unquote, urlencode, urlsplit
 
-from . import budget, db
+from . import budget, db, x_profiles
 from .download import yt_dlp_bin
 from .paths import VIDEO_ID_RE, find_video_file, parse_video_id
 
@@ -45,11 +46,12 @@ _SLEEP_RE = re.compile(r"\[youtube[^\]]*\] Sleeping [\d.]+ seconds")
 def listing_source(source: str) -> dict:
     """What to list for a pasted link: {"kind", "url", "section"}.
 
-    kind is "channel" (a creator's uploads), "playlists" (a creator's playlists) or
-    "playlist"; section is the channel tab the link pointed at ("videos", "shorts", "live").
+    kind is "channel" (a creator's uploads), "playlists" (a creator's playlists),
+    "playlist", or "x-profile" (an X profile's videos); section is the channel tab the link
+    pointed at ("videos", "shorts", "live"). A bare @handle is a YouTube handle.
     """
     if not isinstance(source, str) or not source.strip() or len(source) > 2048:
-        raise ValueError("Paste a YouTube creator homepage, @handle, or playlist link.")
+        raise ValueError("Paste a YouTube creator homepage, @handle, or playlist link, or an X profile link.")
     source = source.strip()
     if CHANNEL_ID_RE.fullmatch(source):
         return _target("channel", "channel/" + source)
@@ -60,8 +62,10 @@ def listing_source(source: str) -> dict:
         return _target("channel", "@" + quote(name))
     parsed = urlsplit(source if "://" in source else "https://" + source)
     host = parsed.netloc.lower()
+    if parsed.scheme in {"http", "https"} and host in x_profiles.HOSTS:
+        return x_profiles.profile_source(parsed.path)
     if parsed.scheme not in {"http", "https"} or host not in _HOSTS:
-        raise ValueError("Use a YouTube creator homepage, @handle, or playlist link.")
+        raise ValueError("Use a YouTube creator homepage, @handle, or playlist link, or an X profile link.")
     parts = unquote(parsed.path).strip("/").split("/")
     playlist_id = (parse_qs(parsed.query).get("list") or [""])[0]
     if host in {"youtu.be", "music.youtube.com"} or parts[0] in {"playlist", "watch"} or parts[:2] == ["embed", "videoseries"]:
@@ -132,8 +136,10 @@ def playlist_browse_url(video_link: str) -> str:
 
 
 def needs_account(url: str) -> bool:
-    """A list YouTube shows only to the signed-in user, so asking without the account is wasted."""
-    return (parse_qs(urlsplit(url).query).get("list") or [""])[0] in _ACCOUNT_LISTS
+    """A list shown only to a signed-in reader, so asking without the account is wasted: a
+    YouTube list of the user's own, or any X profile's Media tab."""
+    parsed = urlsplit(url)
+    return parsed.netloc == "x.com" or (parse_qs(parsed.query).get("list") or [""])[0] in _ACCOUNT_LISTS
 
 
 def listing_id(url: str) -> str:
@@ -321,10 +327,11 @@ def fetch_listing(url: str, kind: str, data_dir, progress=None, account: bool = 
 
 class CreatorBrowser:
     """Listings are kept in SQLite until refreshed, so reloads, other tabs and restarts never
-    ask YouTube again. One fetch per link at a time, LOADING_AT_ONCE at most, each request
-    paid for from the hourly listing budget. Only lists that exist for the user's account
-    alone are read with it: account lists from the start, a playlist after YouTube called it
-    missing without the account, and a kept list read with the account on every refresh."""
+    ask YouTube or X again. One fetch per link at a time, LOADING_AT_ONCE at most, each
+    request paid for from the site's hourly listing budget. Only lists that exist for the
+    user's account alone are read with it: account lists from the start, a playlist after
+    YouTube called it missing without the account, a kept list read with the account on
+    every refresh, and X profiles always (with the user's X login)."""
 
     def __init__(self, data_dir, queue):
         self.data_dir = data_dir
@@ -349,9 +356,10 @@ class CreatorBrowser:
             if fetch and not refresh and time.monotonic() - fetch["at"] < FAILURE_KEPT:
                 return self._fetch_summary(fetch)
             if sum(item["status"] == "loading" for item in self._fetches.values()) >= LOADING_AT_ONCE:
-                raise ValueError("Two YouTube lists are already loading. Wait for one to finish.")
-            if not budget.take(self.data_dir, "listing"):
-                exceeded = budget.exceeded(self.data_dir, "listing")
+                raise ValueError("Two lists are already loading. Wait for one to finish.")
+            paid_from = "x-listing" if target["kind"] == x_profiles.KIND else "listing"
+            if not budget.take(self.data_dir, paid_from):
+                exceeded = budget.exceeded(self.data_dir, paid_from)
                 if kept:
                     return {**self._summary(kept), "error": str(exceeded)}
                 raise exceeded
@@ -371,6 +379,8 @@ class CreatorBrowser:
         return db.find_channel_listing(self.data_dir, target["kind"], match.group(1)) if match else None
 
     def _fetch(self, fetch: dict, progress) -> dict:
+        if fetch["kind"] == x_profiles.KIND:
+            return x_profiles.fetch_profile(fetch["url"], self.data_dir, progress)
         try:
             return fetch_listing(fetch["url"], fetch["kind"], self.data_dir, progress, account=fetch["account"])
         except AccountNeeded as hidden:

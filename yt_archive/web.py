@@ -478,7 +478,7 @@ def home_html(
     bookmarklet_html = (
         f'<p class="bookmarklet">Or drag <a id="bookmarklet" href="#" data-key="{_esc(bookmarklet)}">'
         "+ ytarchive</a> to your bookmarks bar and click it on any YouTube video or creator page, "
-        "or a tweet with a video.</p>"
+        "a tweet with a video, or an X profile.</p>"
         if bookmarklet
         else ""
     )
@@ -497,11 +497,11 @@ def home_html(
     body = f"""
 <header>
   <h1><a href="/">ytarchive</a></h1>
-  <div class="sub">Paste video links (YouTube, or tweets on X) to get them, or a YouTube creator’s homepage, @handle, or playlist link to choose from all of its videos.</div>
+  <div class="sub">Paste video links (YouTube, or tweets on X) to get them, or a YouTube creator’s homepage, @handle, or playlist link, or an X profile link, to choose from all of its videos.</div>
   <form class="get" id="get-form">
     <input name="url" id="url" type="text" autofocus
-      aria-label="Video links, YouTube creator, or playlist"
-      placeholder="video links, creator homepage, @handle, or playlist link"
+      aria-label="Video links, YouTube creator, playlist, or X profile"
+      placeholder="video links, creator homepage, @handle, playlist, or X profile link"
       autocomplete="off">
     <button type="submit" id="go">Get</button>
     <button type="button" id="browse-creator">Browse</button>
@@ -565,7 +565,7 @@ if (bookmarklet) {
   bookmarklet.onclick = (e) => {
     e.preventDefault();
     status.replaceChildren();
-    note('Drag that button to your bookmarks bar, then click it on a YouTube page or a tweet.');
+    note('Drag that button to your bookmarks bar, then click it on a YouTube page, a tweet, or an X profile.');
   };
 }
 async function post(path, body) {
@@ -823,20 +823,23 @@ def browse_creator_html(source: str = "") -> bytes:
     body = f"""
 <header>
   <p><a href="/">← archive and download queue</a></p>
-  <h1>Browse YouTube</h1>
+  <h1>Browse YouTube or X</h1>
   <p class="sub">Paste a creator’s homepage or @handle to go through their videos, Shorts, live streams,
   and playlists, or paste a playlist link. Only the list is read; nothing downloads until you choose.
   Your <a href="{_esc(browse_url('https://www.youtube.com/playlist?list=WL'))}">Watch later</a>,
   <a href="{_esc(browse_url('https://www.youtube.com/playlist?list=LL'))}">Liked videos</a>,
-  and private playlists are read with your YouTube account.</p>
+  and private playlists are read with your YouTube account. An X profile link (x.com/name) lists that
+  profile’s videos, newest first, read with your X login from Firefox.</p>
   <form class="get" id="creator-form">
-    <input id="creator-source" aria-label="YouTube creator or playlist" value="{_esc(source)}"
-      placeholder="creator homepage, @handle, channel ID, or playlist link" required autocomplete="off">
+    <input id="creator-source" aria-label="YouTube creator, playlist, or X profile" value="{_esc(source)}"
+      placeholder="creator homepage, @handle, channel ID, playlist, or X profile link" required autocomplete="off">
     <button id="creator-load" type="submit">Browse</button>
   </form>
   <div id="creator-status" role="status" aria-live="polite"></div>
 </header>
-<main id="creator-picker" data-downloads-per-hour="{budget.LIMITS['download']}" hidden>
+<main id="creator-picker" data-downloads-per-hour="{budget.LIMITS['download']}"
+  data-x-downloads-per-hour="{budget.LIMITS['x-download']}"
+  data-x-login-downloads-per-hour="{budget.LIMITS['x-account']}" hidden>
   <div class="pick-head">
     <h2 id="creator-title"></h2>
     <span id="creator-kind" class="pick-kind"></span>
@@ -868,7 +871,7 @@ def browse_creator_html(source: str = "") -> bytes:
         <option value="366-">over a year ago</option>
       </select></label>
       <label class="pick-field"><span>Sort</span><select id="creator-sort">
-        <option value="">YouTube’s order</option>
+        <option value="">as listed</option>
         <option value="new">newest first</option>
         <option value="old">oldest first</option>
         <option value="long">longest first</option>
@@ -897,7 +900,7 @@ def browse_creator_html(source: str = "") -> bytes:
       <button id="creator-next" type="button">next →</button>
     </nav>
     <p class="pick-keys"><kbd>j</kbd> <kbd>k</kbd> or arrows move · <kbd>x</kbd> or <kbd>space</kbd> selects ·
-      shift-click or <kbd>shift</kbd>+<kbd>x</kbd> selects a range · <kbd>o</kbd> opens on YouTube</p>
+      shift-click or <kbd>shift</kbd>+<kbd>x</kbd> selects a range · <kbd>o</kbd> opens it on YouTube or X</p>
   </section>
   <section id="creator-one" class="pick-one" hidden>
     <img id="creator-one-thumb" alt="" referrerpolicy="no-referrer">
@@ -922,7 +925,7 @@ def browse_creator_html(source: str = "") -> bytes:
 </main>
 """
     return _page(
-        "Browse YouTube · ytarchive", body,
+        "Browse YouTube or X · ytarchive", body,
         extra_head=f'<link rel="stylesheet" href="{_static_url("creators.css")}">',
         extra_tail=f'<script src="{_static_url("creators.js")}"></script>',
     )

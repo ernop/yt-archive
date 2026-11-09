@@ -21,6 +21,13 @@ from yt_archive.paths import (
 from yt_archive.web import load_archive_info, make_handler
 
 TWEET = "x-1234567890123456789"
+LOGIN_REQUIRED = (
+    "ERROR: [twitter] 1234567890123456789: NSFW tweet requires authentication. Use --cookies, "
+    "--cookies-from-browser, --username and --password, --netrc-cmd, or --netrc (twitter) "
+    "to provide account credentials."
+)
+NO_VIDEO = "ERROR: [twitter] 1234567890123456789: No video could be found in this tweet"
+STOPPED = "ERROR: [twitter] stopped by the test"
 
 
 class TweetIdTests(unittest.TestCase):
@@ -72,41 +79,72 @@ class TweetDownloadTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.data = Path(tmp.name)
 
-    def run_yt_dlp(self, video_id):
-        """The command download() hands yt-dlp, and the budget it paid from."""
-        proc = Mock(stdout=iter(["ERROR: [twitter] stopped by the test"]))
-        proc.wait.return_value = 1
+    def run_yt_dlp(self, video_id, *outputs):
+        """Each command download() hands yt-dlp, the budgets it paid from, and its error.
+
+        Every yt-dlp run prints the next of outputs and fails.
+        """
+        procs = []
+        for line in outputs or (STOPPED,):
+            proc = Mock(stdout=iter([line]))
+            proc.wait.return_value = 1
+            procs.append(proc)
         with (
             patch("yt_archive.download.budget.wait_and_take") as wait,
             patch("yt_archive.download.yt_dlp_bin", return_value="yt-dlp"),
-            patch("yt_archive.download.subprocess.Popen", return_value=proc) as popen,
-            self.assertRaises(RuntimeError),
+            patch("yt_archive.download.subprocess.Popen", side_effect=procs) as popen,
+            self.assertRaises(RuntimeError) as failed,
         ):
             download(video_id, self.data, log=lambda *_: None)
-        return popen.call_args.args[0], wait.call_args.args[1]
+        return (
+            [call.args[0] for call in popen.call_args_list],
+            [call.args[1] for call in wait.call_args_list],
+            str(failed.exception),
+        )
 
     def test_tweets_are_read_without_an_account_and_only_by_x_extractors(self):
-        cmd, kind = self.run_yt_dlp(TWEET)
-        self.assertEqual(kind, "x-download")
+        (cmd,), kinds, _ = self.run_yt_dlp(TWEET)
+        self.assertEqual(kinds, ["x-download"])
         self.assertFalse([arg for arg in cmd if arg.startswith("--cookies")])
         self.assertEqual(cmd[cmd.index("--use-extractors") + 1], "twitter.*")
         self.assertEqual(cmd[cmd.index("--playlist-items") + 1], "1")
         self.assertEqual(cmd[-1], "https://x.com/i/status/1234567890123456789")
 
+    def test_a_tweet_x_hides_from_readers_without_an_account_is_asked_again_with_the_x_login(self):
+        for tweet, refusal in (("x-1234567890123456780", NO_VIDEO), ("x-1234567890123456781", LOGIN_REQUIRED)):
+            with self.subTest(refusal=refusal):
+                (guest, signed_in), kinds, error = self.run_yt_dlp(tweet, refusal, STOPPED)
+                self.assertEqual(kinds, ["x-download", "x-account"])
+                self.assertFalse([arg for arg in guest if arg.startswith("--cookies")])
+                self.assertEqual(signed_in[signed_in.index("--cookies-from-browser") + 1], "firefox")
+                self.assertEqual(signed_in[signed_in.index("--use-extractors") + 1], "twitter.*")
+                self.assertEqual(signed_in[-1], guest[-1])
+                self.assertEqual(error, "[twitter] stopped by the test")
+                self.assertTrue(db.x_hidden(self.data, tweet))
+
+    def test_a_tweet_known_to_be_hidden_goes_straight_to_the_x_login(self):
+        db.mark_x_hidden(self.data, [TWEET])
+        (cmd,), kinds, _ = self.run_yt_dlp(TWEET, NO_VIDEO)
+        self.assertEqual(kinds, ["x-account"])
+        self.assertEqual(cmd[cmd.index("--cookies-from-browser") + 1], "firefox")
+        self.assertEqual(cmd[cmd.index("--use-extractors") + 1], "twitter.*")
+        self.assertEqual(cmd[-1], "https://x.com/i/status/1234567890123456789")
+
+    def test_other_failures_do_not_mark_a_tweet_hidden(self):
+        self.run_yt_dlp(TWEET, STOPPED)
+        self.assertFalse(db.x_hidden(self.data, TWEET))
+
     def test_youtube_downloads_keep_their_recipe(self):
-        cmd, kind = self.run_yt_dlp("choose00001")
-        self.assertEqual(kind, "download")
+        (cmd,), kinds, _ = self.run_yt_dlp("choose00001", NO_VIDEO)
+        self.assertEqual(kinds, ["download"])
         self.assertEqual(cmd[cmd.index("--cookies-from-browser") + 1], "firefox")
         self.assertNotIn("--use-extractors", cmd)
         self.assertEqual(cmd[-1], "https://www.youtube.com/watch?v=choose00001")
 
-    def test_failures_say_what_the_archive_will_not_do(self):
-        login = (
-            "ERROR: [twitter] 1234567890123456789: NSFW tweet requires authentication. Use --cookies, "
-            "--cookies-from-browser, --username and --password, --netrc-cmd, or --netrc (twitter) "
-            "to provide account credentials."
-        )
-        self.assertIn("without your account", _yt_dlp_failure([login], "X"))
+    def test_failures_say_why_there_is_no_video(self):
+        for refusal in (LOGIN_REQUIRED, NO_VIDEO):
+            with self.subTest(refusal=refusal):
+                self.assertIn("even with your X login from Firefox", _yt_dlp_failure([refusal], "X"))
         elsewhere = "ERROR: No suitable extractor found for URL https://youtu.be/choose00001"
         self.assertEqual(
             _yt_dlp_failure([elsewhere], "X"),

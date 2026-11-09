@@ -139,6 +139,11 @@ CREATE TABLE IF NOT EXISTS youtube_requests (
   at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS youtube_requests_by_time ON youtube_requests(kind, at);
+
+CREATE TABLE IF NOT EXISTS x_hidden_tweets (
+  video_id TEXT PRIMARY KEY,
+  noted_at TEXT NOT NULL
+);
 """
 
 
@@ -1274,6 +1279,29 @@ def take_youtube_request(data_dir: Path, kind: str, limit: int, now: float, wind
     except Exception:
         conn.rollback()
         raise
+    finally:
+        conn.close()
+
+
+def mark_x_hidden(data_dir: Path, video_ids) -> None:
+    """Note tweets (x-<tweet id>) X hides from readers without an account, so their downloads
+    go straight to the user's X login (docs/download.md, "X tweets")."""
+    now = _now()
+    conn = connect(data_dir)
+    try:
+        conn.executemany(
+            "INSERT OR IGNORE INTO x_hidden_tweets (video_id, noted_at) VALUES (?, ?)",
+            [(video_id, now) for video_id in video_ids],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def x_hidden(data_dir: Path, video_id: str) -> bool:
+    conn = connect(data_dir)
+    try:
+        return conn.execute("SELECT 1 FROM x_hidden_tweets WHERE video_id=?", (video_id,)).fetchone() is not None
     finally:
         conn.close()
 

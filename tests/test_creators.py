@@ -21,6 +21,7 @@ from yt_archive.creators import (
 from yt_archive.jobs import JobQueue
 from yt_archive.paths import parse_video_id
 from yt_archive.web import make_handler
+from yt_archive.x_profiles import ProfileParser, fetch_profile
 
 CHANNEL = "UC" + "a" * 22
 TAB = "https://www.youtube.com/@Example/"
@@ -145,6 +146,23 @@ class ListingSourceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_video_id("https://www.youtube.com/embed/videoseries?list=PLabc")
         self.assertEqual(parse_video_id("https://www.youtube.com/embed/choose00001"), "choose00001")
+
+    def test_x_profile_links_list_the_profiles_videos_with_the_x_login(self):
+        for source in ["https://x.com/Example_1", "x.com/Example_1/media", "https://twitter.com/example_1/",
+                       "https://mobile.x.com/Example_1/with_replies", "http://www.twitter.com/Example_1?s=20"]:
+            with self.subTest(source=source):
+                self.assertEqual(listing_source(source),
+                                 {"kind": "x-profile", "url": "https://x.com/example_1/media", "section": ""})
+        self.assertTrue(needs_account("https://x.com/example_1/media"))
+        self.assertEqual(browse_url("x.com/Example_1"), "/browse?source=https%3A%2F%2Fx.com%2Fexample_1%2Fmedia")
+        # A bare @handle stays a YouTube handle.
+        self.assertEqual(listing_source("@Example_1")["kind"], "channel")
+        with self.assertRaisesRegex(ValueError, "single tweet"):
+            listing_source("https://x.com/Example_1/status/1234567890123456789")
+        for source in ["https://x.com/home", "https://x.com/i/bookmarks", "https://x.com/Example_1/likes",
+                       "https://x.com/name-with-dash", "https://x.com/a_name_too_long_for_x", "https://x.com/"]:
+            with self.subTest(source=source), self.assertRaisesRegex(ValueError, "X profile link"):
+                listing_source(source)
 
 
 class ListingParserTests(unittest.TestCase):
@@ -278,6 +296,160 @@ class FetchListingTests(unittest.TestCase):
         with patch("yt_archive.creators.LISTING_TIMEOUT", 0.5):
             result = self.run_fake([channel_lines()[:2]], hang=30)
         self.assertEqual(len(result["items"]), 2)
+        self.assertIn("longer than", result["warning"])
+
+
+X_POSTER = "https://pbs.twimg.com/amplify_video_thumb/1/img/poster.jpg?format=jpg&name=small"
+
+
+def x_file(tweet, kind="video", **extra):
+    """One line of what x_profiles._PRINT makes gallery-dl print for a file of an X profile."""
+    return json.dumps({"tweet": tweet, "type": kind, "duration": None, "url": "", "sensitive": False,
+                       "flags": [], "views": 0, "text": "A video", "date": "None",
+                       "nick": "Example Name", "name": "Example_1", **extra})
+
+
+def x_profile_lines():
+    """An X profile's Media tab, newest tweet first, as gallery-dl prints it."""
+    return [
+        x_file(1900000000000000003, duration=237.6, views=1500, text="First  video\nsecond line"),
+        x_file(1900000000000000003, "preview", url=X_POSTER),
+        x_file(1900000000000000003, duration=5.0),
+        x_file(1900000000000000003, "preview", url=X_POSTER.replace("poster", "second")),
+        x_file(1900000000000000002, "photo", url="https://pbs.twimg.com/media/photo?format=jpg&name=small"),
+        x_file(1900000000000000001, "animated_gif"),
+        x_file(1900000000000000001, "preview", url=X_POSTER),
+        x_file(1900000000000000001, sensitive=True, text=""),
+        x_file(1900000000000000001, "preview", url="https://evil.test/poster.jpg"),
+        x_file(12345678901, flags=["Nudity"], date="2010-06-01 12:00:00"),
+        "None",
+        json.dumps(["not", "a", "file"]),
+        x_file("../bad"),
+    ]
+
+
+class ProfileParserTests(unittest.TestCase):
+    def test_first_video_of_each_tweet_with_its_poster(self):
+        parser = ProfileParser("example_1")
+        for line in x_profile_lines():
+            parser.feed(line)
+        result = parser.result()
+        self.assertEqual((result["title"], result["channel"], result["channel_id"]),
+                         ("Example Name (@Example_1)", "Example Name", ""))
+        first, sensitive, old = result["items"]
+        self.assertEqual(first, {
+            "video_id": "x-1900000000000000003", "title": "First video second line", "duration": 238,
+            "views": 1500, "timestamp": 1741830274, "section": "", "position": 1, "channel": "Example Name",
+            "unavailable": "", "thumb": X_POSTER, "hidden": False,
+        })
+        # A GIF's poster is not a video's, and only X's image host is shown.
+        self.assertEqual((sensitive["video_id"], sensitive["title"], sensitive["thumb"], sensitive["hidden"]),
+                         ("x-1900000000000000001", "(no text)", "", True))
+        # Tweets from before 2010-11 carry no time in their id.
+        self.assertEqual((old["timestamp"], old["views"], old["duration"], old["hidden"]),
+                         (1275393600, None, None, True))
+        self.assertEqual(parser.hidden, {"x-1900000000000000001", "x-12345678901"})
+
+    def test_a_profile_without_videos_is_named_by_its_handle(self):
+        self.assertEqual(ProfileParser("example_1").result()["title"], "@example_1")
+
+
+FAKE_GALLERY_DL = """#!{python}
+import json, os, sys, time
+plan = json.load(open(os.environ["FAKE_GALLERYDL_PLAN"]))
+open(plan["args"], "w").write(json.dumps(sys.argv[1:]))
+def answer(path):
+    print('[urllib3.connectionpool][debug] https://x.com:443 "GET ' + path + ' HTTP/1.1" 200 100',
+          file=sys.stderr, flush=True)
+for number, page in enumerate(plan["pages"]):
+    if number:
+        print("[twitter][debug] Sleeping 2.00 seconds (request)", file=sys.stderr, flush=True)
+        time.sleep(plan.get("pause", 0.3))
+    answer("/i/api/graphql/page" + str(number))
+    for line in page:
+        sys.stdout.write(line + chr(10))
+        sys.stdout.flush()
+for number in range(plan.get("unannounced", 0)):
+    answer("/retried")
+for error in plan.get("errors", []):
+    print("[twitter][error] " + error, file=sys.stderr, flush=True)
+time.sleep(plan.get("hang", 0))
+sys.exit(plan.get("exit", 0))
+"""
+
+
+class FetchProfileTests(unittest.TestCase):
+    """fetch_profile against a stand-in gallery-dl that logs its requests like the real one."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.data = Path(tmp.name)
+        self.binary = self.data / "gallery-dl"
+        self.binary.write_text(FAKE_GALLERY_DL.format(python=sys.executable), encoding="utf-8")
+        self.binary.chmod(self.binary.stat().st_mode | stat.S_IEXEC)
+        self.plan = self.data / "plan.json"
+        self.args = self.data / "args.json"
+        for patcher in (patch("yt_archive.x_profiles.gallery_dl_bin", lambda: str(self.binary)),
+                        patch.dict(os.environ, {"FAKE_GALLERYDL_PLAN": str(self.plan)})):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def run_fake(self, pages, **plan):
+        self.plan.write_text(json.dumps({"pages": pages, "args": str(self.args), **plan}), encoding="utf-8")
+        budget.take(self.data, "x-listing")  # the caller pays for the first request
+        return fetch_profile("https://x.com/example_1/media", self.data)
+
+    def test_reads_the_media_tab_with_the_x_login_and_pays_every_request(self):
+        lines = x_profile_lines()
+        # X's client keys (two requests), the profile, then a page of tweets per request; one
+        # request is sent again without a pause.
+        result = self.run_fake([[], [], [], lines[:4], lines[4:]], pause=0, unannounced=1)
+        self.assertEqual([item["video_id"] for item in result["items"]],
+                         ["x-1900000000000000003", "x-1900000000000000001", "x-12345678901"])
+        self.assertEqual((result["title"], result["warning"], result["requests"]),
+                         ("Example Name (@Example_1)", "", 6))
+        self.assertEqual(len(db.youtube_request_times(self.data, "x-listing", 0)), 6)
+        self.assertTrue(db.x_hidden(self.data, "x-1900000000000000001"))
+        self.assertFalse(db.x_hidden(self.data, "x-1900000000000000003"))
+        command = json.loads(self.args.read_text())
+        self.assertEqual(command[command.index("--cookies-from-browser") + 1], "firefox/.x.com")
+        self.assertEqual(command[command.index("--sleep-request") + 1], "2")
+        for option in ["--config-ignore", "--verbose", "extractor.twitter.ratelimit=abort",
+                       "extractor.twitter.retweets=false", "extractor.twitter.previews=true"]:
+            self.assertIn(option, command)
+        self.assertTrue(command[command.index("--print") + 1].startswith("prepare:\fE "))
+        self.assertEqual(command[-1], "https://x.com/example_1/media")
+
+    def test_budget_stops_before_the_next_request_and_keeps_what_arrived(self):
+        lines = x_profile_lines()
+        with patch.dict(budget.LIMITS, {"x-listing": 2}):
+            result = self.run_fake([[], lines[:4], lines[4:]])
+        self.assertEqual([item["video_id"] for item in result["items"]], ["x-1900000000000000003"])
+        self.assertEqual(result["requests"], 2)
+        self.assertIn("X budget of 2 listing requests is used up", result["warning"])
+        self.assertEqual(len(db.youtube_request_times(self.data, "x-listing", 0)), 2)
+
+    def test_x_errors_are_explained_and_fail_only_when_nothing_arrived(self):
+        result = self.run_fake([x_profile_lines()[:2]], errors=["AuthorizationError: Account temporarily locked"],
+                               exit=16, pause=0)
+        self.assertEqual(len(result["items"]), 1)
+        self.assertIn("incomplete", result["warning"])
+        self.assertIn("X has temporarily locked your account", result["warning"])
+        for error, explained in [("NotFoundError: Requested user could not be found", "no account by that name"),
+                                 ("AuthRequired: authenticated cookies needed to access this timeline",
+                                  "Sign in to x.com in Firefox")]:
+            with self.subTest(error=error), self.assertRaisesRegex(RuntimeError, explained):
+                self.run_fake([[]], errors=[error], exit=16)
+
+    def test_a_profile_without_videos_is_an_empty_list(self):
+        result = self.run_fake([[], [x_file(1900000000000000002, "photo")]], pause=0)
+        self.assertEqual((result["items"], result["warning"], result["title"]), ([], "", "Example Name (@Example_1)"))
+
+    def test_a_hung_listing_is_stopped(self):
+        with patch("yt_archive.x_profiles.LISTING_TIMEOUT", 0.5):
+            result = self.run_fake([x_profile_lines()[:2]], hang=30, pause=0)
+        self.assertEqual(len(result["items"]), 1)
         self.assertIn("longer than", result["warning"])
 
 
@@ -450,6 +622,28 @@ class CreatorBrowserTests(unittest.TestCase):
         self.assertIn("used up", kept["error"])
         self.assertEqual(kept["lookup_id"], listing["lookup_id"])
 
+    def test_x_profiles_are_read_with_the_x_login_on_their_own_budget_and_queue_tweets(self):
+        parser = ProfileParser("example_1")
+        for line in x_profile_lines():
+            parser.feed(line)
+        fetch = Mock(return_value={**parser.result(), "warning": "", "requests": 4})
+        with patch("yt_archive.x_profiles.fetch_profile", fetch):
+            started = self.browser.start("https://x.com/Example_1")
+            listing = self.wait(self.browser, started["lookup_id"])
+        self.assertEqual((listing["kind"], listing["account"], listing["title"]),
+                         ("x-profile", True, "Example Name (@Example_1)"))
+        self.assertEqual(fetch.call_args.args[0], "https://x.com/example_1/media")
+        self.assertEqual(len(db.youtube_request_times(self.data, "x-listing", 0)), 1)
+        self.assertEqual(db.youtube_request_times(self.data, "listing", 0), [])
+        result = self.browser.enqueue(listing["lookup_id"], video_ids=["x-1900000000000000003"])
+        self.assertEqual(result["video_ids"], ["x-1900000000000000003"])
+        job = next(job for job in db.list_jobs(self.data) if job["video_id"] == "x-1900000000000000003")
+        self.assertEqual((job["url"], job["title"]),
+                         ("https://x.com/i/status/1900000000000000003", "First video second line"))
+        with patch.dict(budget.LIMITS, {"x-listing": 1}), \
+                self.assertRaisesRegex(BudgetExceeded, "X budget of 1 listing requests is used up"):
+            self.browser.start("https://x.com/Other_1")
+
     def test_playlists_list_has_nothing_to_queue(self):
         playlists = {"title": "Example", "channel": "Example", "channel_id": CHANNEL, "warning": "", "requests": 1,
                      "items": [{"playlist_id": "PLabc_DEF-123", "title": "Series", "thumb_id": ""}]}
@@ -486,7 +680,8 @@ class CreatorBrowserTests(unittest.TestCase):
                 if method == "POST" or path.startswith("/api/") else handler.wfile.getvalue()
 
         for source in ["@Example", "Example", "https://youtube.com/@Example/videos",
-                       "https://www.youtube.com/playlist?list=PLabc", "https://www.youtube.com/playlist?list=WL"]:
+                       "https://www.youtube.com/playlist?list=PLabc", "https://www.youtube.com/playlist?list=WL",
+                       "https://x.com/Example_1"]:
             code, data = request("/api/get", {"url": source})
             self.assertEqual(code, 200)
             self.assertIn("/browse?source=", data["browse_url"])

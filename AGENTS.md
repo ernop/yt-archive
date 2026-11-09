@@ -19,9 +19,9 @@ history and `to_archive` marks. This process owns the files and the ML venv
 |-----|------------|
 | [README.md](README.md) | Public GitHub intro — what this is, how to invoke it |
 | [docs/setup.md](docs/setup.md) | New-machine install, `.venv`, the media player copy, live service |
-| [docs/download.md](docs/download.md) | yt-dlp flags, cookies, JS runtime; X tweets (`x-<tweet id>`, no account, own budget) — settled, do not reinvent |
+| [docs/download.md](docs/download.md) | yt-dlp flags, cookies, JS runtime; X tweets (`x-<tweet id>`, no account unless X hides the tweet, own budgets) — settled, do not reinvent |
 | [docs/framesheets.md](docs/framesheets.md) | Shot pipeline, thresholds, rejected approaches |
-| [docs/browsing.md](docs/browsing.md) | Download queue panel, archive status and update, single-line list rows, order and sort, creator pages, the YouTube picker for creators and playlists (and which lists use your account), the hourly YouTube request budget, text contrast, the video page and player |
+| [docs/browsing.md](docs/browsing.md) | Download queue panel, archive status and update, single-line list rows, order and sort, creator pages, the picker for YouTube creators and playlists (and which lists use your account) and X profiles (with your X login, via gallery-dl), the hourly YouTube and X request budgets, text contrast, the video page and player |
 | [docs/bookmarklet.md](docs/bookmarklet.md) | The **+ ytarchive** bookmarklet: queue the YouTube page or tweet you're on, its key, why a pop-up |
 | [docs/transcription.md](docs/transcription.md) | Explicit local Whisper jobs, timed transcript UI, captions, speakers |
 
@@ -35,12 +35,14 @@ The main path is the live service, not the CLI.
 `yt-archive.service` (user unit) owns `127.0.0.1:8765`. Open
 `http://127.0.0.1:8765/` — or `http://ytarchive.localhost` on boxes with
 the Caddy `*.localhost` proxy. Paste one video URL or a pile of them; each
-becomes a queued job. Creator homepages, handles, and playlist links open the
-`/browse` picker: sections, playlists, filters, one-by-one review, and bulk
-get (see [docs/browsing.md](docs/browsing.md#browse-youtube)). Everything
-this repo asks of YouTube stays inside the hourly budgets in
-`yt_archive/budget.py`; listings send cookies only for the user's own Watch
-later, Liked videos, and private playlists.
+becomes a queued job. Creator homepages, handles, playlist links, and X
+profile links open the `/browse` picker: sections, playlists, filters,
+one-by-one review, and bulk get (see
+[docs/browsing.md](docs/browsing.md#browse-youtube)). Everything this repo
+asks of YouTube or X stays inside the hourly budgets in
+`yt_archive/budget.py`; YouTube listings send cookies only for the user's own
+Watch later, Liked videos, and private playlists, and X profiles are always
+listed with the user's X login.
 The **+ ytarchive** bookmarklet on that page queues the YouTube page you are
 on in one click ([docs/bookmarklet.md](docs/bookmarklet.md)).
 Jobs run one at a time: download, then shots, then
@@ -126,8 +128,14 @@ archive, only replaceable.
   it ([docs/download.md](docs/download.md#flags-locked)). YouTube ids
   (`[A-Za-z0-9_-]`, case-sensitive) pass through unchanged; a tweet's video is
   `x-<tweet id>` (never 11 characters, so never a YouTube id).
-- X is read without the user's X account. Never add cookies or a login to X
-  downloads without the user's explicit approval.
+- X is read without the user's X account, with two exceptions the user
+  approved: a tweet X hides from readers without an account is downloaded with
+  the user's X login from Firefox, on the `x-account` budget
+  ([docs/download.md](docs/download.md#x-tweets-settled-2026-10-25)), and an X
+  profile the user browses is listed with it through gallery-dl, on the
+  `x-listing` budget ([docs/browsing.md](docs/browsing.md#x-profiles-settled-2026-11-06)).
+  Never send that login with any other X request without the user's explicit
+  approval.
 - Shot and download recipes are settled. Read [docs/download.md](docs/download.md)
   and [docs/framesheets.md](docs/framesheets.md) before changing either.
   Do not reintroduce the rejected approaches.

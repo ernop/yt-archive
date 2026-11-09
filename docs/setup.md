@@ -8,7 +8,12 @@ Parent: [AGENTS.md](../AGENTS.md).
   copies are usually stale.
 - `ffmpeg` — shot keyframes and `_condensed/soundtrack.mp3` (libmp3lame, VBR `-q:a 0`)
 - A JS runtime yt-dlp can use (Deno is the default; Node also works)
-- Firefox — cookie source for YouTube downloads
+- `gallery-dl` — lists X profiles for the picker
+  ([browsing.md](browsing.md#x-profiles-settled-2026-11-06)), as its own `uv`
+  tool: `uv tool install gallery-dl`, and `uv tool upgrade gallery-dl` when X
+  changes and listing breaks.
+- Firefox — cookie source for YouTube downloads, and the X login for X
+  profiles and tweets X hides from signed-out readers
 
 ## Python venv (this repo)
 

@@ -14,6 +14,7 @@ from .paths import (
     VIDEO_ID_RE,
     archive_needs,
     find_video_file,
+    is_tweet,
     load_archive_info,
     parse_video_id,
     soundtrack_path,
@@ -81,8 +82,8 @@ class JobQueue:
         return job
 
     def submit_many(self, video_ids: list[str], titles: dict[str, str] | None = None) -> dict:
-        if any(not isinstance(vid, str) or not VIDEO_ID_RE.fullmatch(vid) for vid in video_ids):
-            raise ValueError("Invalid YouTube video ID in selection.")
+        if any(not isinstance(vid, str) or not (VIDEO_ID_RE.fullmatch(vid) or is_tweet(vid)) for vid in video_ids):
+            raise ValueError("Invalid video ID in selection.")
         with self._cv:
             result = db.enqueue_missing_videos(self.data_dir, video_ids, titles)
             self._cv.notify()

@@ -85,6 +85,7 @@ kbd { font: 700 .85em var(--mono); border: 1px solid #fff; border-radius: 4px; p
 .pick-one[hidden] { display: none; }
 .pick-one img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; background: #111; display: block; }
 .pick-one img[hidden] { display: none; }
+.x-list .pick-one img { object-fit: contain; }
 .one-pos { font-size: 1.05rem; font-weight: 700; }
 .one-pos strong { font: 850 1.6rem/1 var(--mono); font-variant-numeric: tabular-nums; }
 .pick-one h3 { font-size: 1.6rem; font-weight: 800; margin: .7rem 0; overflow-wrap: anywhere; }

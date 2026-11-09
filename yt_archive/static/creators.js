@@ -1,14 +1,16 @@
 // The picker on /browse (docs/browsing.md, "Browse YouTube"). Lists come from the server's
-// kept copy; the server asks YouTube only when it has none or when Refresh is pressed.
+// kept copy; the server asks YouTube or X only when it has none or when Refresh is pressed.
 (() => {
   'use strict';
   const el = (id) => document.getElementById('creator-' + id);
   const PAGE = 100;
   const CONFIRM_OVER = 50;
   const DOWNLOADS_PER_HOUR = Number(el('picker').dataset.downloadsPerHour);
+  const X_PER_HOUR = Number(el('picker').dataset.xDownloadsPerHour);
+  const X_LOGIN_PER_HOUR = Number(el('picker').dataset.xLoginDownloadsPerHour);
   const SECTIONS = [['videos', 'Videos'], ['shorts', 'Shorts'], ['live', 'Live'], ['all', 'All']];
-  const KINDS = {channel: 'creator', playlists: 'playlists', playlist: 'playlist'};
-  // [value, direction, tie order]: missing values sort last; ties keep YouTube's order,
+  const KINDS = {channel: 'creator', playlists: 'playlists', playlist: 'playlist', 'x-profile': 'X profile'};
+  // [value, direction, tie order]: missing values sort last; ties keep the site's order,
   // which lists newest first, so "oldest first" breaks ties the other way.
   const SORTS = {
     new: [(item) => item.timestamp, -1, 1],
@@ -36,8 +38,15 @@
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const available = (item) => !item.archived && !item.queued && !item.unavailable;
-  const watchUrl = (id) => 'https://www.youtube.com/watch?v=' + id;
+  const isTweet = (id) => id.startsWith('x-');
+  const siteOf = (id) => (isTweet(id) ? 'X' : 'YouTube');
+  const listSite = () => (listing && listing.kind === 'x-profile' ? 'X' : 'YouTube');
+  const watchUrl = (id) => (isTweet(id) ? 'https://x.com/i/status/' + id.slice(2) : 'https://www.youtube.com/watch?v=' + id);
   const thumbUrl = (id, size) => 'https://i.ytimg.com/vi/' + id + '/' + size + '.jpg';
+  // X lists bring their own posters, in X's small size; large asks X's image host for medium.
+  const posterUrl = (item, large) => (isTweet(item.video_id)
+    ? (large ? (item.thumb || '').replace(/name=small$/, 'name=medium') : item.thumb || '')
+    : thumbUrl(item.video_id, large ? 'hqdefault' : 'mqdefault'));
   const browseHref = (source) => '/browse?' + new URLSearchParams({source});
 
   function node(tag, className, text) {
@@ -59,7 +68,7 @@
     const minutes = Math.floor(total / 60) % 60, secs = String(total % 60).padStart(2, '0');
     return hours ? hours + ':' + String(minutes).padStart(2, '0') + ':' + secs : minutes + ':' + secs;
   }
-  // Upload dates come from YouTube's "3 weeks ago" text, so they are shown that coarsely.
+  // YouTube's upload dates come from its "3 weeks ago" text, so all dates are shown that coarsely.
   function age(stamp) {
     if (typeof stamp !== 'number') return '';
     const days = Math.max(0, (Date.now() / 1000 - stamp) / 86400);
@@ -88,8 +97,9 @@
     }
   }
   function progress(state) {
-    const parts = ['Reading ', state.title ? '“' + state.title + '”' : 'the list',
-      state.account ? ' from YouTube with your account: ' : ' from YouTube: ', strong(number.format(state.found || 0))];
+    const where = state.kind === 'x-profile' ? ' from X with your X login: '
+      : state.account ? ' from YouTube with your account: ' : ' from YouTube: ';
+    const parts = ['Reading ', state.title ? '“' + state.title + '”' : 'the list', where, strong(number.format(state.found || 0))];
     if (state.expected) parts.push(' of ', strong(number.format(state.expected)));
     parts.push(' found, ', strong(number.format(state.requests || 1)),
       state.requests === 1 ? ' request so far. ' : ' requests so far. ', 'Nothing is downloaded.');
@@ -154,7 +164,7 @@
     }
     busy = true;
     if (listing) paintBar();
-    status(refresh ? 'Asking YouTube for the current list…' : 'Opening the list…');
+    status(refresh ? 'Asking ' + listSite() + ' for the current list…' : 'Opening the list…');
     try {
       const result = await load(source, refresh, (state) => status(progress(state)), current);
       if (!result || current !== generation) return;
@@ -215,8 +225,11 @@
       owner.textContent = 'all videos by ' + (listing.channel || 'this creator');
       owner.href = browseHref(listing.url.replace(/\/playlists$/, ''));
     }
+    el('picker').classList.toggle('x-list', listing.kind === 'x-profile');
     el('youtube').href = listing.url;
-    el('listed').replaceChildren(...listed(listing.fetched_at), listing.account ? ' with your YouTube account' : '');
+    el('youtube').textContent = 'open on ' + listSite() + ' ↗';
+    el('listed').replaceChildren(...listed(listing.fetched_at),
+      listing.account ? (listing.kind === 'x-profile' ? ' with your X login' : ' with your YouTube account') : '');
     el('listed').title = new Date(listing.fetched_at).toLocaleString();
     el('refresh').disabled = busy;
     el('warning').textContent = listing.warning || '';
@@ -308,11 +321,14 @@
     box.checked = selected.has(item.video_id);
     box.disabled = busy || !available(item);
     box.setAttribute('aria-label', 'Select ' + item.title);
-    const image = node('img', 'th');
-    image.loading = 'lazy';
-    image.referrerPolicy = 'no-referrer';
-    image.alt = '';
-    image.src = thumbUrl(item.video_id, 'mqdefault');
+    const poster = posterUrl(item, false);
+    const image = poster ? node('img', 'th') : node('span', 'th ph', 'no image');
+    if (poster) {
+      image.loading = 'lazy';
+      image.referrerPolicy = 'no-referrer';
+      image.alt = '';
+      image.src = poster;
+    }
     const title = node('span', 't', item.title);
     title.title = item.title;
     let state;
@@ -323,7 +339,7 @@
       state = node('span', 's' + (item.queued ? ' queued' : item.unavailable ? ' bad' : ''),
         item.queued ? 'Queued' : item.unavailable || '');
     }
-    const watch = link('YouTube ↗', watchUrl(item.video_id), true);
+    const watch = link(siteOf(item.video_id) + ' ↗', watchUrl(item.video_id), true);
     watch.className = 'w';
     line.append(box, node('span', 'n', number.format(index + 1)), image, title, node('span', 'c', item.channel || ''),
       node('span', 'v len', duration(item.duration)), node('span', 'v views', item.views === null || item.views === undefined ? '' : compact.format(item.views)),
@@ -341,7 +357,7 @@
     rows.append(headRow());
     shown.slice(page * PAGE, (page + 1) * PAGE).forEach((item, offset) => rows.append(row(item, page * PAGE + offset)));
     if (!shown.length) {
-      rows.append(node('p', 'pick-empty', items.length ? 'Nothing here matches these filters.' : 'YouTube listed no videos here.'));
+      rows.append(node('p', 'pick-empty', items.length ? 'Nothing here matches these filters.' : listSite() + ' listed no videos here.'));
     }
     list.replaceChildren(rows);
     el('page').replaceChildren('page ', strong(number.format(page + 1)), ' of ', strong(number.format(pages)));
@@ -435,8 +451,9 @@
     el('one-total').textContent = number.format(total);
     el('one-chosen').replaceChildren(' · ', strong(number.format(selected.size)), ' selected in total');
     const image = el('one-thumb');
-    image.hidden = end;
-    if (!end) image.src = thumbUrl(item.video_id, 'hqdefault');
+    const poster = end ? '' : posterUrl(item, true);
+    image.hidden = !poster;
+    if (poster) image.src = poster;
     el('one-title').textContent = end ? 'That was the last one.' : item.title;
     const facts = [];
     if (end) {
@@ -456,7 +473,10 @@
     el('one-skip').hidden = end;
     el('one-back').disabled = one.index === 0;
     el('one-youtube').hidden = end;
-    if (!end) el('one-youtube').href = watchUrl(item.video_id);
+    if (!end) {
+      el('one-youtube').href = watchUrl(item.video_id);
+      el('one-youtube').textContent = 'watch on ' + siteOf(item.video_id) + ' ↗';
+    }
   }
   function decide(choose) {
     if (!one || one.index >= one.queue.length) return;
@@ -472,11 +492,20 @@
     render();
   }
 
+  // [how many an hour, whole hours] for a selection at the download budgets it is paid from.
+  function pace(ids) {
+    if (listing.kind !== 'x-profile') return [DOWNLOADS_PER_HOUR, Math.floor((ids.length - 1) / DOWNLOADS_PER_HOUR)];
+    const hidden = new Set(items.filter((item) => item.hidden).map((item) => item.video_id));
+    const signedIn = ids.filter((id) => hidden.has(id)).length;
+    const hours = Math.floor(Math.max(0, (signedIn - 1) / X_LOGIN_PER_HOUR, (ids.length - signedIn - 1) / X_PER_HOUR));
+    return [X_PER_HOUR + (signedIn ? ' (' + X_LOGIN_PER_HOUR + ' for tweets X shows only to signed-in readers)' : ''), hours];
+  }
+
   async function enqueue(ids) {
     if (busy || !ids.length) return;
-    const hours = Math.floor((ids.length - 1) / DOWNLOADS_PER_HOUR);
+    const [perHour, hours] = pace(ids);
     if (ids.length > CONFIRM_OVER && !confirm('Queue ' + number.format(ids.length) + ' videos?\n\nThey download one at a time'
-        + (hours ? ', at most ' + DOWNLOADS_PER_HOUR + ' an hour, so this takes more than ' + hours + (hours === 1 ? ' hour' : ' hours') : '')
+        + (hours ? ', at most ' + perHour + ' an hour, so this takes more than ' + hours + (hours === 1 ? ' hour' : ' hours') : '')
         + '. Videos already saved or queued are skipped.')) return;
     busy = true;
     if (one) paintOne(); else { paintRows(); paintBar(); }

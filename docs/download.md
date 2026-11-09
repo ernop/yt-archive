@@ -71,11 +71,28 @@ bookmarklet on the tweet, or run `./yt get <tweet link>`.
   to 19 digits are accepted (every tweet that can carry a video has 18 or
   more), so an archive id is never 11 characters and never taken for a YouTube
   id. Some YouTube ids start with `x-` too; they stay YouTube ids.
-- **No account.** X is read without the user's X login: no cookies, ever
-  (`SITE_ARGS` in `download.py`). Firefox's cookies would make every download a
-  request made as the user. Tweets X shows only to signed-in accounts (sensitive
-  media, protected accounts) fail with "X shows this tweet only to signed-in
-  accounts". Using an account needs the user's explicit approval first.
+- **No account, unless X hides the tweet** (the login retry approved by the
+  user 2026-11-06). Every tweet is first read without the user's X login: no
+  cookies (`SITE_ARGS` in `download.py`), since cookies make a download a
+  request made as the user. X hides some tweets from readers without an
+  account (adult content, protected accounts), and yt-dlp then fails one of two
+  ways: with a login hint ("NSFW tweet requires authentication … account
+  credentials"), or, when X sends a bare `{"__typename":"TweetTombstone"}` with
+  no reason in place of the tweet (both its API and its embed endpoint
+  `cdn.syndication.twimg.com` did, 2026-11-06), with "No video could be found in
+  this tweet", the same words as for a tweet without a video. Either failure
+  asks X once more with the user's X login from Firefox
+  (`--cookies-from-browser firefox`, the login the user browses x.com with), on
+  its own budget (below); the job log says so. A tweet that really has no video
+  therefore costs one request as the user too. If the signed-in try fails the
+  same way, the job says X refused the tweet, or sent no video, even with the
+  login, and to check that Firefox is signed in to x.com. A tweet found hidden
+  this way, and one an X profile listing found marked sensitive
+  ([browsing.md](browsing.md#x-profiles-settled-2026-11-06)), is noted in
+  `x_hidden_tweets`; its downloads from then on go straight to the login,
+  skipping the try X would refuse. Besides these downloads, only listing an X
+  profile carries the login (approved by the user 2026-11-06); widening that
+  needs the user's explicit approval.
 - **Only X's extractors** (`--use-extractors twitter.*`). For a tweet with no
   video of its own, yt-dlp follows the tweet's first link; restricted, the job
   fails with "This tweet has no video of its own; it links to <url>" instead of
@@ -105,3 +122,8 @@ bookmarklet on the tweet, or run `./yt get <tweet link>`.
   reading without an account; each tweet costs yt-dlp two X API requests (a
   guest token, then the tweet), and the video itself comes from X's CDN. A tweet
   already on disk costs nothing.
+- **Budget: 30 signed-in tweet downloads an hour** (`x-account`), for every
+  try with the user's X login: one X API request made as the user (no guest
+  token), far below what the account sends while the user scrolls X.
+  The queue row waits with "this hour's X account budget of 30 downloads is
+  used up".
