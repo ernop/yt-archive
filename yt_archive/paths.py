@@ -10,6 +10,7 @@ import tempfile
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 # Search anywhere in pasted text. Covers watch/shorts/embed/live/v, youtu.be,
@@ -212,7 +213,7 @@ def transcript_is_complete(data_dir: Path, video_id: str) -> bool:
 
 
 def restrict_filename(text: str, *, fallback: str = "untitled", max_len: int = 80) -> str:
-    """Keep a title fragment in [A-Za-z0-9._-], same charset as --restrict-filenames."""
+    """Keep a title fragment in [A-Za-z0-9._-]; stricter than --restrict-filenames."""
     text = unicodedata.normalize("NFKD", text or "")
     text = text.encode("ascii", "ignore").decode("ascii")
     text = re.sub(r"[^A-Za-z0-9._-]+", "_", text)
@@ -319,9 +320,10 @@ def file_cache_key(path: Path) -> str:
 
 
 def media_url(data_dir: Path, path: Path) -> str:
-    """Durable media URL. Same key ⇒ same bytes (see Cache-Control immutable)."""
+    """Durable media URL. Same key ⇒ same bytes (see Cache-Control immutable).
+    Percent-encoded: yt-dlp's file names can hold % + = @ ~ (docs/download.md)."""
     rel = path.resolve().relative_to(Path(data_dir).resolve()).as_posix()
-    return f"/media/{rel}?v={file_cache_key(path)}"
+    return f"/media/{quote(rel)}?v={file_cache_key(path)}"
 
 
 def shots_json_path(data_dir: Path, video_id: str) -> Path:

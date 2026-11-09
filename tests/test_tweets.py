@@ -172,6 +172,17 @@ class TweetPageTests(unittest.TestCase):
         self.assertIn('href="https://x.com/i/status/1234567890123456789" target="_blank" rel="noopener noreferrer">X</a>', html)
         self.assertIn('const site = "X";', html)
 
+    def test_a_percent_in_the_file_name_is_escaped_in_the_video_link(self):
+        folder = self.data / TWEET
+        folder.mkdir()
+        (folder / "Someone_-_90%_-_...-1111111111111111111.mp4").write_bytes(b"video")
+        (folder / "archive.json").write_text(json.dumps({"video_id": TWEET, "title": "a tweet"}), encoding="utf-8")
+        link = f"/media/{TWEET}/Someone_-_90%25_-_...-1111111111111111111.mp4"
+        code, raw = self.request(f"/v/{TWEET}", method="GET")
+        self.assertEqual(code, 200)
+        self.assertIn(f'<video controls preload="metadata" src="{link}?v=', raw.decode())
+        self.assertEqual(self.request(link, method="GET"), (200, b"video"))
+
 
 if __name__ == "__main__":
     unittest.main()

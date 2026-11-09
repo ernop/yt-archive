@@ -120,9 +120,12 @@ archive, only replaceable.
 ## Rules
 
 - Originals stay untouched. Derived work goes in `_condensed/`.
-- Filenames: `[A-Za-z0-9._-]` only. yt-dlp uses `--restrict-filenames`.
-  YouTube ids (`[A-Za-z0-9_-]`, case-sensitive) pass through unchanged; a
-  tweet's video is `x-<tweet id>` (never 11 characters, so never a YouTube id).
+- Filenames this repo writes: `[A-Za-z0-9._-]` only (`paths.restrict_filename`).
+  yt-dlp uses `--restrict-filenames`, which also keeps `%`, `+`, `=`, `@`, `~`,
+  so every `/media/` link comes from `paths.media_url`, which percent-encodes
+  it ([docs/download.md](docs/download.md#flags-locked)). YouTube ids
+  (`[A-Za-z0-9_-]`, case-sensitive) pass through unchanged; a tweet's video is
+  `x-<tweet id>` (never 11 characters, so never a YouTube id).
 - X is read without the user's X account. Never add cookies or a login to X
   downloads without the user's explicit approval.
 - Shot and download recipes are settled. Read [docs/download.md](docs/download.md)

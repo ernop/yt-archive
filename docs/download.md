@@ -19,8 +19,13 @@ Tweets on X take the same recipe except where
   without a PO token. Authenticated requests have no cutoff.
 - **JS runtime required** or yt-dlp reports "This video is not available".
   Deno is yt-dlp's default (sandboxed). Node also works.
-- `--restrict-filenames` — names stay in `[A-Za-z0-9._-]`. YouTube ids
-  (`[A-Za-z0-9_-]`, case-sensitive) pass through unchanged.
+- `--restrict-filenames` — ASCII names without spaces or shell characters.
+  It still keeps `%`, `+`, `=`, `@` and `~` from titles
+  (`Someone_-_90%_-_...-<id>.mp4`), so every link to a file is built by
+  `paths.media_url`, which percent-encodes the name (2026-10-31): a bare `%`
+  in a link makes the Caddy `*.localhost` proxy answer 400 Bad Request, and the
+  player then says it cannot play the file. YouTube ids (`[A-Za-z0-9_-]`,
+  case-sensitive) pass through unchanged.
 - Output: `data/<id>/%(title)s-%(id)s.%(ext)s` so one video is one folder.
 
 Use the official standalone `yt-dlp` on `PATH` (`~/.local/bin/yt-dlp`,
@@ -83,9 +88,11 @@ bookmarklet on the tweet, or run `./yt get <tweet link>`.
   are tiers, not bitrates: on 2026-10-25 a 716×538 `http-2176` MP4 was
   6,359,453 bytes and the merged `hls-628` + 128k audio 6,356,661 bytes, the
   same encode. The locked `-f` / `-S` pick the HLS pair at the top resolution.
-- **File name** `<uploader>-<media id>.mp4`: yt-dlp's `id` for a tweet's video
-  is the media id; the tweet id is its `display_id`. Non-ASCII tweet text drops
-  out under `--restrict-filenames`.
+- **File name** `<title>-<media id>.mp4`, the title being `<display name> -
+  <tweet text>` as yt-dlp shortens it (ending in `...`): yt-dlp's `id` for a
+  tweet's video is the media id; the tweet id is its `display_id`. Non-ASCII
+  text drops out under `--restrict-filenames` and ASCII pieces such as `90%`
+  stay, so a Chinese tweet can become `Someone_-_90%_-_...-<media id>.mp4`.
 - **Metadata.** `archive.json` takes the title (`<display name> - <tweet
   text>`), `channel` (the display name), duration, upload date, size, and codec
   from the info JSON, and `url` is the tweet. `channel_id` stays empty: creator
