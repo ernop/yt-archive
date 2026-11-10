@@ -13,6 +13,23 @@ Sibling of [matthoom](https://github.com/ernop/matthoom). Matthoom owns watch
 history and `to_archive` marks. This process owns the files and the ML venv
 (torch / OpenCLIP stay out of Django).
 
+## Direction (2026-11-10)
+
+The archive is broadening: everything the user watches or listens to is to be
+archived automatically, with exclusions added later. Other sessions are
+building that intake; do not start it here until the user settles it with
+them.
+
+Considered on 2026-11-10 and not being built now:
+
+- A music shelf (ID3 tags and cover art on the MP3s, a Listen page that plays
+  one after another): deferred until the user decides it is worth having.
+- Following creators so their new videos download by themselves: no automatic
+  downloads yet.
+- Finding a moment by describing it (CLIP vectors of every shot, transcripts
+  of every spoken video): not now.
+- Lighter video pages (shot images loaded as you scroll): not now.
+
 ## Docs
 
 | Doc | What it is |
