@@ -7,6 +7,9 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -41,11 +44,77 @@ _LINKS_ELSEWHERE_RE = re.compile(r"No suitable extractor.* found for URL (\S+)")
 _HIDDEN_FROM_GUESTS_RE = re.compile(r"account credentials|No video could be found in this tweet")
 
 
+YT_DLP_UPDATE_DAYS = 7
+YT_DLP_UPDATE_FILE = "yt-dlp-update.txt"  # in the data root: when yt-dlp last asked, and its answer
+_updating = threading.Lock()
+
+
 def yt_dlp_bin() -> str:
+    with _updating:  # a yt-dlp started while it replaces itself would read half of each file
+        return _yt_dlp_path()
+
+
+def _yt_dlp_path() -> str:
     found = shutil.which("yt-dlp")
     if not found:
         raise FileNotFoundError("yt-dlp not on PATH (expected ~/.local/bin/yt-dlp)")
     return found
+
+
+def keep_yt_dlp_current(data_dir: Path, log=print) -> bool:
+    """`yt-dlp -U` at most once a week (docs/download.md#keeping-yt-dlp-current): YouTube
+    changes often and an old yt-dlp stops downloading. Returns whether it asked."""
+    stamp = data_dir / YT_DLP_UPDATE_FILE
+    try:
+        if time.time() - stamp.stat().st_mtime < YT_DLP_UPDATE_DAYS * 86400:
+            return False
+    except FileNotFoundError:
+        pass
+    with _updating:
+        binary = _yt_dlp_path()
+        if _yt_dlp_running(binary):
+            return False
+        asked = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        stamp.write_text(f"{asked} asking\n", encoding="utf-8")
+        try:
+            done = subprocess.run(
+                [binary, "-U"], capture_output=True, text=True, errors="replace", timeout=300
+            )
+            answer = (done.stdout + done.stderr).strip()
+        except (OSError, subprocess.SubprocessError) as exc:
+            answer = f"failed: {exc}"
+        stamp.write_text(f"{asked}\n{answer}\n", encoding="utf-8")
+    log(f"yt-dlp -U: {answer.splitlines()[-1] if answer else 'no answer'}")
+    return True
+
+
+def keep_yt_dlp_current_hourly(data_dir: Path) -> None:
+    """The service's thread for keep_yt_dlp_current: a week is due at most an hour late, and a
+    week that falls while yt-dlp downloads waits for the next hour."""
+
+    def loop() -> None:
+        while True:
+            try:
+                keep_yt_dlp_current(data_dir, log=lambda message: print(message, flush=True))
+            except Exception:
+                traceback.print_exc()
+            time.sleep(3600)
+
+    threading.Thread(target=loop, name="ytarchive-yt-dlp-update", daemon=True).start()
+
+
+def _yt_dlp_running(binary: str) -> bool:
+    """Whether a yt-dlp process runs: replacing the file under one breaks it, as it reads
+    its own modules from that file as it goes."""
+    names = {binary, os.path.realpath(binary)}
+    for cmdline in Path("/proc").glob("[0-9]*/cmdline"):
+        try:
+            args = cmdline.read_bytes().split(b"\0")[:2]
+        except OSError:
+            continue
+        if any(os.fsdecode(arg) in names for arg in args):
+            return True
+    return False
 
 
 def download(

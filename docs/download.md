@@ -56,9 +56,23 @@ creators and playlists has its own budget and sends the cookies only for the
 user's own Watch later, Liked videos, and private playlists
 ([browsing.md](browsing.md#listing-is-read-only-the-account-only-for-the-users-own-lists)).
 
-Keep `yt-dlp` current (`yt-dlp -U`); an outdated copy prints a
-"To suppress this warning, add --no-update" warning on every run, and YouTube
-changes break old versions.
+## Keeping yt-dlp current (settled 2026-11-10)
+
+YouTube changes often and an old yt-dlp stops downloading (an outdated copy
+also prints "To suppress this warning, add --no-update" on every run). The
+service runs `yt-dlp -U` itself, at most once a week
+(`download.keep_yt_dlp_current`, checked hourly by a thread of its own):
+
+- `data/yt-dlp-update.txt` records when it last asked and yt-dlp's answer;
+  it is written before asking, so restarts and failures never ask twice in a
+  week. One question to GitHub's release list a week, plus the download when
+  there is a new release.
+- It never replaces yt-dlp under a running yt-dlp (a download or a creator
+  listing): the zipapp reads its own modules from its file as it runs. A week
+  that falls during one waits for the next hour, and no yt-dlp starts while
+  it updates (`yt_dlp_bin` waits).
+- Only the standalone zipapp can update itself; a copy installed with pip
+  answers that pip must update it, and that answer is what the file records.
 
 ## X tweets (settled 2026-10-25)
 

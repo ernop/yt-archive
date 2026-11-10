@@ -19,7 +19,7 @@ history and `to_archive` marks. This process owns the files and the ML venv
 |-----|------------|
 | [README.md](README.md) | Public GitHub intro — what this is, how to invoke it |
 | [docs/setup.md](docs/setup.md) | New-machine install, `.venv`, the media player copy, live service |
-| [docs/download.md](docs/download.md) | yt-dlp flags, cookies, JS runtime; X tweets (`x-<tweet id>`, no account unless X hides the tweet, own budgets) — settled, do not reinvent |
+| [docs/download.md](docs/download.md) | yt-dlp flags, cookies, JS runtime, its weekly self-update; X tweets (`x-<tweet id>`, no account unless X hides the tweet, own budgets) — settled, do not reinvent |
 | [docs/framesheets.md](docs/framesheets.md) | Shot pipeline, thresholds, rejected approaches |
 | [docs/browsing.md](docs/browsing.md) | Download queue panel, archive status and update, single-line list rows, order and sort, creator pages, the picker for YouTube creators and playlists (and which lists use your account) and X profiles (with your X login, via gallery-dl), the hourly YouTube and X request budgets, text contrast, the video page and player |
 | [docs/bookmarklet.md](docs/bookmarklet.md) | The **+ ytarchive** bookmarklet: queue the YouTube page or tweet you're on, its key, why a pop-up |
@@ -108,6 +108,10 @@ list/search does not re-read every `archive.json`. `./yt reindex` rebuilds it.
 `data/bookmarklet.key` is the bookmarklet's secret (see
 [docs/bookmarklet.md](docs/bookmarklet.md)); it is not rebuildable from the
 archive, only replaceable.
+
+`data/yt-dlp-update.txt` records when the service last ran `yt-dlp -U` and
+its answer, so it asks at most once a week
+([docs/download.md](docs/download.md#keeping-yt-dlp-current-settled-2026-11-10)).
 
 `YT_ARCHIVE_DATA` overrides the data root. Default is `./data`.
 

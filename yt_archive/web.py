@@ -2158,10 +2158,12 @@ def serve(data_dir: Path | None = None, host: str = "127.0.0.1", port: int = 876
     data_dir = (data_dir or default_data_dir()).resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
     from .db import db_path, rebuild
+    from .download import keep_yt_dlp_current_hourly
 
     n = rebuild(data_dir)
     queue = JobQueue(data_dir)
     work_queue = DerivedWorkQueue(data_dir)
+    keep_yt_dlp_current_hourly(data_dir)
     httpd = ThreadingHTTPServer(
         (host, port), make_handler(data_dir, queue, work_queue)
     )
