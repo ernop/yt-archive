@@ -72,3 +72,7 @@ The video detail page can run transcription on demand, search and seek by
 spoken word, show a playback-following transcript, assign speaker groups, and
 enable the generated WebVTT as actual player captions. See
 [docs/transcription.md](docs/transcription.md).
+
+## License
+
+MIT; see [LICENSE](LICENSE).
