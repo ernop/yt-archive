@@ -65,7 +65,8 @@ result per video (`videos.needs`) so the bar costs one query.
 ## Archive list
 
 One single-line row per video: list thumbnail, title, creator, length, shot
-count, upload date, and when it was gotten (local time, `YYYY-MM-DD HH:MM`).
+count, upload date, when it was gotten (local time, `YYYY-MM-DD HH:MM`), and
+how it was first asked for ([Added by](#added-by-settled-2026-11-10)).
 Numbers and dates are monospaced and right-aligned so they line up. A video
 with an open job shows an **updating** marker. The creator column is dropped
 on creator pages, and narrow screens keep thumbnail, title, and length.
@@ -74,6 +75,39 @@ The thumbnail is `_condensed/preview.jpg` (sheet 1 resized to 480 px wide,
 tens of KB) or, until that exists, the YouTube thumbnail downloaded with the
 video. The list never loads a full framesheet: those are up to hundreds of
 megapixels each, and the list once pulled about 1.5 GB of PNGs per load.
+
+## Added by (settled 2026-11-10)
+
+The archive list's last column names the route of the **first** request for
+each video. Later requests leave it alone.
+
+| Column | First request came from |
+|--------|-------------------------|
+| Played | a local player watcher, when the video started playing |
+| Bookmarklet | the **+ ytarchive** pop-up ([bookmarklet.md](bookmarklet.md)) |
+| Pasted | the home page's paste box |
+| Picker | the YouTube or X picker |
+| Matthoom | Matthoom |
+| Command line | `./yt get` |
+| Not recorded | before routes were kept (videos archived before November 10, 2026), or a request that named no route |
+
+A request names its route with `"via"` on `POST /api/get`:
+
+```bash
+curl -s -X POST localhost:8765/api/get -H 'Content-Type: application/json' \
+  -d '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "via": "played"}'
+```
+
+Values are `played`, `bookmarklet`, `pasted`, `picker`, `matthoom`, `cli`;
+anything else is refused with 400 before anything is queued. Retry, Redo,
+**Create MP3 audio** and **Update N videos** send none: they redo a video,
+they do not add one.
+
+The route is kept in the catalog's `video_adds` table from the first request
+on, and the download copies it into the video's `archive.json` as `added_via`
+and `added_at`, so a rebuilt catalog shows it again. A video that already has
+an `archive.json` without a route was archived before routes were kept; a new
+request for it is not its first, so nothing is recorded.
 
 ## List order
 
@@ -367,6 +401,31 @@ channels; it is left out when the title already names one (`Artist - Song`,
 a tweet's `Name - text`) or contains the channel name. The name keeps to
 `[A-Za-z0-9._-]` like every filename here, so a title with no Latin letters
 leaves just `<id>.mp3`.
+
+## Lyrics (settled 2026-11-10)
+
+A local client that finds a song's lyrics (a lyrics overlay, say) can hand
+them to the archive:
+
+```bash
+curl -s -X POST localhost:8765/api/lyrics -H 'Content-Type: application/json' \
+  -d '{"video_id": "dQw4w9WgXcQ", "lrc": "[00:01.00]first line\n"}'
+```
+
+`lrc` is the text of an LRC file (timed `[mm:ss.xx]` lines, or plain lines),
+at most 256 KB; `null` removes the video's lyrics. The answer's `lyrics` is
+`saved`, `pending`, or `removed`.
+
+- A video on disk gets `_condensed/soundtrack.lrc` at once. It sits beside
+  `soundtrack.mp3` under the same name, which is where music players look
+  for an LRC, and the video page offers **download lyrics** next to
+  **download MP3 audio**, named like the MP3 (`<artist>_-_<title>-<id>.lrc`).
+- Lyrics for a video not downloaded yet wait in the catalog's
+  `pending_lyrics` table (`pending`). The video's job writes the file when it
+  finishes, and its summary ends with `lyrics`. Waiting lyrics never create
+  the video's folder, since any folder named like a video ID is a list row.
+- Newer lyrics replace older ones; the file is written to a temporary name
+  and renamed, so a reader never sees half of it.
 
 ## Video and audio player
 

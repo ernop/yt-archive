@@ -67,6 +67,7 @@ class BookmarkletTests(unittest.TestCase):
         self.assertIn('data-url="https://www.youtube.com/watch?v=choose00001&amp;t=5"', html)
         self.assertIn('<p class="add-title">A &lt;b&gt;video&lt;/b&gt;</p>', html)
         self.assertIn("fetch('/api/get'", html)
+        self.assertIn("via: 'bookmarklet'", html)
         self.assertIn("window.close()", html)
         self.assertEqual(db.list_jobs(self.data), [])
 

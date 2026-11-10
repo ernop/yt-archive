@@ -300,6 +300,10 @@ def write_archive_json(data_dir: Path, video_id: str, video: Path, extra: dict |
         if kept:
             prev["downloaded_at"] = kept
         payload = prev
+    if "added_via" not in payload:
+        from .db import first_add
+
+        payload.update(first_add(data_dir, video_id))
     _atomic_json(out, payload)
     from .db import upsert
 

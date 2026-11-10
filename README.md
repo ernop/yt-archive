@@ -49,6 +49,7 @@ data/<id>/
     framesheet.png                      # framesheet-1.png, -2.png … past 250 shots
     preview.jpg                         # small copy of sheet 1 for the archive list
     soundtrack.mp3
+    soundtrack.lrc                      # optional, lyrics a local client sent
     transcript.json                     # optional, explicit local Whisper run
     transcript.vtt                      # selectable captions
     grab-Some_Title-00h01m23s450.png   # optional, player `s` / grab

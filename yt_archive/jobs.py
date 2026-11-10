@@ -10,6 +10,7 @@ from .audio import dump_soundtrack
 from .download import clear_archive_extras, download
 from .framesheet import ensure_preview, make_shots, retile_sheets
 from .locks import try_video_lock
+from .lyrics import place_pending_lyrics
 from .paths import (
     VIDEO_ID_RE,
     archive_needs,
@@ -54,38 +55,52 @@ class JobQueue:
             with self._cv:
                 self._cv.notify()
 
-    def submit(self, url: str, *, force_video: bool = False, force_shots: bool = False) -> dict:
+    def submit(
+        self, url: str, *, force_video: bool = False, force_shots: bool = False, via: str | None = None
+    ) -> dict:
         """Queue a video. Without force, an open job is reused and an up-to-date video
-        is reported as complete instead of queueing a job that would do nothing."""
+        is reported as complete instead of queueing a job that would do nothing.
+        `via` names how a video was asked for (db.ADD_ROUTES); a redo of an archived video
+        passes none."""
         video_id = parse_video_id(url)
+        if via is not None:
+            db.check_add_route(via)
         if force_video:
             force_shots = True
         with self._cv:
-            if not force_video and not force_shots:
-                existing = db.find_open_job(self.data_dir, video_id)
-                if existing:
-                    return {**existing, "existing": True}
-                if find_video_file(self.data_dir, video_id) and not archive_needs(
-                    self.data_dir, video_id
-                ):
-                    info = load_archive_info(self.data_dir, video_id)
-                    return {"status": "complete", "video_id": video_id,
-                            "title": info.get("title") or ""}
-            job = db.insert_job(
-                self.data_dir,
-                url.strip() or watch_url(video_id),
-                video_id,
-                force_video=force_video,
-                force_shots=force_shots,
-            )
-            self._cv.notify()
+            result = self._submit_locked(url, video_id, force_video, force_shots)
+            if via is not None:
+                db.note_first_add(self.data_dir, video_id, via)
+        return result
+
+    def _submit_locked(self, url: str, video_id: str, force_video: bool, force_shots: bool) -> dict:
+        if not force_video and not force_shots:
+            existing = db.find_open_job(self.data_dir, video_id)
+            if existing:
+                return {**existing, "existing": True}
+            if find_video_file(self.data_dir, video_id) and not archive_needs(
+                self.data_dir, video_id
+            ):
+                info = load_archive_info(self.data_dir, video_id)
+                return {"status": "complete", "video_id": video_id,
+                        "title": info.get("title") or ""}
+        job = db.insert_job(
+            self.data_dir,
+            url.strip() or watch_url(video_id),
+            video_id,
+            force_video=force_video,
+            force_shots=force_shots,
+        )
+        self._cv.notify()
         return job
 
-    def submit_many(self, video_ids: list[str], titles: dict[str, str] | None = None) -> dict:
+    def submit_many(
+        self, video_ids: list[str], titles: dict[str, str] | None = None, *, via: str
+    ) -> dict:
         if any(not isinstance(vid, str) or not (VIDEO_ID_RE.fullmatch(vid) or is_tweet(vid)) for vid in video_ids):
             raise ValueError("Invalid video ID in selection.")
         with self._cv:
-            result = db.enqueue_missing_videos(self.data_dir, video_ids, titles)
+            result = db.enqueue_missing_videos(self.data_dir, video_ids, titles, via=via)
             self._cv.notify()
         return result
 
@@ -203,6 +218,10 @@ class JobQueue:
             else:
                 skip("audio")
                 log("soundtrack already exists")
+
+            if place_pending_lyrics(self.data_dir, video_id):
+                did["lyrics"] = "lyrics"
+                log("saved the lyrics that arrived before the video")
 
             db.upsert(self.data_dir, video_id)
             db.finish_job(self.data_dir, job_id, message=" · ".join(did.values()) or "already complete")

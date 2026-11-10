@@ -95,6 +95,7 @@ data/<id>/
     framesheet.png          # or framesheet-1.png, framesheet-2.png … (docs/framesheets.md)
     preview.jpg             # sheet 1 at 480 px wide, for the archive list
     soundtrack.mp3
+    soundtrack.lrc          # lyrics a local client sent (docs/browsing.md, "Lyrics")
     transcript.json
     transcript.vtt
     shots.json

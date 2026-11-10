@@ -460,4 +460,4 @@ class CreatorBrowser:
                 raise ValueError("Select available videos from this list.")
             selected = list(dict.fromkeys(video_ids))
         titles = {row["video_id"]: row["title"] for row in listing["items"]}
-        return self.queue.submit_many(selected, titles)
+        return self.queue.submit_many(selected, titles, via="picker")

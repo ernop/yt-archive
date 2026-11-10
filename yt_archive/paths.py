@@ -117,6 +117,11 @@ def soundtrack_path(data_dir: Path, video_id: str) -> Path:
     return condensed_dir(data_dir, video_id) / "soundtrack.mp3"
 
 
+def lyrics_path(data_dir: Path, video_id: str) -> Path:
+    """Beside soundtrack.mp3 under the same name, where music players look for an LRC."""
+    return condensed_dir(data_dir, video_id) / "soundtrack.lrc"
+
+
 def preview_path(data_dir: Path, video_id: str) -> Path:
     """Small JPEG of the first framesheet, for list rows."""
     return condensed_dir(data_dir, video_id) / "preview.jpg"

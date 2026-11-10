@@ -5,9 +5,11 @@ import argparse
 import json
 from pathlib import Path
 
+from . import db
 from .audio import dump_soundtrack
 from .download import download
 from .framesheet import make_shots
+from .lyrics import place_pending_lyrics
 from .paths import default_data_dir, find_video_file, parse_video_id
 from .transcribe import MODELS, transcribe_soundtrack
 from .web import serve
@@ -98,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _get(data_dir: Path, target: str, sim: float, skip_shots: bool) -> int:
     video_id = parse_video_id(target)
+    db.note_first_add(data_dir, video_id, "cli")
     video = download(video_id, data_dir)
     print(f"video: {video} ({video.stat().st_size / 1e6:.1f} MB)")
     if not skip_shots:
@@ -106,6 +109,8 @@ def _get(data_dir: Path, target: str, sim: float, skip_shots: bool) -> int:
     mp3 = dump_soundtrack(video, data_dir, video_id)
     if mp3:
         print(f"MP3 audio: {mp3} ({mp3.stat().st_size / 1e6:.1f} MB)")
+    if place_pending_lyrics(data_dir, video_id):
+        print("lyrics: saved beside the MP3 audio")
     print(f"browse: /v/{video_id}")
     return 0
 

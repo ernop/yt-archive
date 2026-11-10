@@ -16,7 +16,9 @@ from .budget import BudgetExceeded
 from .creators import CreatorBrowser, browse_url, playlist_browse_url
 from .db import list_creator_videos, normalize_video_sort
 from .jobs import JobQueue
+from .lyrics import MAX_LYRICS_BYTES, store_lyrics
 from .paths import (
+    VIDEO_ID_RE,
     all_labeled_path,
     bookmarklet_key,
     condensed_dir,
@@ -30,6 +32,7 @@ from .paths import (
     list_items,
     load_archive_info,
     media_url,
+    lyrics_path,
     mp3_filename,
     parse_video_id,
     read_shots_json,
@@ -147,10 +150,10 @@ a.qtitle:hover { text-decoration: underline; }
 #update-status:empty { display: none; }
 
 .vlist { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-.vrow { display: grid; grid-template-columns: 8rem minmax(0, 6fr) minmax(0, 2.2fr) 5.5rem 4.5rem 7rem 11rem;
+.vrow { display: grid; grid-template-columns: 8rem minmax(0, 6fr) minmax(0, 2.2fr) 5.5rem 4.5rem 7rem 11rem 7.5rem;
   gap: .9rem; align-items: center; padding: .3rem .8rem .3rem .3rem; border-top: 1px solid #262626;
   white-space: nowrap; }
-.vlist.no-creator .vrow { grid-template-columns: 8rem minmax(0, 6fr) 5.5rem 4.5rem 7rem 11rem; }
+.vlist.no-creator .vrow { grid-template-columns: 8rem minmax(0, 6fr) 5.5rem 4.5rem 7rem 11rem 7.5rem; }
 .vrow:first-child { border-top: 0; }
 .vrow:not(.vhead):hover { background: #111; }
 .vrow > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -165,6 +168,8 @@ a.qtitle:hover { text-decoration: underline; }
 .vrow .n { font: 700 1rem var(--mono); font-variant-numeric: tabular-nums; }
 .vrow .d { font: 600 .92rem var(--mono); font-variant-numeric: tabular-nums; }
 .vhead .n, .vhead .d { font: 800 .95rem system-ui, sans-serif; }
+.vrow .a { font-weight: 600; font-size: .92rem; }
+.vhead .a { font-weight: 800; font-size: .95rem; }
 .vrow .busy { color: #fff; font-weight: 800; font-size: .8rem; margin-left: .5rem; padding: .05rem .4rem;
   border: 1px solid #fff; border-radius: 999px; }
 .meta { color: var(--muted); font-size: .85rem; }
@@ -259,7 +264,7 @@ dialog .primary { background: #2e7441; border-color: #4a9d61; font-weight: 700; 
   .sort-field select { width: 100%; }
   .vrow, .vlist.no-creator .vrow { grid-template-columns: 5.5rem minmax(0, 1fr) 4.5rem; }
   .vrow .thumb img, .vrow .thumb .ph { width: 5.5rem; }
-  .vrow > .c, .vrow > .s, .vrow > .u, .vrow > .g { display: none; }
+  .vrow > .c, .vrow > .s, .vrow > .u, .vrow > .g, .vrow > .a { display: none; }
   .qrow { grid-template-columns: 5.5rem minmax(0, 1fr) auto; }
   .qrow > .qdetail, .qrow > .qtime { display: none; }
   .segment { grid-template-columns: 4.6rem 6rem minmax(0, 1fr); gap: .5rem; }
@@ -389,7 +394,7 @@ def _creator_url(item: dict) -> str:
 LIST_HEAD = (
     '<div class="vrow vhead"><span></span><span>Title</span>{creator}'
     '<span class="n">Length</span><span class="n s">Shots</span>'
-    '<span class="d u">Uploaded</span><span class="d g">Got</span></div>'
+    '<span class="d u">Uploaded</span><span class="d g">Got</span><span class="a">Added by</span></div>'
 )
 
 
@@ -419,7 +424,8 @@ def _video_row_html(item: dict, *, show_creator: bool = True, busy: frozenset = 
         f'<span class="n">{_esc(_clock(item.get("duration")))}</span>'
         f'<span class="n s">{_esc(shots)}</span>'
         f'<span class="d u">{_esc(_upload_date(item.get("upload_date")))}</span>'
-        f'<span class="d g">{_time_html(item.get("downloaded_at") or "")}</span></div>'
+        f'<span class="d g">{_time_html(item.get("downloaded_at") or "")}</span>'
+        f'<span class="a">{_esc(db.ADD_ROUTES.get(item.get("added_via") or "", "Not recorded"))}</span></div>'
     )
 
 
@@ -590,7 +596,7 @@ form.addEventListener('submit', async (e) => {
   creators.replaceChildren();
   for (const url of urls) {
     try {
-      const data = await post('/api/get', {url});
+      const data = await post('/api/get', {url, via: 'pasted'});
       if (data.browse_url) {
         if (urls.length === 1) { window.location.assign(data.browse_url); return; }
         const link = document.createElement('a');
@@ -961,7 +967,7 @@ const detail = document.getElementById('add-detail');
     const res = await fetch('/api/get', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({url: box.dataset.url}),
+      body: JSON.stringify({url: box.dataset.url, via: 'bookmarklet'}),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || res.statusText);
@@ -1091,10 +1097,16 @@ shift-click a shot to open its PNG · ? lists every key</p>
     soundtrack_bits = ['<div class="soundtrack">']
     if mp3.is_file():
         mp3_name = mp3_filename(vid, info.get("title") or "", info.get("channel") or "")
+        lrc = lyrics_path(data_dir, vid)
+        lyrics_link = (
+            f' · <a href="{_esc(media_url(data_dir, lrc))}" download="{_esc(mp3_name.removesuffix(".mp3"))}.lrc">'
+            'download lyrics</a>'
+            if lrc.is_file() else ""
+        )
         soundtrack_bits.append(
             f'<h2>MP3 audio</h2>'
             f'<p class="meta"><a href="{_esc(media_url(data_dir, mp3))}" download="{_esc(mp3_name)}">'
-            'download MP3 audio</a></p>'
+            f'download MP3 audio</a>{lyrics_link}</p>'
             f'<audio controls preload="metadata" src="{_esc(media_url(data_dir, mp3))}" data-media-player '
             f'data-title="{_esc(f"MP3 audio: {title}")}"></audio>'
         )
@@ -1835,6 +1847,8 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 return self._open_folder()
             if parsed.path == "/api/grab":
                 return self._grab(parsed)
+            if parsed.path == "/api/lyrics":
+                return self._lyrics()
             if parsed.path != "/api/get":
                 return self.send_error(404)
             length = int(self.headers.get("Content-Length") or 0)
@@ -1852,14 +1866,17 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
             url = url.strip()
             force_video = bool(payload.get("force_video"))
             force_shots = bool(payload.get("force_shots"))
+            via = payload.get("via")
             try:
+                if via is not None:
+                    db.check_add_route(via)
                 try:
                     parse_video_id(url)
                 except ValueError:
                     if force_video or force_shots:
                         raise
                     return self._json({"browse_url": browse_url(url)})
-                job = queue.submit(url, force_video=force_video, force_shots=force_shots)
+                job = queue.submit(url, force_video=force_video, force_shots=force_shots, via=via)
             except ValueError as exc:
                 return self._json({"error": str(exc)}, 400)
             queued = job.get("status") != "complete" and not job.get("existing")
@@ -1867,6 +1884,26 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
             if playlist_browse_url(url):
                 result["playlist_browse_url"] = playlist_browse_url(url)
             return self._json(result, 202 if queued else 200)
+
+        def _lyrics(self):
+            """A local client's lyrics for a video; null removes them (docs/browsing.md, "Lyrics")."""
+            payload = self._read_json(max_bytes=MAX_LYRICS_BYTES + 4096)
+            if payload is None:
+                return
+            try:
+                video_id = payload.get("video_id")
+                if not isinstance(video_id, str) or not VIDEO_ID_RE.fullmatch(video_id):
+                    raise ValueError("video_id must be a YouTube video id")
+                if "lrc" not in payload:
+                    raise ValueError("lrc is required; null removes the lyrics")
+                lrc = payload["lrc"]
+                if lrc is not None and (not isinstance(lrc, str) or not lrc.strip()):
+                    raise ValueError("lrc must be text or null")
+                if lrc is not None and len(lrc.encode("utf-8")) > MAX_LYRICS_BYTES:
+                    raise ValueError("lrc is too long")
+            except ValueError as exc:
+                return self._json({"error": str(exc)}, 400)
+            return self._json({"video_id": video_id, "lyrics": store_lyrics(data_dir, video_id, lrc)})
 
         def _transcribe(self):
             payload = self._read_json()

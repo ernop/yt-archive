@@ -21,6 +21,8 @@ home page — without leaving the page:
   ([download.md](download.md#x-tweets-settled-2026-10-25)).
 - Clicking it again on the same video does not queue a second job; the
   existing queued or running job is reused.
+- A video first asked for this way shows **Bookmarklet** in the archive list's
+  Added by column ([browsing.md](browsing.md#added-by-settled-2026-11-10)).
 
 The bookmarklet sends the page's address and title only to this archive.
 It opens the pop-up at whatever address the home page was loaded from

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .paths import (
+    archive_json_path,
     card_thumb_path,
     find_video_file,
     list_archived_ids,
@@ -50,9 +51,22 @@ CREATE TABLE IF NOT EXISTS videos (
   has_framesheet INTEGER NOT NULL DEFAULT 0,
   has_soundtrack INTEGER NOT NULL DEFAULT 0,
   has_transcript INTEGER NOT NULL DEFAULT 0,
-  needs TEXT NOT NULL DEFAULT ''
+  needs TEXT NOT NULL DEFAULT '',
+  added_via TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS videos_by_time ON videos(downloaded_at DESC);
+
+CREATE TABLE IF NOT EXISTS video_adds (
+  video_id TEXT PRIMARY KEY,
+  via TEXT NOT NULL,
+  added_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS pending_lyrics (
+  video_id TEXT PRIMARY KEY,
+  lrc TEXT NOT NULL,
+  received_at TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY,
@@ -175,6 +189,7 @@ _MIGRATIONS = {
         ("has_soundtrack", "INTEGER NOT NULL DEFAULT 0"),
         ("has_transcript", "INTEGER NOT NULL DEFAULT 0"),
         ("needs", "TEXT NOT NULL DEFAULT ''"),
+        ("added_via", "TEXT NOT NULL DEFAULT ''"),
     ),
     "jobs": (
         ("audio", "TEXT NOT NULL DEFAULT 'pending'"),
@@ -221,6 +236,7 @@ def _row_from_info(info: dict) -> dict:
         "has_soundtrack": 1 if info.get("has_soundtrack") else 0,
         "has_transcript": 1 if info.get("has_transcript") else 0,
         "needs": ",".join(info.get("needs") or []),
+        "added_via": info.get("added_via") or "",
     }
 
 
@@ -228,6 +244,7 @@ _VIDEO_COLUMNS = (
     "video_id", "title", "channel", "channel_id", "duration", "upload_date",
     "description", "video_file", "file_size", "downloaded_at", "shots_detected",
     "shots_kept", "has_video", "has_framesheet", "has_soundtrack", "has_transcript", "needs",
+    "added_via",
 )
 _UPSERT_VIDEO = (
     f"INSERT INTO videos ({', '.join(_VIDEO_COLUMNS)}) "
@@ -404,6 +421,7 @@ def _public(row: sqlite3.Row) -> dict:
         "has_soundtrack": bool(row["has_soundtrack"]),
         "has_transcript": bool(row["has_transcript"]),
         "needs": [need for need in (row["needs"] or "").split(",") if need],
+        "added_via": row["added_via"] or "",
     }
 
 
@@ -525,6 +543,87 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# How a video was first asked for, and its label in the archive list (docs/browsing.md, "Added by").
+ADD_ROUTES = {
+    "played": "Played",
+    "bookmarklet": "Bookmarklet",
+    "pasted": "Pasted",
+    "picker": "Picker",
+    "matthoom": "Matthoom",
+    "cli": "Command line",
+}
+
+
+def check_add_route(via: str) -> str:
+    if not isinstance(via, str) or via not in ADD_ROUTES:
+        raise ValueError(f"via must be one of: {', '.join(ADD_ROUTES)}")
+    return via
+
+
+def note_first_add(data_dir: Path, video_id: str, via: str) -> None:
+    """Keep the route of the first request for a video; later requests leave it alone."""
+    check_add_route(via)
+    # Archived before routes were kept: its first request is unknown, and this one is not it.
+    if archive_json_path(data_dir, video_id).exists():
+        return
+    conn = connect(data_dir)
+    try:
+        _note_first_add_conn(conn, video_id, via)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _note_first_add_conn(conn: sqlite3.Connection, video_id: str, via: str) -> None:
+    conn.execute(
+        "INSERT OR IGNORE INTO video_adds (video_id, via, added_at) VALUES (?, ?, ?)",
+        (video_id, via, _now()),
+    )
+
+
+def first_add(data_dir: Path, video_id: str) -> dict:
+    """The archive.json fields for the first request, or {} when none was kept."""
+    conn = connect(data_dir)
+    try:
+        row = conn.execute(
+            "SELECT via, added_at FROM video_adds WHERE video_id=?", (video_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    return {"added_via": row["via"], "added_at": row["added_at"]} if row else {}
+
+
+def save_pending_lyrics(data_dir: Path, video_id: str, lrc: str) -> None:
+    conn = connect(data_dir)
+    try:
+        conn.execute(
+            "INSERT INTO pending_lyrics (video_id, lrc, received_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(video_id) DO UPDATE SET lrc=excluded.lrc, received_at=excluded.received_at",
+            (video_id, lrc, _now()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def pending_lyrics(data_dir: Path, video_id: str) -> str | None:
+    conn = connect(data_dir)
+    try:
+        row = conn.execute("SELECT lrc FROM pending_lyrics WHERE video_id=?", (video_id,)).fetchone()
+    finally:
+        conn.close()
+    return row["lrc"] if row else None
+
+
+def drop_pending_lyrics(data_dir: Path, video_id: str) -> None:
+    conn = connect(data_dir)
+    try:
+        conn.execute("DELETE FROM pending_lyrics WHERE video_id=?", (video_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _job_public(row: sqlite3.Row, *, with_log: bool = True) -> dict:
     keys = row.keys()
     download = row["download"]
@@ -627,9 +726,10 @@ def get_job(data_dir: Path, job_id: str) -> dict | None:
 
 
 def enqueue_missing_videos(
-    data_dir: Path, video_ids: list[str], titles: dict[str, str] | None = None
+    data_dir: Path, video_ids: list[str], titles: dict[str, str] | None = None, *, via: str
 ) -> dict:
     """Atomically queue a creator selection, skipping saved and open videos."""
+    check_add_route(via)
     titles = titles or {}
     conn = connect(data_dir)
     queued, skipped = [], []
@@ -650,6 +750,8 @@ def enqueue_missing_videos(
                 (uuid.uuid4().hex[:12], watch_url(video_id), video_id,
                  str(titles.get(video_id) or "")[:500], now, now),
             )
+            if not archive_json_path(data_dir, video_id).exists():
+                _note_first_add_conn(conn, video_id, via)
             queued.append(video_id)
         conn.commit()
     except Exception:
