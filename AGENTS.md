@@ -167,9 +167,11 @@ to say "commit and push". When the work is done and verified:
    `yt-archive.service`. A restart re-queues the running job, which then
    redoes its current step, and starts a running transcript over; queued jobs
    survive. So first wait until nothing is running:
-   `sqlite3 -readonly data/ytarchive.sqlite "SELECT count(*) FROM jobs WHERE status='running' UNION ALL SELECT count(*) FROM work_jobs WHERE status='running'"`
-   prints `0` twice. If the running job will take long, report the restart
-   as pending instead of waiting. Then
+   `sqlite3 -readonly -cmd ".timeout 5000" data/ytarchive.sqlite "SELECT (SELECT count(*) FROM jobs WHERE status='running') + (SELECT count(*) FROM work_jobs WHERE status='running')"`
+   prints `0`. Make the restart depend on that output (`[ "$(…)" = 0 ] &&
+   systemctl …`): anything else, an error included, means wait. A busy
+   queue locks the file for moments, hence the timeout. If the running job
+   will take long, report the restart as pending instead of waiting. Then
    `systemctl --user restart yt-archive.service`, and check that a page showing
    the change answers (the service takes up to half a minute to come up).
    Docs-only and test-only changes need no restart. If the unit is not
