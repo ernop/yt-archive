@@ -12,8 +12,9 @@ from yt_archive import db
 from yt_archive.download import parse_progress
 from yt_archive.framesheet import _sheet_chunk_sizes, retile_sheets
 from yt_archive.jobs import JobQueue
-from yt_archive.paths import archive_needs, card_thumb_path, framesheet_paths, preview_path
-from yt_archive.web import _byte_range, detail_html, load_archive_info, make_handler
+from yt_archive.paths import archive_needs, card_thumb_path, framesheet_paths, load_archive_info, preview_path
+from yt_archive.web import detail_html, make_handler
+from yt_archive.web.server import _byte_range
 
 CURRENT = {"compare": "last-kept", "sample": "change"}
 

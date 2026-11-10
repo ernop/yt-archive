@@ -10,8 +10,8 @@ from unittest.mock import Mock, patch
 from yt_archive import db
 from yt_archive.download import write_archive_json
 from yt_archive.lyrics import MAX_LYRICS_BYTES, place_pending_lyrics
-from yt_archive.paths import lyrics_path
-from yt_archive.web import detail_html, load_archive_info, make_handler
+from yt_archive.paths import load_archive_info, lyrics_path
+from yt_archive.web import detail_html, make_handler
 
 from page_text import with_static
 from test_queue import fake_queue, make_video

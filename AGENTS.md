@@ -119,6 +119,24 @@ data/<id>/
     shots/0000.png …
 ```
 
+Code, in `yt_archive/`:
+
+```
+cli.py                 ./yt commands
+web/                   the service: server.py (routes, JSON API, media), home.py, video.py,
+                       creator.py (creator pages, /browse picker), add.py (bookmarklet pop-up),
+                       html.py (page frame, list rows, formatters)
+static/                stylesheets and page scripts (app.css, home.js, video-page.js, …),
+                       the media player copy; a page's values reach its scripts as #page-data JSON
+jobs.py                download queue: download, shots, MP3 audio, lyrics
+work.py                transcript queue; transcribe.py runs Whisper (gpu_gate.py: the GPU gate)
+download.py            yt-dlp, and its weekly self-update
+framesheet.py          shots and framesheets; audio.py the MP3; lyrics.py
+creators.py            YouTube listings for the picker; x_profiles.py X profiles
+db.py                  SQLite catalog and job tables; paths.py layout, ids, names
+budget.py              hourly request budgets; locks.py per-video locks
+```
+
 Files are the source of truth. `data/ytarchive.sqlite` is a catalog so
 list/search does not re-read every `archive.json`. `./yt reindex` rebuilds it.
 

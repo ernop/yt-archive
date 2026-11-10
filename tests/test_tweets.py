@@ -14,11 +14,12 @@ from yt_archive.jobs import JobQueue
 from yt_archive.paths import (
     is_tweet,
     list_archived_ids,
+    load_archive_info,
     parse_video_id,
     site_name,
     watch_url,
 )
-from yt_archive.web import load_archive_info, make_handler
+from yt_archive.web import make_handler
 
 TWEET = "x-1234567890123456789"
 LOGIN_REQUIRED = (
