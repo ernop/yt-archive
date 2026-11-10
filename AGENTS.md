@@ -23,7 +23,7 @@ history and `to_archive` marks. This process owns the files and the ML venv
 | [docs/framesheets.md](docs/framesheets.md) | Shot pipeline, thresholds, rejected approaches |
 | [docs/browsing.md](docs/browsing.md) | Download queue panel, archive status and update, single-line list rows, order and sort, creator pages, the picker for YouTube creators and playlists (and which lists use your account) and X profiles (with your X login, via gallery-dl), the hourly YouTube and X request budgets, text contrast, the video page and player |
 | [docs/bookmarklet.md](docs/bookmarklet.md) | The **+ ytarchive** bookmarklet: queue the YouTube page or tweet you're on, its key, why a pop-up |
-| [docs/transcription.md](docs/transcription.md) | Explicit local Whisper jobs, timed transcript UI, captions, speakers |
+| [docs/transcription.md](docs/transcription.md) | Explicit local Whisper jobs, the GPU gate they hold, timed transcript UI, captions, speakers |
 
 Every durable note in this repo is in that list or linked from one of those
 files. Do not leave decisions only in chat.
@@ -173,6 +173,9 @@ restart; **pdeploy** is ppush plus step 3.
   `x-listing` budget ([docs/browsing.md](docs/browsing.md#x-profiles-settled-2026-11-06)).
   Never send that login with any other X request without the user's explicit
   approval.
+- Anything on the GPU holds matthoom's GPU gate first, with a measured claim
+  ([docs/transcription.md](docs/transcription.md#the-gpu-gate)). Whisper is
+  the only GPU work today; shots run CLIP on the processor.
 - Shot and download recipes are settled. Read [docs/download.md](docs/download.md)
   and [docs/framesheets.md](docs/framesheets.md) before changing either.
   Do not reintroduce the rejected approaches.

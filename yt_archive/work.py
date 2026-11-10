@@ -10,7 +10,7 @@ from pathlib import Path
 from . import db
 from .locks import video_lock
 from .paths import parse_video_id, soundtrack_path, transcript_json_path
-from .transcribe import normalize_config, transcribe_soundtrack
+from .transcribe import normalize_config, transcribe_in_child
 
 
 class DerivedWorkQueue:
@@ -103,7 +103,7 @@ class DerivedWorkQueue:
                 raise RuntimeError(
                     "MP3 audio changed after this job was queued; start transcription again"
                 )
-            transcribe_soundtrack(
+            transcribe_in_child(
                 self.data_dir,
                 job["video_id"],
                 job["config"],

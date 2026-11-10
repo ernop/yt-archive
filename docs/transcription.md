@@ -44,6 +44,45 @@ between file publication and the SQLite transaction.
 Re-downloading a video invalidates its MP3 and transcript artifacts so stale
 captions are not shown against new media.
 
+## The GPU gate
+
+Settled 2026-11-10. Every program on this computer that puts anything on the
+GPU holds it through matthoom's gate first (`core/utils/gpu.py`, explained in
+matthoom's `docs/GPU.md`), so none runs out of GPU memory beside another and
+the most urgent work goes first. Whisper is ytarchive's only GPU work: shots
+run CLIP on the processor.
+
+- **A process of its own.** The service runs each transcription as
+  `python -m yt_archive.transcribe <job>` (`transcribe_in_child`). The CUDA
+  libraries and their GPU memory go when it ends, so the service itself never
+  holds the GPU, and a crash in them cannot take the service down. The child
+  sends its log and progress back as JSON lines on its standard output; what
+  the libraries print goes to the service's journal.
+- **The hold.** Before loading Whisper on the GPU, the process holds the gate
+  for `Whisper <model>`, 7 GB (`gpu_gate.WHISPER_GB`). It lets go once the
+  model is freed, and the hold ends with the process however it ends. The hold
+  says it lasts 5 minutes plus a tenth of the audio's length.
+- **Measured** with `gpu run` (2026-11-10): large-v3 in float16 had at most
+  4.4 GB on the GPU on 6 minutes of speech and 5.3 GB on 78 minutes, so longer
+  audio reaches a little higher, and the claim keeps 1.7 GB above the longer
+  run. It ran 13.7 and 11.4 times as fast as the audio plays (the second beside
+  a busy processor) after a 4 to 5 s load. The other models are smaller.
+- **Lanes.** A transcript clicked for on the video page is
+  `ytarchive transcripts` in the lane `now`: the user waits on it.
+  `./yt transcribe` is `ytarchive transcribe, run by hand` in `backfill`, as
+  the gate's guide puts every command run by hand.
+- **It waits as long as it takes**, and the transcript panel shows why
+  ("waiting for the GPU: 4.4 GB is free; it needs 7.0"). The gate's rule for
+  a job on a queue is to wait at most 2 minutes so the jobs behind it are not
+  held up; this queue holds only transcripts, which need the GPU too, so
+  nothing behind one could go ahead. The gate alerts the user's desktop when
+  a `now` request waits 15 minutes.
+- A transcript is one item, so it does not step aside partway through: nothing
+  ranks above `now`, and a three-hour recording takes about 16 minutes.
+- On the processor there is no hold. Where the gate is not installed
+  (matthoom not checked out beside this repo), Whisper runs without it;
+  `YT_ARCHIVE_GPU_GATE` points at the gate's file anywhere else.
+
 ## Files
 
 ```

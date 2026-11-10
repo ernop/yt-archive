@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
-from yt_archive import db
+from yt_archive import db, gpu_gate, transcribe
 from yt_archive.paths import transcript_json_path, transcript_vtt_path
 from yt_archive.transcribe import _spoken_text, _timed_spoken_words, normalize_config
 from yt_archive.web import detail_html
@@ -235,6 +238,102 @@ class TranscriptionTests(unittest.TestCase):
             words, "[Music] Hello (birds chirping) again"
         )
         self.assertEqual([word["word"] for word in cleaned], ["Hello", "again"])
+
+
+class GpuGateTests(unittest.TestCase):
+    """Whisper on the GPU waits for the gate before loading and lets go once done
+    (docs/transcription.md#the-gpu-gate)."""
+
+    setUp = TranscriptionTests.setUp
+    tearDown = TranscriptionTests.tearDown
+
+    def _fake_whisper(self, events, cuda_devices=1):
+        class FakeModel:
+            def __init__(self, name, **options):
+                events.append(("load", options["device"]))
+
+            def transcribe(self, path, **options):
+                words = [SimpleNamespace(word=" Hello", start=0, end=1, probability=0.9)]
+                segment = SimpleNamespace(text=" Hello", start=0.0, end=1.0, words=words)
+                return iter([segment]), SimpleNamespace(
+                    duration=80, language="en", language_probability=0.9
+                )
+
+        fake_modules = {
+            "ctranslate2": SimpleNamespace(get_cuda_device_count=lambda: cuda_devices),
+            "faster_whisper": SimpleNamespace(WhisperModel=FakeModel),
+        }
+        return [
+            mock.patch.dict(sys.modules, fake_modules),
+            mock.patch.object(transcribe, "_activate_cuda_libraries", return_value=(True, "")),
+            mock.patch.object(
+                transcribe, "_whisper_model",
+                lambda WhisperModel, name, **options: WhisperModel(name, **options),
+            ),
+        ]
+
+    def _run_with(self, patches):
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+        return transcribe.transcribe_soundtrack(self.data, VIDEO_ID, log=lambda message: None)
+
+    def test_whisper_holds_the_gpu_before_loading_and_lets_go_after(self):
+        events = []
+        gate = SimpleNamespace(
+            hold=lambda what, gb, **options: events.append(("hold", what, gb, options)),
+            let_go=lambda what: events.append(("let go", what)),
+        )
+        patches = self._fake_whisper(events) + [mock.patch.object(gpu_gate, "load", return_value=gate)]
+        artifact = self._run_with(patches)
+        self.assertEqual(artifact["device"], "cuda")
+        self.assertEqual([event[0] for event in events], ["hold", "load", "let go"])
+        _, what, gb, options = events[0]
+        self.assertEqual((what, gb), ("Whisper large-v3", gpu_gate.WHISPER_GB))
+        self.assertEqual(options["lane"], "backfill")
+        self.assertIsNone(options["wait"])
+        self.assertEqual(options["minutes"], gpu_gate.whisper_minutes(80))
+        self.assertEqual(events[2], ("let go", "Whisper large-v3"))
+
+    def test_whisper_on_the_cpu_leaves_the_gate_alone(self):
+        events = []
+        loads = mock.patch.object(gpu_gate, "load", side_effect=AssertionError("no CPU hold"))
+        artifact = self._run_with(self._fake_whisper(events, cuda_devices=0) + [loads])
+        self.assertEqual(artifact["device"], "cpu")
+        self.assertEqual(events, [("load", "cpu")])
+
+    def test_the_gate_is_absent_without_its_file(self):
+        with mock.patch.dict(os.environ, {"YT_ARCHIVE_GPU_GATE": str(self.data / "missing.py")}):
+            self.assertIsNone(gpu_gate.load())
+
+    def test_the_service_hears_the_childs_log_and_progress(self):
+        lines = [
+            '{"log": "loading Whisper large-v3 on cuda"}\n',
+            '{"progress": 0.5, "message": "transcribing 0:40 / 1:20"}\n',
+            "a library's own line\n",
+        ]
+        child = mock.MagicMock(stdout=iter(lines), returncode=0)
+        child.__enter__.return_value = child
+        logged, progressed = [], []
+        with mock.patch.object(transcribe.subprocess, "Popen", return_value=child) as popen:
+            transcribe.transcribe_in_child(
+                self.data, VIDEO_ID, normalize_config(), log=logged.append,
+                progress=lambda value, message: progressed.append((value, message)),
+                work_key="k", source_sha256="s", generation_id="g",
+            )
+        spec = json.loads(popen.call_args.args[0][-1])
+        self.assertEqual(spec["gpu"], gpu_gate.CLICKED)
+        self.assertEqual(logged, ["loading Whisper large-v3 on cuda", "a library's own line"])
+        self.assertEqual(progressed, [(0.5, "transcribing 0:40 / 1:20")])
+
+    def test_a_failed_child_reports_why(self):
+        (self.data / VIDEO_ID / "_condensed" / "soundtrack.mp3").unlink()
+        with self.assertRaisesRegex(RuntimeError, "MP3 audio is missing"):
+            transcribe.transcribe_in_child(
+                self.data, VIDEO_ID, normalize_config(), log=lambda message: None,
+                progress=lambda value, message: None,
+                work_key="k", source_sha256="s", generation_id="g",
+            )
 
 
 if __name__ == "__main__":
