@@ -133,7 +133,9 @@ work.py                transcript queue; transcribe.py runs Whisper (gpu_gate.py
 download.py            yt-dlp, and its weekly self-update
 framesheet.py          shots and framesheets; audio.py the MP3; lyrics.py
 creators.py            YouTube listings for the picker; x_profiles.py X profiles
-db.py                  SQLite catalog and job tables; paths.py layout, ids, names
+db/                    SQLite catalog, used as one module (db.list_videos): core.py (schema,
+                       connections), videos.py, transcripts.py, adds.py, jobs.py, work.py, listings.py
+paths.py               layout, ids, file names
 budget.py              hourly request budgets; locks.py per-video locks
 ```
 

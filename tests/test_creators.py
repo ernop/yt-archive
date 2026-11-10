@@ -653,7 +653,7 @@ class CreatorBrowserTests(unittest.TestCase):
             self.browser.enqueue(listing["lookup_id"], all_items=True)
 
     def test_only_recent_listings_are_kept(self):
-        with patch("yt_archive.db.LISTINGS_KEPT", 2):
+        with patch("yt_archive.db.listings.LISTINGS_KEPT", 2):
             for name in ["One", "Two", "Three"]:
                 url = "https://www.youtube.com/@" + name
                 db.save_listing(self.data, {"id": listing_id(url), "url": url, "kind": "channel", "items": []})
