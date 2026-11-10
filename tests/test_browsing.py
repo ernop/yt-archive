@@ -6,7 +6,9 @@ import unittest
 from pathlib import Path
 
 from yt_archive import db
-from yt_archive.web import CSS, creator_html, home_html
+from yt_archive.web import STATIC_DIR, creator_html, home_html
+
+from page_text import with_static
 
 
 class BrowsingTests(unittest.TestCase):
@@ -98,7 +100,7 @@ class BrowsingTests(unittest.TestCase):
         self.assertEqual(html.count('<div class="vrow">'), 3)
         self.assertIn('<span class="d u">2020-01-01</span>', html)
         # The list refreshes by re-reading this page, not by a second renderer in JS.
-        self.assertIn("refreshArchive", html)
+        self.assertIn("refreshArchive", with_static(html))
         self.assertNotIn("/api/list", html)
 
     def test_list_rows_are_single_line_and_never_load_full_framesheets(self):
@@ -141,12 +143,9 @@ class BrowsingTests(unittest.TestCase):
         self.assertNotIn("Alpha", html)
 
     def test_neutral_ui_text_is_pure_white(self):
-        video_css = (
-            Path(__file__).parents[1] / "yt_archive" / "static" / "video.css"
-        ).read_text(encoding="utf-8")
-        creators_css = (
-            Path(__file__).parents[1] / "yt_archive" / "static" / "creators.css"
-        ).read_text(encoding="utf-8")
+        CSS, video_css, creators_css = (
+            (STATIC_DIR / name).read_text(encoding="utf-8") for name in ("app.css", "video.css", "creators.css")
+        )
         combined = (CSS + video_css + creators_css).lower()
         for forbidden in ("color: #999", "color: #aaa", "color: #bbb",
                           "color: #ccc", "color: #ddd", "color: #eee"):

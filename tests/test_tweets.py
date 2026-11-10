@@ -208,7 +208,7 @@ class TweetPageTests(unittest.TestCase):
         self.assertEqual(code, 200)
         html = raw.decode()
         self.assertIn('href="https://x.com/i/status/1234567890123456789" target="_blank" rel="noopener noreferrer">X</a>', html)
-        self.assertIn('const site = "X";', html)
+        self.assertIn(f'id="page-data">{{"vid": "{TWEET}", "site": "X"}}</script>', html)
 
     def test_a_percent_in_the_file_name_is_escaped_in_the_video_link(self):
         folder = self.data / TWEET

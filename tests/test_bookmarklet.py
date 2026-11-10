@@ -14,6 +14,8 @@ from yt_archive.jobs import JobQueue
 from yt_archive.paths import bookmarklet_key
 from yt_archive.web import make_handler
 
+from page_text import with_static
+
 
 class BookmarkletTests(unittest.TestCase):
     def setUp(self):
@@ -52,7 +54,7 @@ class BookmarkletTests(unittest.TestCase):
                 code, html = self.get("/", host)
                 self.assertEqual(code, 200)
                 self.assertIn(f'id="bookmarklet" href="#" data-key="{self.key}"', html)
-                self.assertIn("location.origin + '/add'", html)
+                self.assertIn("location.origin + '/add'", with_static(html))
         code, html = self.get("/", "rebound.evil.test:8765")
         self.assertEqual(code, 403)
         self.assertNotIn(self.key, html)
@@ -66,9 +68,9 @@ class BookmarkletTests(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertIn('data-url="https://www.youtube.com/watch?v=choose00001&amp;t=5"', html)
         self.assertIn('<p class="add-title">A &lt;b&gt;video&lt;/b&gt;</p>', html)
-        self.assertIn("fetch('/api/get'", html)
-        self.assertIn("via: 'bookmarklet'", html)
-        self.assertIn("window.close()", html)
+        self.assertIn("fetch('/api/get'", with_static(html))
+        self.assertIn("via: 'bookmarklet'", with_static(html))
+        self.assertIn("window.close()", with_static(html))
         self.assertEqual(db.list_jobs(self.data), [])
 
     def test_wrong_missing_or_rebound_key_queues_nothing(self):
@@ -83,7 +85,7 @@ class BookmarkletTests(unittest.TestCase):
                 self.assertEqual(code, 403)
                 if host.startswith("127."):
                     self.assertIn("key doesn’t match", html)
-                self.assertNotIn("/api/get", html)
+                self.assertNotIn("/api/get", with_static(html))
                 self.assertIsNone(re.search(r"data-url=", html))
         self.assertEqual(db.list_jobs(self.data), [])
 

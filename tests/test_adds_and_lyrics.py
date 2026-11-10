@@ -13,6 +13,7 @@ from yt_archive.lyrics import MAX_LYRICS_BYTES, place_pending_lyrics
 from yt_archive.paths import lyrics_path
 from yt_archive.web import detail_html, load_archive_info, make_handler
 
+from page_text import with_static
 from test_queue import fake_queue, make_video
 
 LRC = "[ti:Made-up song]\n[00:01.00]first line\n[00:03.50]second line\n"
@@ -96,7 +97,7 @@ class AddedByTests(Base):
         self.assertIn('<span class="a">Added by</span>', html)
         self.assertIn('<span class="a">Bookmarklet</span>', html)
         self.assertIn('<span class="a">Not recorded</span>', html)
-        self.assertIn("via: 'pasted'", html)
+        self.assertIn("via: 'pasted'", with_static(html))
 
 
 class LyricsTests(Base):
