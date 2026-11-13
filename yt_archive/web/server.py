@@ -6,6 +6,7 @@ import ipaddress
 import json
 import mimetypes
 import re
+import shutil
 import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -112,6 +113,8 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                         health=db.archive_needs_summary(data_dir),
                         busy=frozenset(db.open_video_ids(data_dir)),
                         total=db.count_videos(data_dir),
+                        disk_used=db.archive_disk_bytes(data_dir),
+                        disk_free=shutil.disk_usage(data_dir).free,
                     )
                 )
             if path == "/add":

@@ -10,6 +10,7 @@ from .videos import (
     list_videos,
     list_creator_videos,
     count_videos,
+    archive_disk_bytes,
     archive_needs_summary,
 )
 from .transcripts import replace_transcript, delete_transcript, get_transcript
@@ -73,6 +74,7 @@ __all__ = [
     "WAITING_SHOWN",
     "append_job_log",
     "append_work_log",
+    "archive_disk_bytes",
     "archive_needs_summary",
     "check_add_route",
     "claim_next_job",

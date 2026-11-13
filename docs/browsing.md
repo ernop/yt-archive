@@ -62,6 +62,22 @@ what is still missing, so pressing it twice or racing a running job is
 harmless. The rules live in `paths.archive_needs()`; the catalog stores the
 result per video (`videos.needs`) so the bar costs one query.
 
+## Disk space (settled 2026-11-13)
+
+The **Archive** heading reads `596 videos · 134 GB on disk · 1.2 TB free`.
+"On disk" is every file in every video's folder (the original, `_condensed/`
+shot images, sheets, MP3, transcript), counted as allocated blocks the way
+`du` does — not just the video file, since `_condensed/` is about a third of
+the archive. "Free" is the free space on the disk holding the data root.
+
+Each catalog row stores its folder's size (`videos.disk_bytes`), measured
+whenever the row is refreshed (every `archive.json` write, every finished
+job, `./yt reindex`), so the heading is one `SUM` plus one `statvfs` and
+never walks 60k files on a page load. Rows from before the column are
+measured once, on the first page load after the upgrade. Files written
+without a catalog refresh (lyrics, a saved frame) count from the video's
+next refresh.
+
 ## Archive list
 
 One single-line row per video: list thumbnail, title, creator, length, shot

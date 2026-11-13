@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS videos (
   description TEXT NOT NULL DEFAULT '',
   video_file TEXT,
   file_size INTEGER,
+  disk_bytes INTEGER,
   downloaded_at TEXT NOT NULL DEFAULT '',
   shots_detected INTEGER,
   shots_kept INTEGER,
@@ -166,6 +167,7 @@ _MIGRATIONS = {
         ("has_transcript", "INTEGER NOT NULL DEFAULT 0"),
         ("needs", "TEXT NOT NULL DEFAULT ''"),
         ("added_via", "TEXT NOT NULL DEFAULT ''"),
+        ("disk_bytes", "INTEGER"),
     ),
     "jobs": (
         ("audio", "TEXT NOT NULL DEFAULT 'pending'"),

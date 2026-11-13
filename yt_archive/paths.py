@@ -86,6 +86,18 @@ def video_dir(data_dir: Path, video_id: str) -> Path:
     return data_dir / video_id
 
 
+def folder_disk_bytes(data_dir: Path, video_id: str) -> int:
+    """Disk space the video's folder takes (allocated blocks, as du counts), every file in it."""
+    total = 0
+    for root, _, files in os.walk(video_dir(data_dir, video_id)):
+        for name in files:
+            try:
+                total += os.lstat(os.path.join(root, name)).st_blocks * 512
+            except OSError:
+                pass
+    return total
+
+
 def condensed_dir(data_dir: Path, video_id: str) -> Path:
     return video_dir(data_dir, video_id) / "_condensed"
 

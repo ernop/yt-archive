@@ -119,6 +119,30 @@ class BrowsingTests(unittest.TestCase):
         self.assertNotIn("<br", row)
         self.assertNotIn("<p", row)
 
+    def test_disk_total_counts_every_file_and_follows_catalog_refreshes(self):
+        import os
+
+        folder = self.data / "newest00001"
+        (folder / "_condensed").mkdir()
+        (folder / "_condensed" / "0000.png").write_bytes(os.urandom(50_000))
+        db.rebuild(self.data)
+        used = db.archive_disk_bytes(self.data)
+        self.assertGreaterEqual(used, 50_000)
+        (folder / "newest00001.mkv").write_bytes(os.urandom(200_000))
+        self.assertEqual(db.archive_disk_bytes(self.data), used)
+        db.upsert(self.data, "newest00001")
+        self.assertGreaterEqual(db.archive_disk_bytes(self.data), used + 200_000)
+
+        conn = db.connect(self.data)
+        conn.execute("UPDATE videos SET disk_bytes=NULL")
+        conn.commit()
+        conn.close()
+        self.assertGreaterEqual(db.archive_disk_bytes(self.data), used + 200_000)
+
+        html = home_html([], data_dir=self.data, total=3, disk_used=134_400_000_000,
+                         disk_free=1_200_000_000_000).decode()
+        self.assertIn("<strong>134 GB</strong>on disk · <strong>1.2 TB</strong>free", html)
+
     def test_creator_page_lists_only_that_uploader_and_supports_search(self):
         videos = db.list_creator_videos(self.data, channel_id="UCbeta")
         self.assertEqual(

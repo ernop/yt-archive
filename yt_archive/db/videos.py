@@ -7,6 +7,7 @@ from pathlib import Path
 
 from ..paths import (
     card_thumb_path,
+    folder_disk_bytes,
     list_archived_ids,
     load_archive_info,
     media_url,
@@ -27,7 +28,7 @@ VIDEO_SORT_ORDERS = {
 }
 
 
-def _row_from_info(info: dict) -> dict:
+def _row_from_info(info: dict, disk_bytes: int | None = None) -> dict:
     shots = info.get("shots_kept")
     if shots is None:
         shots = len(info.get("shot_files") or [])
@@ -41,6 +42,7 @@ def _row_from_info(info: dict) -> dict:
         "description": info.get("description") or "",
         "video_file": info.get("video_file") or "",
         "file_size": info.get("file_size"),
+        "disk_bytes": disk_bytes,
         "downloaded_at": info.get("downloaded_at") or "",
         "shots_detected": info.get("shots_detected"),
         "shots_kept": shots or 0,
@@ -55,7 +57,7 @@ def _row_from_info(info: dict) -> dict:
 
 _VIDEO_COLUMNS = (
     "video_id", "title", "channel", "channel_id", "duration", "upload_date",
-    "description", "video_file", "file_size", "downloaded_at", "shots_detected",
+    "description", "video_file", "file_size", "disk_bytes", "downloaded_at", "shots_detected",
     "shots_kept", "has_video", "has_framesheet", "has_soundtrack", "has_transcript", "needs",
     "added_via",
 )
@@ -72,7 +74,7 @@ def upsert(data_dir: Path, video_id: str | None = None, info: dict | None = None
         if not video_id:
             raise ValueError("upsert needs video_id or info")
         info = load_archive_info(data_dir, video_id)
-    row = _row_from_info(info)
+    row = _row_from_info(info, folder_disk_bytes(data_dir, info["video_id"]))
     conn = connect(data_dir)
     try:
         conn.execute(_UPSERT_VIDEO, row)
@@ -89,7 +91,12 @@ def rebuild(data_dir: Path) -> int:
         conn.execute("DELETE FROM transcripts")
         conn.execute("DELETE FROM transcript_segments")
         for video_id in ids:
-            conn.execute(_UPSERT_VIDEO, _row_from_info(load_archive_info(data_dir, video_id)))
+            conn.execute(
+                _UPSERT_VIDEO,
+                _row_from_info(
+                    load_archive_info(data_dir, video_id), folder_disk_bytes(data_dir, video_id)
+                ),
+            )
             transcript_path = transcript_json_path(data_dir, video_id)
             if transcript_is_complete(data_dir, video_id):
                 try:
@@ -193,6 +200,28 @@ def count_videos(data_dir: Path) -> int:
     conn = connect(data_dir)
     try:
         return conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def archive_disk_bytes(data_dir: Path) -> int:
+    """Disk space every archived video's folder takes. A row from before disk_bytes is
+    measured once here; after that each catalog refresh of the video keeps it current."""
+    if not db_path(data_dir).is_file():
+        rebuild(data_dir)
+    conn = connect(data_dir)
+    try:
+        unmeasured = [
+            row[0] for row in conn.execute("SELECT video_id FROM videos WHERE disk_bytes IS NULL")
+        ]
+        for video_id in unmeasured:
+            conn.execute(
+                "UPDATE videos SET disk_bytes=? WHERE video_id=?",
+                (folder_disk_bytes(data_dir, video_id), video_id),
+            )
+        if unmeasured:
+            conn.commit()
+        return conn.execute("SELECT COALESCE(SUM(disk_bytes), 0) FROM videos").fetchone()[0]
     finally:
         conn.close()
 

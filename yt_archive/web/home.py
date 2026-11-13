@@ -6,7 +6,7 @@ from pathlib import Path
 from ..db import normalize_video_sort
 from ..paths import NEEDS
 
-from .html import SORT_OPTIONS, _esc, _health_html, _page, _video_list_html
+from .html import SORT_OPTIONS, _esc, _health_html, _page, _size, _video_list_html
 
 
 def home_html(
@@ -18,6 +18,8 @@ def home_html(
     health: dict | None = None,
     busy: frozenset = frozenset(),
     total: int | None = None,
+    disk_used: int | None = None,
+    disk_free: int | None = None,
 ) -> bytes:
     sort = normalize_video_sort(sort)
     bookmarklet_html = (
@@ -34,6 +36,10 @@ def home_html(
         if query
         else f"<strong>{total}</strong>videos"
     )
+    if _size(disk_used):
+        count += f" · <strong>{_size(disk_used)}</strong>on disk"
+    if _size(disk_free):
+        count += f" · <strong>{_size(disk_free)}</strong>free"
     q_val = _esc(query)
     sort_options = "".join(
         f'<option value="{value}"{" selected" if value == sort else ""}>{label}</option>'
