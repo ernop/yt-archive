@@ -1,77 +1,72 @@
 # yt-archive
 
-A local YouTube archive: paste a URL, download the video, and get a contact sheet of its distinct shots. Browse and play everything already saved.
+yt-archive downloads YouTube videos, and videos posted on X, to your own computer. With each video it saves a picture of every shot and an MP3 of the sound track, and, when asked, a transcript of the speech. You use it from a web page that the same computer serves.
 
-Paste a creator's YouTube homepage, `@handle`, or a playlist link to go
-through all of its videos: Videos, Shorts, Live, and the creator's playlists,
-with filters for length and upload age. Get them all, a filtered part, a
-hand-picked selection, or go one by one; saved and already queued videos are
-skipped. Your own Watch later, Liked videos, and private playlists work too.
-Lists are read without your YouTube account, except those, which only your
-account can see; lists are kept until you refresh them and held to an hourly
-request budget. See
-[browsing YouTube](docs/browsing.md#browse-youtube).
+## Adding videos
 
-Videos in tweets work too: paste an `x.com` or `twitter.com` link to a tweet
-with a video and it is archived like a YouTube video, read without your X
-account. A tweet X shows only to signed-in readers is asked again with your X
-login from Firefox. See [X tweets](docs/download.md#x-tweets-settled-2026-10-25).
-Paste an X profile link (`x.com/name`) to go through that profile's videos,
-newest first, in the same picker; X shows a profile's media only to signed-in
-readers, so it is listed with your X login from Firefox, through
-[gallery-dl](https://github.com/mikf/gallery-dl), on its own hourly budget. See
-[X profiles](docs/browsing.md#x-profiles-settled-2026-11-06).
+- Paste one or more links into the box on the archive page; each video joins the download queue. YouTube video links (watch, `youtu.be`, Shorts, live, embed), bare YouTube video IDs, and links to tweets with a video all work.
+- A video already archived is not downloaded again, and a video already queued is not added twice.
+- Pasting a creator, playlist or X profile link opens the picker, which lists its videos to choose from (next section).
+- **+ ytarchive** is a bookmark button: drag it from the archive page to the bookmarks bar. Clicked on a YouTube video or a tweet, it queues that video without leaving the page. Clicked on a creator, playlist or X profile page, it opens the picker.
+- A pasted video link that was playing in a playlist adds a link to choose more videos from that playlist.
+- Other programs on the same computer can add videos too.
 
-Drag the home page's **+ ytarchive** button to your bookmarks bar, then click
-it on any YouTube video or tweet to queue it without leaving the page, or on a
-creator, playlist, or X profile to open the picker. See
-[the bookmarklet](docs/bookmarklet.md).
+## Choosing from a creator, playlist or X profile
 
-Pairs with [matthoom](https://github.com/ernop/matthoom). Matthoom holds YouTube **watch history** (Takeout) and a gallery that can mark videos to archive. This service does the other half: **the file on disk** and **the shot images**.
+The picker lists the videos of a YouTube creator, a playlist or an X profile. Nothing downloads until videos are chosen.
 
-```sh
-./yt get <url-or-id>
-./yt serve          # http://127.0.0.1:8765/
-```
+- It takes a creator's homepage or @handle, a playlist link, or an X profile link. Your Watch later, Liked videos, Liked music and private playlists work too. An X profile is listed newest first.
+- A creator's list has tabs: Videos, Shorts, Live, All, and Playlists. Each playlist opens in the picker.
+- Filters: text in the title or video ID, length, upload age, and "hide saved and queued". Sort: as listed, newest, oldest, longest, shortest, most viewed, or title.
+- Each row shows whether the video is already saved or queued, or why it cannot be chosen: live now, not ready yet, restricted, or unavailable.
+- Select by clicking rows, shift-clicking a range, **Select all shown**, **Select first N**, or with keys: J and K move, X selects, O opens the video on YouTube or X. The selection stays through tabs, filters, pages and page reloads.
+- **Go one by one** shows each video large, to choose (Y), skip (N) or go back (B).
+- **Get selected** or **Get all shown** adds them to the download queue, skipping videos already saved or queued. More than 50 at once asks first.
+- The 60 most recently used lists are kept until **Refresh list** is pressed, so opening one again does not ask YouTube or X again.
 
-The home page shows the download queue live (what is downloading, waiting, or
-failed, with progress) above the archive list, and offers
-one button to bring older videos up to the current pipeline. See
-[browsing](docs/browsing.md#download-queue-home-page).
+## What each video gets
 
-Each video is one folder (`data/x-<tweet id>/` for a tweet's video). The original file is left untouched; derived shots live beside it:
+- **The video file** at the highest resolution offered, with its thumbnail, title, channel, description and upload date.
+- **Shot pictures.** yt-archive checks the video twice a second and keeps a frame whenever it looks different from the last frame kept.
+- **A framesheet**: all of a video's shot pictures laid out together in one image. Past 250 shots it is split into several images.
+- **MP3 audio** of the sound track. A video without sound gets none.
+- **Lyrics**, when a program on the computer sends them for the video. They are kept beside the MP3.
 
-```
-data/<id>/
-  <title>-<id>.mkv
-  *.info.json  *.webp  archive.json
-  _condensed/
-    framesheet.png                      # framesheet-1.png, -2.png … past 250 shots
-    preview.jpg                         # small copy of sheet 1 for the archive list
-    soundtrack.mp3
-    soundtrack.lrc                      # optional, lyrics a local client sent
-    transcript.json                     # optional, explicit local Whisper run
-    transcript.vtt                      # selectable captions
-    grab-Some_Title-00h01m23s450.png   # optional, player `s` / grab
-    shots.json
-    shots/0000.png …
-```
+## The archive page
 
-```sh
-./yt get <url-or-id>           # download + shots + MP3 audio
-./yt get <url-or-id> --skip-shots
-./yt shots <id>                # shots only (video already on disk)
-./yt audio <id>                # MP3 audio only (video already on disk)
-./yt transcribe <id>           # explicit local Whisper transcription
-./yt list
-./yt reindex
-./yt serve [--port 8765]
-```
+- **Download queue**, updated live. The video being worked on shows its steps (download, shots, MP3), percent done, download speed and time left. Waiting videos can be removed one at a time or all at once. Failed ones show their error, with **Retry** and **Dismiss**. Videos are worked on one at a time; the queue keeps going with the page closed and continues after the program restarts.
+- **Archive list**, one line per video: thumbnail, title, creator, length, number of shots, upload date, download date, and where the first request for it came from (paste box, bookmark button, picker, command line, or another program).
+- **Search** finds videos whose title, channel, description, video ID, transcript or speaker names contain the words typed.
+- **Sort** by download date (newest or oldest first), upload date, title, or channel.
+- The heading shows how many videos there are, the disk space they take, and the free space left on the disk.
+- **Update N videos.** When videos archived by an earlier version lack something the current version makes, or have shots found the earlier way, a bar says how many and what is missing, and this button queues the missing work.
+- **Creator pages.** Each creator name links to a page of that creator's archived videos, with the same search and sorting. When the YouTube channel is known, the page links to it and to the picker for the creator's other videos.
 
-The video detail page can run transcription on demand, search and seek by
-spoken word, show a playback-following transcript, assign speaker groups, and
-enable the generated WebVTT as actual player captions. See
-[docs/transcription.md](docs/transcription.md).
+## The video page
+
+- **Facts** on one line: creator, length, resolution, file size, number of shots, upload date, download date, and a link to the original on YouTube or X. The description follows, folded.
+- **Player.** Each shot is a mark on the seek bar, and the picture of the shot playing is outlined in red. Clicking a shot picture plays from that moment; PageUp and PageDown then step from shot to shot.
+- **Keys.** S saves the frame on screen as a full-size PNG beside the MP3. T enlarges the video from 72% to 86% of the window height. R turns repeat on or off: the video starts again each time it ends. ? lists every key. The player offers to resume where you stopped, and remembers speed, volume, captions and the enlarged view.
+- **MP3.** It plays on the page and downloads as a file named after the artist and title. **Open MP3 folder** opens its folder on the computer. **Create MP3 audio** makes one for a video that has none. Lyrics, when present, download beside it.
+- **The framesheet and every shot picture** are on the page.
+- **Redo.** **Rebuild shots** remakes the shot pictures and framesheet from the local file. **Download again** downloads the video again, rebuilds its shots, deletes its transcript, and makes a new MP3.
+
+## Transcripts
+
+- **Transcribe audio…** on the video page runs Whisper speech recognition on this computer, only when asked. By default it uses Whisper's large-v3 model and detects the language; a dialog offers other models, a set language, and other settings.
+- Transcripts hold spoken words only. Labels such as [music] or (applause) are removed.
+- The transcript panel highlights the line being spoken and scrolls with it. Clicking a word or a line plays from there. The panel searches the transcript, shows all of it or only the current line, and has three text sizes.
+- **Speakers.** Clicking a line's speaker label names its speaker. Lines with the same name form a group; a group can be renamed or merged into another.
+- **Captions.** The transcript shows as captions in the player (C, or the CC button) and downloads as a WebVTT subtitle file.
+- **Re-transcribe…** replaces the transcript.
+
+## Accounts and limits
+
+- YouTube downloads use your YouTube login from Firefox. Creators and public playlists are listed without it; Watch later, Liked videos, Liked music and private playlists are listed with it.
+- Tweets are downloaded without an X account. A tweet that X shows only to signed-in readers is fetched again with your X login from Firefox. X profiles are always listed with that login.
+- Hourly limits: 150 YouTube downloads, 60 tweet downloads, 30 tweet downloads with your X login, 500 requests to YouTube for lists, and 60 requests to X for lists. A download past its limit waits in the queue, which says when it starts.
+
+Setup: [docs/setup.md](docs/setup.md). Command line, file layout, and how each part works: [AGENTS.md](AGENTS.md).
 
 ## License
 

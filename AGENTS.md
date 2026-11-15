@@ -34,7 +34,7 @@ Considered on 2026-11-10 and not being built now:
 
 | Doc | What it is |
 |-----|------------|
-| [README.md](README.md) | Public GitHub intro — what this is, how to invoke it |
+| [README.md](README.md) | Public GitHub intro: what yt-archive does, feature by feature ([its rules](#readme-settled-2026-11-15)) |
 | [docs/setup.md](docs/setup.md) | New-machine install, `.venv`, the media player copy, live service |
 | [docs/download.md](docs/download.md) | yt-dlp flags, cookies, JS runtime, its weekly self-update; X tweets (`x-<tweet id>`, no account unless X hides the tweet, own budgets) — settled, do not reinvent |
 | [docs/framesheets.md](docs/framesheets.md) | Shot pipeline, thresholds, rejected approaches |
@@ -44,6 +44,20 @@ Considered on 2026-11-10 and not being built now:
 
 Every durable note in this repo is in that list or linked from one of those
 files. Do not leave decisions only in chat.
+
+## README (settled 2026-11-15)
+
+README.md tells a reader what yt-archive does. The owner's rules for it:
+
+- Say what it does, feature by feature, in short plain sentences.
+- Only what the code does; check each line against the code. No use cases
+  the writer thought up.
+- No self-praise and no words that grade it ("well", "brilliantly", "fast",
+  "easy").
+- No setup, commands, file layout or internals. Those live in this file and
+  `docs/`; one line at the end of the README links to them.
+- A change that adds, changes or removes something the user can do updates
+  the README in the same commit.
 
 ## How you use it
 
@@ -113,6 +127,7 @@ data/<id>/
     preview.jpg             # sheet 1 at 480 px wide, for the archive list
     soundtrack.mp3
     soundtrack.lrc          # lyrics a local client sent (docs/browsing.md, "Lyrics")
+    grab-<title>-<time>.png # a frame saved from the player (S)
     transcript.json
     transcript.vtt
     shots.json
