@@ -30,6 +30,7 @@ from ..paths import (
     parse_video_id,
     video_dir,
 )
+from ..settings import load_settings
 from ..work import DerivedWorkQueue
 
 from .add import add_html
@@ -284,6 +285,8 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 return self._grab(parsed)
             if parsed.path == "/api/lyrics":
                 return self._lyrics()
+            if parsed.path == "/api/played-stop":
+                return self._played_stop()
             if parsed.path != "/api/get":
                 return self.send_error(404)
             length = int(self.headers.get("Content-Length") or 0)
@@ -339,6 +342,16 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
             except ValueError as exc:
                 return self._json({"error": str(exc)}, 400)
             return self._json({"video_id": video_id, "lyrics": store_lyrics(data_dir, video_id, lrc)})
+
+        def _played_stop(self):
+            """A player watcher says the user stopped hearing a video (docs/download.md, "Live streams")."""
+            payload = self._read_json()
+            if payload is None:
+                return
+            video_id = payload.get("video_id")
+            if not isinstance(video_id, str) or not VIDEO_ID_RE.fullmatch(video_id):
+                return self._json({"error": "video_id must be a YouTube video id"}, 400)
+            return self._json(queue.stop_played(video_id))
 
         def _transcribe(self):
             payload = self._read_json()
@@ -595,8 +608,9 @@ def serve(data_dir: Path | None = None, host: str = "127.0.0.1", port: int = 876
     from ..db import db_path, rebuild
     from ..download import keep_yt_dlp_current_hourly
 
+    settings = load_settings()
     n = rebuild(data_dir)
-    queue = JobQueue(data_dir)
+    queue = JobQueue(data_dir, live_clip_max_seconds=settings["live_clip_max_seconds"])
     work_queue = DerivedWorkQueue(data_dir)
     keep_yt_dlp_current_hourly(data_dir)
     httpd = ThreadingHTTPServer(

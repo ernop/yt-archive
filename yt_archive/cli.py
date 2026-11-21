@@ -11,6 +11,7 @@ from .download import download
 from .framesheet import make_shots
 from .lyrics import place_pending_lyrics
 from .paths import default_data_dir, find_video_file, parse_video_id
+from .settings import load_settings
 from .transcribe import MODELS, transcribe_soundtrack
 from .web import serve
 
@@ -99,9 +100,12 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _get(data_dir: Path, target: str, sim: float, skip_shots: bool) -> int:
+    settings = load_settings()
     video_id = parse_video_id(target)
     db.note_first_add(data_dir, video_id, "cli")
-    video = download(video_id, data_dir)
+    video = download(
+        video_id, data_dir, live_clip_max_seconds=settings["live_clip_max_seconds"]
+    )
     print(f"video: {video} ({video.stat().st_size / 1e6:.1f} MB)")
     if not skip_shots:
         summary = make_shots(video, data_dir, video_id, sim_threshold=sim, layout="squash")

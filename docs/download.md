@@ -56,6 +56,44 @@ creators and playlists has its own budget and sends the cookies only for the
 user's own Watch later, Liked videos, and private playlists
 ([browsing.md](browsing.md#listing-is-read-only-the-account-only-for-the-users-own-lists)).
 
+## Live streams (settled 2026-11-20)
+
+An active live stream (`live_status == "is_live"`, no fixed duration) would
+otherwise record forever and hold the one-at-a-time download lane behind it.
+yt-dlp reports `before_dl:ytarchive-live %(live_status)s %(is_live)s` before
+writing media, so each stream kind takes its own branch without an extra
+metadata request:
+
+- **Active live stream (`is_live`)**: records from when the job starts (never
+  `--live-from-start`) off the main download lane, so queued normal videos keep
+  running while the clip records. The normal hourly YouTube download budget is
+  still charged once when yt-dlp starts.
+- **Stopping a live recording**: ends cleanly by sending `SIGINT` to yt-dlp
+  (never kill ffmpeg directly — yt-dlp stops ffmpeg, finishes the container,
+  renames `.part`, and exits 0):
+  - **Stop signal** (`POST /api/played-stop {"video_id": "<id>"}`): sent by a
+    local player watcher when the user stops hearing the stream (immediately on
+    tab close or switch, or after a pause timeout on the watcher side). If the
+    stop arrives while the live stream is still queued, the job ends without
+    recording; normal videos ignore it.
+  - **Cap**: if no stop signal arrives (watcher not running, pasted URL,
+    bookmarklet), recording stops after `live_clip_max_seconds` from the
+    gitignored `settings.json` (template: `settings.example.json`, default
+    `3600` seconds / 60 minutes). Malformed settings fail fast at startup.
+  - **Stream ended**: if the broadcast finishes on its own first, the recording
+    ends normally.
+- **Normal post-processing**: once recording ends, `archive.json` records
+  `live_clip` (`started_at`, `ended_at`, `stopped_by`: `"stop signal"`,
+  `"cap"`, or `"stream ended"`) and probes duration with `ffprobe` when
+  `info.json` had `duration: null`. The job re-enters the queue with
+  `download="done"` so framesheet shots and MP3 audio still run one at a time on
+  the main worker. The video page shows the recorded time range and stop reason
+  in its facts bar; everywhere else it is an ordinary archived video.
+- **Upcoming streams (`is_upcoming`)**: fail immediately with a message
+  containing `"stream has not started"` instead of waiting.
+- **Finished streams (`was_live`, `post_live`)**: have a fixed duration and
+  take the normal download path unchanged.
+
 ## Keeping yt-dlp current (settled 2026-11-10)
 
 YouTube changes often and an old yt-dlp stops downloading (an outdated copy

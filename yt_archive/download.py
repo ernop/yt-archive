@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import threading
@@ -23,8 +24,10 @@ from .paths import (
     video_dir,
     watch_url,
 )
+from .settings import DEFAULT_LIVE_CLIP_MAX_SECONDS
 
 PROGRESS_MARK = "ytarchive-progress"
+LIVE_MARK = "ytarchive-live"
 PROGRESS_TEMPLATE = (
     "download:" + PROGRESS_MARK + " %(progress.status)s %(progress.downloaded_bytes)s"
     " %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s"
@@ -42,6 +45,12 @@ _LINKS_ELSEWHERE_RE = re.compile(r"No suitable extractor.* found for URL (\S+)")
 # yt-dlp's words when X will not show a tweet to a reader without an account: a login hint
 # (adult content, protected accounts), or "no video" for the bare tombstone X can send instead.
 _HIDDEN_FROM_GUESTS_RE = re.compile(r"account credentials|No video could be found in this tweet")
+# YouTube's playability errors for scheduled streams and premieres that have not started yet.
+_UPCOMING_RE = re.compile(r"This live event will begin|Premieres in|Live stream offline", re.IGNORECASE)
+
+
+class UpcomingStreamError(RuntimeError):
+    """Raised when a scheduled live stream or premiere has not started yet."""
 
 
 YT_DLP_UPDATE_DAYS = 7
@@ -117,19 +126,175 @@ def _yt_dlp_running(binary: str) -> bool:
     return False
 
 
-def download(
-    video_id: str, data_dir: Path, log=print, force: bool = False, progress=None
-) -> Path:
-    """Download one video into data/<id>/. Returns the video file path.
+def parse_live_status(line: str) -> str | None:
+    """live_status from our before_dl --print marker, or None for other output."""
+    if not line.startswith(LIVE_MARK + " "):
+        return None
+    fields = line.split()[1:3]
+    fields += ["NA"] * (2 - len(fields))
+    live_status, is_live = fields
+    if live_status == "is_upcoming":
+        return "is_upcoming"
+    if live_status == "is_live" or is_live.lower() == "true":
+        return "is_live"
+    return live_status
 
-    YouTube needs Firefox cookies: anonymous YouTube downloads 403 after ~10 MB.
-    Deno (yt-dlp default) solves JS challenges. A tweet (x-<tweet id>) is read
-    without an account; one X hides from such readers is asked again with the
-    user's X login from Firefox, and from then on asked with it straight away, as
-    are the tweets an X profile listing found marked sensitive. --restrict-filenames
-    keeps names ASCII, but % + = @ ~ stay in them.
+
+def format_cap(seconds: float) -> str:
+    """Human-readable label for the live recording cap (e.g. '60m', '90s')."""
+    if seconds >= 60 and abs(seconds - round(seconds)) < 1e-6 and int(round(seconds)) % 60 == 0:
+        return f"{int(round(seconds)) // 60}m"
+    if abs(seconds - round(seconds)) < 1e-6:
+        return f"{int(round(seconds))}s"
+    return f"{seconds:g}s"
+
+
+class LiveClipSession:
+    """An active yt-dlp process recording a live stream (docs/download.md, "Live streams").
+
+    Runs outside the main download lane until stopped by SIGINT (either from a
+    played-stop signal or the recording cap) or until the stream ends on its own.
+    """
+
+    def __init__(
+        self,
+        *,
+        video_id: str,
+        proc: subprocess.Popen,
+        dest: Path,
+        data_dir: Path,
+        site: str,
+        existed_before: bool,
+        log,
+        progress,
+        lines: list[str],
+        cap_seconds: float,
+    ):
+        self.video_id = video_id
+        self.proc = proc
+        self.dest = dest
+        self.data_dir = data_dir
+        self.site = site
+        self.existed_before = existed_before
+        self.log = log
+        self.progress = progress
+        self.lines = lines
+        self.cap_seconds = cap_seconds
+        self.started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        self._lock = threading.Lock()
+        self._stop_reason: str | None = None
+        self._signal_sent = False
+        self._timer: threading.Timer | None = None
+
+    def start_cap_timer(self) -> None:
+        """Stop the recording once cap_seconds elapse if no stop signal arrived first."""
+        with self._lock:
+            if self._signal_sent or self._timer is not None or self.cap_seconds <= 0:
+                return
+            timer = threading.Timer(self.cap_seconds, self.stop, args=("cap",))
+            timer.daemon = True
+            self._timer = timer
+            timer.start()
+
+    def stop(self, reason: str = "stop signal") -> bool:
+        """End the recording cleanly by sending SIGINT to yt-dlp (never kill ffmpeg directly)."""
+        with self._lock:
+            if self._signal_sent or self.proc.poll() is not None:
+                return False
+            self._stop_reason = reason
+            self._signal_sent = True
+            timer = self._timer
+            self._timer = None
+        if timer is not None:
+            timer.cancel()
+        self.log(f"stopping live recording ({reason}); sending SIGINT to yt-dlp")
+        if self.progress:
+            self.progress(None, f"finishing live clip ({reason})")
+        try:
+            self.proc.send_signal(signal.SIGINT)
+        except (ProcessLookupError, OSError):
+            pass
+        return True
+
+    def cancel_before_recording(self) -> None:
+        """Abort a live stream that stopped before recording even started (e.g. while queued)."""
+        with self._lock:
+            self._stop_reason = "stop signal"
+            self._signal_sent = True
+            timer = self._timer
+            self._timer = None
+        if timer is not None:
+            timer.cancel()
+        _terminate_proc(self.proc)
+        _cleanup_aborted_dest(self.dest, self.existed_before)
+
+    def finish(self) -> tuple[Path | None, dict]:
+        """Drain yt-dlp until it exits, then write archive.json with the live_clip time range."""
+        assert self.proc.stdout is not None
+        try:
+            for raw in self.proc.stdout:
+                line = raw.rstrip()
+                if not line:
+                    continue
+                if parse_live_status(line) is not None:
+                    continue
+                report = parse_progress(line)
+                if report is not None:
+                    if self.progress:
+                        self.progress(*report)
+                    continue
+                self.lines.append(line)
+                self.log(line)
+        finally:
+            _close_stdout(self.proc)
+        code = self.proc.wait()
+        with self._lock:
+            timer = self._timer
+            self._timer = None
+            stop_reason = self._stop_reason
+        if timer is not None:
+            timer.cancel()
+        ended_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        reason = stop_reason or "stream ended"
+        live_clip = {
+            "started_at": self.started_at,
+            "ended_at": ended_at,
+            "stopped_by": reason,
+        }
+        video = find_video_file(self.data_dir, self.video_id)
+        if code != 0 and (video is None or stop_reason is None):
+            _cleanup_aborted_dest(self.dest, self.existed_before)
+            if stop_reason == "stop signal":
+                return None, live_clip
+            raise RuntimeError(_yt_dlp_failure(self.lines, self.site))
+        if not video:
+            _cleanup_aborted_dest(self.dest, self.existed_before)
+            if stop_reason == "stop signal":
+                return None, live_clip
+            raise FileNotFoundError(f"yt-dlp finished but no video in {self.dest}")
+        self.log(f"live recording finished ({reason})")
+        write_archive_json(self.data_dir, self.video_id, video, extra={"live_clip": live_clip})
+        _log_resolution(video, self.log)
+        return video, live_clip
+
+
+def start_download(
+    video_id: str,
+    data_dir: Path,
+    log=print,
+    force: bool = False,
+    progress=None,
+    live_clip_max_seconds: float = DEFAULT_LIVE_CLIP_MAX_SECONDS,
+) -> Path | LiveClipSession:
+    """Download one video into data/<id>/, or hand back a LiveClipSession for a live stream.
+
+    Normal and finished streams (`not_live`, `was_live`, `post_live`) finish in place and
+    return the video Path. An actively live stream (`is_live`) returns a LiveClipSession as
+    soon as yt-dlp reaches `before_dl` so the caller can move it off the main queue lane.
+    An upcoming stream (`is_upcoming`) raises UpcomingStreamError without waiting.
     """
     dest = video_dir(data_dir, video_id)
+    existed_before = dest.exists()
     dest.mkdir(parents=True, exist_ok=True)
     existing = find_video_file(data_dir, video_id)
     if existing and not force:
@@ -139,14 +304,51 @@ def download(
     signed_in = site == "X" and db.x_hidden(data_dir, video_id)
     if signed_in:
         log("X hides this tweet from readers without an account; asking with your X login from Firefox")
-    code, lines = _attempt(video_id, dest, data_dir, site, signed_in, force, log, progress)
+    outcome, value, lines = _attempt(video_id, dest, data_dir, site, signed_in, force, log, progress)
+    if outcome == "upcoming":
+        _cleanup_aborted_dest(dest, existed_before)
+        raise UpcomingStreamError("stream has not started")
+    if outcome == "live":
+        return LiveClipSession(
+            video_id=video_id,
+            proc=value,
+            dest=dest,
+            data_dir=data_dir,
+            site=site,
+            existed_before=existed_before,
+            log=log,
+            progress=progress,
+            lines=lines,
+            cap_seconds=live_clip_max_seconds,
+        )
+    code = value
     if code != 0 and site == "X" and not signed_in and _HIDDEN_FROM_GUESTS_RE.search("\n".join(lines)):
         db.mark_x_hidden(data_dir, [video_id])
         log("X hides this tweet from readers without an account; asking again with your X login from Firefox")
-        code, lines = _attempt(video_id, dest, data_dir, site, True, False, log, progress)
+        outcome, value, lines = _attempt(video_id, dest, data_dir, site, True, False, log, progress)
+        if outcome == "upcoming":
+            _cleanup_aborted_dest(dest, existed_before)
+            raise UpcomingStreamError("stream has not started")
+        if outcome == "live":
+            return LiveClipSession(
+                video_id=video_id,
+                proc=value,
+                dest=dest,
+                data_dir=data_dir,
+                site=site,
+                existed_before=existed_before,
+                log=log,
+                progress=progress,
+                lines=lines,
+                cap_seconds=live_clip_max_seconds,
+            )
+        code = value
     if code != 0:
         _cleanup_empty(dest)
-        raise RuntimeError(_yt_dlp_failure(lines, site))
+        message = _yt_dlp_failure(lines, site)
+        if message.startswith("stream has not started"):
+            raise UpcomingStreamError(message)
+        raise RuntimeError(message)
     log("download finished")
     video = find_video_file(data_dir, video_id)
     if not video:
@@ -156,7 +358,43 @@ def download(
     return video
 
 
-def _attempt(video_id, dest, data_dir, site, account, force, log, progress) -> tuple[int, list[str]]:
+def download(
+    video_id: str,
+    data_dir: Path,
+    log=print,
+    force: bool = False,
+    progress=None,
+    live_clip_max_seconds: float = DEFAULT_LIVE_CLIP_MAX_SECONDS,
+) -> Path:
+    """Download one video into data/<id>/. Returns the video file path.
+
+    YouTube needs Firefox cookies: anonymous YouTube downloads 403 after ~10 MB.
+    Deno (yt-dlp default) solves JS challenges. A tweet (x-<tweet id>) is read
+    without an account; one X hides from such readers is asked again with the
+    user's X login from Firefox, and from then on asked with it straight away, as
+    are the tweets an X profile listing found marked sensitive. --restrict-filenames
+    keeps names ASCII, but % + = @ ~ stay in them. Live streams record up to
+    live_clip_max_seconds.
+    """
+    result = start_download(
+        video_id,
+        data_dir,
+        log=log,
+        force=force,
+        progress=progress,
+        live_clip_max_seconds=live_clip_max_seconds,
+    )
+    if isinstance(result, LiveClipSession):
+        log(f"live stream detected; recording up to {format_cap(result.cap_seconds)}")
+        result.start_cap_timer()
+        video, _ = result.finish()
+        if video is None:
+            raise RuntimeError("live stream stopped before any video was recorded")
+        return video
+    return result
+
+
+def _attempt(video_id, dest, data_dir, site, account, force, log, progress) -> tuple[str, object, list[str]]:
     """One yt-dlp run, paid for from its hourly budget before it starts."""
     kind = "x-account" if account else "x-download" if site == "X" else "download"
     budget.wait_and_take(data_dir, kind, _waiting(kind, log, progress))
@@ -201,6 +439,7 @@ def _yt_dlp_cmd(video_id: str, dest: Path, site: str, account: bool = False) -> 
         "--embed-metadata",
         "--no-playlist",
         "-o", str(dest / "%(title)s-%(id)s.%(ext)s"),
+        "--print", f"before_dl:{LIVE_MARK} %(live_status)s %(is_live)s",
         "--print", "after_move:downloaded %(resolution)s %(format_id)s %(ext)s",
         "--progress", "--newline", "--progress-delta", "1",
         "--progress-template", PROGRESS_TEMPLATE,
@@ -208,25 +447,77 @@ def _yt_dlp_cmd(video_id: str, dest: Path, site: str, account: bool = False) -> 
     ]
 
 
-def _run_yt_dlp(cmd: list[str], log, progress) -> tuple[int, list[str]]:
-    """Run yt-dlp: progress lines go to progress(), the rest to log(). (exit code, logged lines)"""
+def _run_yt_dlp(cmd: list[str], log, progress) -> tuple[str, object, list[str]]:
+    """Run yt-dlp: progress lines go to progress(), live streams hand back the running proc."""
     proc = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
     )
     lines: list[str] = []
     assert proc.stdout is not None
-    for raw in proc.stdout:
-        line = raw.rstrip()
-        if not line:
-            continue
-        report = parse_progress(line)
-        if report is not None:
-            if progress:
-                progress(*report)
-            continue
-        lines.append(line)
-        log(line)
-    return proc.wait(), lines
+    handed_off = False
+    try:
+        for raw in proc.stdout:
+            line = raw.rstrip()
+            if not line:
+                continue
+            live_status = parse_live_status(line)
+            if live_status == "is_upcoming":
+                _terminate_proc(proc)
+                return "upcoming", None, lines
+            if live_status == "is_live":
+                handed_off = True
+                return "live", proc, lines
+            if live_status is not None:
+                continue
+            report = parse_progress(line)
+            if report is not None:
+                if progress:
+                    progress(*report)
+                continue
+            lines.append(line)
+            log(line)
+    finally:
+        if not handed_off:
+            _close_stdout(proc)
+    return "done", proc.wait(), lines
+
+
+def _close_stdout(proc: subprocess.Popen) -> None:
+    close = getattr(proc.stdout, "close", None)
+    if callable(close):
+        try:
+            close()
+        except OSError:
+            pass
+
+
+def _terminate_proc(proc: subprocess.Popen) -> None:
+    try:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+    except (ProcessLookupError, OSError):
+        pass
+    try:
+        if proc.stdout is not None:
+            proc.stdout.close()
+    except OSError:
+        pass
+
+
+def _cleanup_aborted_dest(dest: Path, existed_before: bool) -> None:
+    if not existed_before:
+        shutil.rmtree(dest, ignore_errors=True)
+        return
+    if dest.is_dir():
+        for p in dest.iterdir():
+            if p.is_file() and p.name.lower().endswith(".part"):
+                p.unlink(missing_ok=True)
+    _cleanup_empty(dest)
 
 
 def parse_progress(line: str) -> tuple[float | None, str] | None:
@@ -294,6 +585,12 @@ def _yt_dlp_failure(lines: list[str], site: str = "YouTube") -> str:
             "YouTube marked this title DRM-protected (Movies / rental / purchase). "
             "No downloadable video stream — only storyboard images. Cannot archive it."
         )
+    if site == "YouTube" and _UPCOMING_RE.search(blob):
+        for line in reversed(lines):
+            if line.startswith("ERROR:") and _UPCOMING_RE.search(line):
+                detail = line.removeprefix("ERROR:").strip()
+                return f"stream has not started ({detail})"
+        return "stream has not started"
     # download() has already asked X again with the user's X login when these appear.
     if site == "X" and "account credentials" in blob:
         return (
@@ -331,6 +628,24 @@ def _log_resolution(video: Path, log) -> None:
         log(f"ffprobe failed: {exc}")
 
 
+def _probe_duration(video: Path) -> float | None:
+    try:
+        out = subprocess.check_output(
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(video),
+            ],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        value = float(out)
+        return round(value, 3) if value > 0 else None
+    except Exception:
+        return None
+
+
 def write_archive_json(data_dir: Path, video_id: str, video: Path, extra: dict | None = None) -> Path:
     info = {}
     for candidate in video_dir(data_dir, video_id).glob("*.info.json"):
@@ -361,6 +676,10 @@ def write_archive_json(data_dir: Path, video_id: str, video: Path, extra: dict |
     }
     if extra:
         payload.update(extra)
+    if payload.get("duration") is None and extra and "live_clip" in extra:
+        probed = _probe_duration(video)
+        if probed is not None:
+            payload["duration"] = probed
     out = archive_json_path(data_dir, video_id)
     if out.exists():
         prev = json.loads(out.read_text(encoding="utf-8"))

@@ -36,7 +36,7 @@ Considered on 2026-11-10 and not being built now:
 |-----|------------|
 | [README.md](README.md) | Public GitHub intro: what yt-archive does, feature by feature ([its rules](#readme-settled-2026-11-15)) |
 | [docs/setup.md](docs/setup.md) | New-machine install, `.venv`, the media player copy, live service |
-| [docs/download.md](docs/download.md) | yt-dlp flags, cookies, JS runtime, its weekly self-update; X tweets (`x-<tweet id>`, no account unless X hides the tweet, own budgets) — settled, do not reinvent |
+| [docs/download.md](docs/download.md) | yt-dlp flags, cookies, JS runtime, live streams (`is_live` off-lane clip with `/api/played-stop` + cap, `is_upcoming` refused), its weekly self-update; X tweets (`x-<tweet id>`, no account unless X hides the tweet, own budgets) — settled, do not reinvent |
 | [docs/framesheets.md](docs/framesheets.md) | Shot pipeline, thresholds, rejected approaches |
 | [docs/browsing.md](docs/browsing.md) | Download queue panel, archive status and update, single-line list rows, order and sort, creator pages, the picker for YouTube creators and playlists (and which lists use your account) and X profiles (with your X login, via gallery-dl), the hourly YouTube and X request budgets, text contrast, the video page and player |
 | [docs/bookmarklet.md](docs/bookmarklet.md) | The **+ ytarchive** bookmarklet: queue the YouTube page or tweet you're on, its key, why a pop-up |
@@ -151,6 +151,7 @@ creators.py            YouTube listings for the picker; x_profiles.py X profiles
 db/                    SQLite catalog, used as one module (db.list_videos): core.py (schema,
                        connections), videos.py, transcripts.py, adds.py, jobs.py, work.py, listings.py
 paths.py               layout, ids, file names
+settings.py            gitignored settings.json loader (settings.example.json; live_clip_max_seconds)
 budget.py              hourly request budgets; locks.py per-video locks
 ```
 

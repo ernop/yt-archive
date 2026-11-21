@@ -56,6 +56,13 @@ def _facts_html(info: dict, creator_link: str, shots: int) -> str:
         facts.append(f'<span>uploaded <b>{_esc(_upload_date(info["upload_date"]))}</b></span>')
     if info.get("downloaded_at"):
         facts.append(f'<span>got <b>{_time_html(info["downloaded_at"])}</b></span>')
+    live_clip = info.get("live_clip")
+    if isinstance(live_clip, dict) and live_clip.get("started_at") and live_clip.get("ended_at"):
+        stopped = f' ({_esc(live_clip["stopped_by"])})' if live_clip.get("stopped_by") else ""
+        facts.append(
+            f'<span>live clip <b>{_time_html(live_clip["started_at"])} – '
+            f'{_time_html(live_clip["ended_at"])}</b>{stopped}</span>'
+        )
     facts.append(f"<span><code>{_esc(vid)}</code></span>")
     facts.append(
         f'<a href="{_esc(watch_url(vid))}" target="_blank" rel="noopener noreferrer">{site_name(vid)}</a>'

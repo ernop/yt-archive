@@ -107,7 +107,7 @@ class SmokeTests(unittest.TestCase):
         for path in ("/api/creators", "/api/creators/nope/get", "/api/update-archive", "/api/jobs/clear-waiting",
                      "/api/jobs/abc123/remove", "/api/jobs/abc123/dismiss", "/api/transcribe",
                      "/api/transcript/speaker", "/api/transcript/rename-speaker", "/api/open-folder", "/api/grab",
-                     "/api/lyrics", "/api/get", "/api/no-such-route"):
+                     "/api/lyrics", "/api/played-stop", "/api/get", "/api/no-such-route"):
             with self.subTest(path=path):
                 code, _ = self.request(path, method="POST")
                 self.assertLess(code, 500)

@@ -7,9 +7,16 @@ import traceback
 
 from . import db
 from .audio import dump_soundtrack
-from .download import clear_archive_extras, download
+from .download import (
+    LiveClipSession,
+    UpcomingStreamError,
+    clear_archive_extras,
+    download,
+    format_cap,
+    start_download,
+)
 from .framesheet import ensure_preview, make_shots, retile_sheets
-from .locks import try_video_lock
+from .locks import try_video_lock, video_lock
 from .lyrics import place_pending_lyrics
 from .paths import (
     VIDEO_ID_RE,
@@ -23,6 +30,7 @@ from .paths import (
     transcript_vtt_path,
     watch_url,
 )
+from .settings import DEFAULT_LIVE_CLIP_MAX_SECONDS, load_settings
 
 
 class _Progress:
@@ -43,9 +51,15 @@ class _Progress:
 
 
 class JobQueue:
-    def __init__(self, data_dir):
+    def __init__(self, data_dir, *, live_clip_max_seconds: float | None = None):
         self.data_dir = data_dir
         self._cv = threading.Condition()
+        self.live_clip_max_seconds = (
+            float(live_clip_max_seconds)
+            if live_clip_max_seconds is not None
+            else load_settings()["live_clip_max_seconds"]
+        )
+        self._ensure_live_state()
         n = db.recover_jobs(data_dir)
         if n:
             print(f"recovered {n} interrupted job(s)", flush=True)
@@ -55,6 +69,19 @@ class JobQueue:
             with self._cv:
                 self._cv.notify()
 
+    def _ensure_live_state(self) -> None:
+        """Initialise live-clip tracking even for JobQueue.__new__ test instances."""
+        if not hasattr(self, "live_clip_max_seconds"):
+            self.live_clip_max_seconds = float(DEFAULT_LIVE_CLIP_MAX_SECONDS)
+        if not hasattr(self, "_live_lock"):
+            self._live_lock = threading.Lock()
+        if not hasattr(self, "_live_sessions"):
+            self._live_sessions: dict[str, tuple[str, LiveClipSession]] = {}
+        if not hasattr(self, "_early_stops"):
+            self._early_stops: set[str] = set()
+        if not hasattr(self, "_live_threads"):
+            self._live_threads: set[threading.Thread] = set()
+
     def submit(
         self, url: str, *, force_video: bool = False, force_shots: bool = False, via: str | None = None
     ) -> dict:
@@ -62,6 +89,7 @@ class JobQueue:
         is reported as complete instead of queueing a job that would do nothing.
         `via` names how a video was asked for (db.ADD_ROUTES); a redo of an archived video
         passes none."""
+        self._ensure_live_state()
         video_id = parse_video_id(url)
         if via is not None:
             db.check_add_route(via)
@@ -77,6 +105,8 @@ class JobQueue:
         if not force_video and not force_shots:
             existing = db.find_open_job(self.data_dir, video_id)
             if existing:
+                with self._live_lock:
+                    self._early_stops.discard(existing["job_id"])
                 return {**existing, "existing": True}
             if find_video_file(self.data_dir, video_id) and not archive_needs(
                 self.data_dir, video_id
@@ -93,6 +123,41 @@ class JobQueue:
         )
         self._cv.notify()
         return job
+
+    def stop_played(self, video_id: str) -> dict:
+        """A player watcher says the user stopped hearing video_id (docs/download.md, "Live streams").
+
+        Ends an active live recording cleanly via SIGINT to yt-dlp, or notes an early stop if
+        an open job for video_id has not entered live recording yet. Normal videos ignore it.
+        """
+        self._ensure_live_state()
+        with self._live_lock:
+            active = self._live_sessions.get(video_id)
+            if active is None:
+                open_job = db.find_open_job(self.data_dir, video_id)
+                if open_job is not None:
+                    self._early_stops.add(open_job["job_id"])
+                    return {"video_id": video_id, "status": "noted", "job_id": open_job["job_id"]}
+                return {"video_id": video_id, "status": "idle"}
+        job_id, session = active
+        stopped = session.stop("stop signal")
+        return {
+            "video_id": video_id,
+            "status": "stopping" if stopped else "already_stopping",
+            "job_id": job_id,
+        }
+
+    def active_live_video_ids(self) -> set[str]:
+        self._ensure_live_state()
+        with self._live_lock:
+            return set(self._live_sessions)
+
+    def stop_all_live(self, reason: str = "stop signal") -> None:
+        self._ensure_live_state()
+        with self._live_lock:
+            sessions = [session for _, session in self._live_sessions.values()]
+        for session in sessions:
+            session.stop(reason)
 
     def submit_many(
         self, video_ids: list[str], titles: dict[str, str] | None = None, *, via: str
@@ -129,6 +194,7 @@ class JobQueue:
             self._run_locked(job)
 
     def _run_locked(self, job: dict) -> None:
+        self._ensure_live_state()
         job_id = job["job_id"]
         video_id = job["video_id"]
         progress = _Progress(self.data_dir, job_id)
@@ -147,9 +213,10 @@ class JobQueue:
             print(f"[job {job_id}] {msg}", flush=True)
             db.append_job_log(self.data_dir, job_id, str(msg))
 
+        handed_to_live = False
         try:
             mp3 = soundtrack_path(self.data_dir, video_id)
-            if job["force_video"]:
+            if job["force_video"] and job["download"] != "done":
                 if mp3.is_file():
                     mp3.unlink()
                     log("removed old MP3 audio for reget")
@@ -160,7 +227,7 @@ class JobQueue:
                     if path.is_file():
                         path.unlink()
                 clear_archive_extras(
-                    self.data_dir, video_id, "transcript", "captions", "audio_stream"
+                    self.data_dir, video_id, "transcript", "captions", "audio_stream", "live_clip"
                 )
                 db.delete_transcript(self.data_dir, video_id)
                 log("cleared stale transcript state for reget")
@@ -171,9 +238,19 @@ class JobQueue:
                 db.update_job(self.data_dir, job_id, download="running")
                 progress(None, "starting download")
                 log(f"get {video_id}" + (" (reget video)" if job["force_video"] else ""))
-                video = download(
-                    video_id, self.data_dir, log=log, force=job["force_video"], progress=progress
+                result = start_download(
+                    video_id,
+                    self.data_dir,
+                    log=log,
+                    force=job["force_video"],
+                    progress=progress,
+                    live_clip_max_seconds=self.live_clip_max_seconds,
                 )
+                if isinstance(result, LiveClipSession):
+                    handed_to_live = True
+                    self._handoff_live_clip(job, result, progress, log)
+                    return
+                video = result
                 db.update_job(self.data_dir, job_id, download="done")
                 did["download"] = "downloaded"
             else:
@@ -226,7 +303,86 @@ class JobQueue:
             db.upsert(self.data_dir, video_id)
             db.finish_job(self.data_dir, job_id, message=" · ".join(did.values()) or "already complete")
             log("done")
+        except UpcomingStreamError as exc:
+            db.finish_job(self.data_dir, job_id, error=str(exc) or "stream has not started")
+            log(f"error: {exc}")
         except Exception as exc:
             db.finish_job(self.data_dir, job_id, error=str(exc) or type(exc).__name__)
             log(f"error: {exc}")
             traceback.print_exc()
+        finally:
+            if not handed_to_live:
+                with self._live_lock:
+                    self._early_stops.discard(job_id)
+
+    def _handoff_live_clip(self, job: dict, session: LiveClipSession, progress, log) -> None:
+        """Move an active live recording onto its own thread so the main queue lane keeps going."""
+        job_id = job["job_id"]
+        video_id = job["video_id"]
+        with self._live_lock:
+            early_stopped = job_id in self._early_stops
+            self._early_stops.discard(job_id)
+            if not early_stopped:
+                self._live_sessions[video_id] = (job_id, session)
+        if early_stopped:
+            session.cancel_before_recording()
+            db.finish_job(
+                self.data_dir,
+                job_id,
+                message="live stream stopped before recording started",
+            )
+            log("live stream stopped before recording started")
+            return
+        cap_label = format_cap(session.cap_seconds)
+        progress(None, f"recording live stream (cap {cap_label})")
+        log(f"live stream detected; recording off the main queue (cap {cap_label})")
+        session.start_cap_timer()
+        thread = threading.Thread(
+            target=self._finish_live_recording,
+            args=(job, session, log),
+            name=f"ytarchive-live-{video_id}",
+            daemon=True,
+        )
+        with self._live_lock:
+            self._live_threads.add(thread)
+        thread.start()
+
+    def _finish_live_recording(self, job: dict, session: LiveClipSession, log) -> None:
+        job_id = job["job_id"]
+        video_id = job["video_id"]
+        current = threading.current_thread()
+        try:
+            with video_lock(video_id):
+                try:
+                    video, live_clip = session.finish()
+                finally:
+                    with self._live_lock:
+                        if self._live_sessions.get(video_id) == (job_id, session):
+                            self._live_sessions.pop(video_id, None)
+                if video is None:
+                    db.finish_job(
+                        self.data_dir,
+                        job_id,
+                        message="live stream stopped before recording started",
+                    )
+                    log("live stream stopped before recording started")
+                    return
+                db.update_job(
+                    self.data_dir,
+                    job_id,
+                    status="queued",
+                    download="done",
+                    progress=None,
+                    message=f"live clip recorded ({live_clip['stopped_by']}) · waiting for shots",
+                )
+            with self._cv:
+                self._cv.notify()
+        except Exception as exc:
+            db.finish_job(self.data_dir, job_id, error=str(exc) or type(exc).__name__)
+            log(f"error: {exc}")
+            traceback.print_exc()
+        finally:
+            with self._live_lock:
+                if self._live_sessions.get(video_id) == (job_id, session):
+                    self._live_sessions.pop(video_id, None)
+                self._live_threads.discard(current)
