@@ -38,7 +38,7 @@ PROGRESS_TEMPLATE = (
 # Only X's extractors run, so a tweet that just links elsewhere fails instead of fetching
 # that site outside its budget. One video per folder: a tweet with several keeps its first.
 SITE_ARGS = {
-    "YouTube": ["--cookies-from-browser", "firefox"],
+    "YouTube": [],
     "X": ["--use-extractors", "twitter.*", "--playlist-items", "1", "--no-write-playlist-metafiles"],
 }
 _LINKS_ELSEWHERE_RE = re.compile(r"No suitable extractor.* found for URL (\S+)")
@@ -343,6 +343,28 @@ def start_download(
                 cap_seconds=live_clip_max_seconds,
             )
         code = value
+    if code != 0 and site == "YouTube" and _is_drm_failure(lines):
+        log("Firefox-cookie playback offered only DRM streams; trying again without cookies")
+        outcome, value, lines = _attempt(
+            video_id, dest, data_dir, site, False, False, log, progress, youtube_cookies=False
+        )
+        if outcome == "upcoming":
+            _cleanup_aborted_dest(dest, existed_before)
+            raise UpcomingStreamError("stream has not started")
+        if outcome == "live":
+            return LiveClipSession(
+                video_id=video_id,
+                proc=value,
+                dest=dest,
+                data_dir=data_dir,
+                site=site,
+                existed_before=existed_before,
+                log=log,
+                progress=progress,
+                lines=lines,
+                cap_seconds=live_clip_max_seconds,
+            )
+        code = value
     if code != 0:
         _cleanup_empty(dest)
         message = _yt_dlp_failure(lines, site)
@@ -394,15 +416,37 @@ def download(
     return result
 
 
-def _attempt(video_id, dest, data_dir, site, account, force, log, progress) -> tuple[str, object, list[str]]:
+def _attempt(
+    video_id,
+    dest,
+    data_dir,
+    site,
+    account,
+    force,
+    log,
+    progress,
+    youtube_cookies: bool = True,
+) -> tuple[str, object, list[str]]:
     """One yt-dlp run, paid for from its hourly budget before it starts."""
     kind = "x-account" if account else "x-download" if site == "X" else "download"
     budget.wait_and_take(data_dir, kind, _waiting(kind, log, progress))
     if force:
         _remove_videos(dest, log)
-    how = "your X login from Firefox" if account else "no account" if site == "X" else "firefox cookies"
+    how = (
+        "your X login from Firefox"
+        if account
+        else "no account"
+        if site == "X" or not youtube_cookies
+        else "firefox cookies"
+    )
     log(f"yt-dlp starting (best video+audio, {how})")
-    return _run_yt_dlp(_yt_dlp_cmd(video_id, dest, site, account=account), log, progress)
+    return _run_yt_dlp(
+        _yt_dlp_cmd(
+            video_id, dest, site, account=account, youtube_cookies=youtube_cookies
+        ),
+        log,
+        progress,
+    )
 
 
 def _waiting(kind: str, log, progress):
@@ -423,12 +467,22 @@ def _waiting(kind: str, log, progress):
     return waiting
 
 
-def _yt_dlp_cmd(video_id: str, dest: Path, site: str, account: bool = False) -> list[str]:
+def _yt_dlp_cmd(
+    video_id: str,
+    dest: Path,
+    site: str,
+    account: bool = False,
+    youtube_cookies: bool = True,
+) -> list[str]:
     return [
         yt_dlp_bin(),
         "--ignore-config",
         *SITE_ARGS[site],
-        *(["--cookies-from-browser", "firefox"] if account else []),
+        *(
+            ["--cookies-from-browser", "firefox"]
+            if account or (site == "YouTube" and youtube_cookies)
+            else []
+        ),
         # Highest resolution available, any codec. Do not prefer mp4 — that
         # can pick 1080p AVC over 4K VP9/AV1. Merge without re-encode.
         "-f", "bv*+ba/b",
@@ -578,13 +632,15 @@ def _cleanup_empty(dest: Path) -> None:
         pass
 
 
+def _is_drm_failure(lines: list[str]) -> bool:
+    return any(
+        line.startswith("ERROR:") and "this video is drm protected" in line.lower()
+        for line in lines
+    )
+
+
 def _yt_dlp_failure(lines: list[str], site: str = "YouTube") -> str:
     blob = "\n".join(lines)
-    if "drm protected" in blob.lower():
-        return (
-            "YouTube marked this title DRM-protected (Movies / rental / purchase). "
-            "No downloadable video stream — only storyboard images. Cannot archive it."
-        )
     if site == "YouTube" and _UPCOMING_RE.search(blob):
         for line in reversed(lines):
             if line.startswith("ERROR:") and _UPCOMING_RE.search(line):

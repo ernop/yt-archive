@@ -29,6 +29,7 @@ LOGIN_REQUIRED = (
 )
 NO_VIDEO = "ERROR: [twitter] 1234567890123456789: No video could be found in this tweet"
 STOPPED = "ERROR: [twitter] stopped by the test"
+DRM = "ERROR: [youtube] choose00001: This video is DRM protected"
 
 
 class TweetIdTests(unittest.TestCase):
@@ -141,6 +142,26 @@ class TweetDownloadTests(unittest.TestCase):
         self.assertEqual(cmd[cmd.index("--cookies-from-browser") + 1], "firefox")
         self.assertNotIn("--use-extractors", cmd)
         self.assertEqual(cmd[-1], "https://www.youtube.com/watch?v=choose00001")
+
+    def test_youtube_drm_failure_is_retried_without_cookies(self):
+        (signed_in, guest), kinds, error = self.run_yt_dlp("choose00001", DRM, STOPPED)
+        self.assertEqual(kinds, ["download", "download"])
+        self.assertEqual(
+            signed_in[signed_in.index("--cookies-from-browser") + 1], "firefox"
+        )
+        self.assertNotIn("--cookies-from-browser", guest)
+        self.assertEqual(guest[-1], signed_in[-1])
+        self.assertEqual(error, "[twitter] stopped by the test")
+
+    def test_drm_warning_alone_does_not_trigger_a_retry(self):
+        warning = (
+            "WARNING: [youtube] Some web_creator client https formats have been skipped "
+            "as they are DRM protected."
+        )
+        (cmd,), kinds, error = self.run_yt_dlp("choose00001", warning)
+        self.assertEqual(kinds, ["download"])
+        self.assertIn("--cookies-from-browser", cmd)
+        self.assertEqual(error, "yt-dlp failed: " + warning)
 
     def test_failures_say_why_there_is_no_video(self):
         for refusal in (LOGIN_REQUIRED, NO_VIDEO):

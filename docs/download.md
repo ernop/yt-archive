@@ -16,7 +16,12 @@ Tweets on X take the same recipe except where
 - **Firefox cookies required** (as of 2026-08-14). Anonymous downloads via
   the android_vr client get HTTP 403 after ~10 MB (URL invalidated
   server-side; `--http-chunk-size` does not help). web/ios/tv refuse
-  without a PO token. Authenticated requests have no cutoff.
+  without a PO token. Authenticated requests have no cutoff. One exception:
+  if yt-dlp's final error says the cookie-backed YouTube player offered only
+  DRM streams, retry once without cookies. YouTube can offer an ordinary
+  downloadable video and audio pair to its anonymous client for the same
+  title. A warning that only *some* formats are DRM-protected does not trigger
+  the retry. Both attempts count against the download budget.
 - **JS runtime required** or yt-dlp reports "This video is not available".
   Deno is yt-dlp's default (sandboxed). Node also works.
 - `--restrict-filenames` — ASCII names without spaces or shell characters.
