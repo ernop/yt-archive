@@ -27,19 +27,25 @@ async function watchJob(jobId, status) {
     await new Promise((r) => setTimeout(r, 1000));
   }
 }
-async function reget(kind) {
-  const ok = confirm(kind === 'video'
-    ? 'Download this video from ' + site + ' again and rebuild its shots and framesheet?'
-    : 'Rebuild the shot images and framesheet from the local video?');
-  if (!ok) return;
-  const png = document.getElementById('reget-png');
-  const video = document.getElementById('reget-video');
-  const status = document.getElementById('reget-status');
-  png.disabled = video.disabled = true;
+const pngBtn = document.getElementById('reget-png');
+const videoBtn = document.getElementById('reget-video');
+const makeShotsBtn = document.getElementById('make-shots');
+async function reget(kind, status) {
+  const regetShots = Boolean(pngBtn);
+  const promptText = kind === 'video'
+    ? (regetShots
+      ? 'Download this video from ' + site + ' again and rebuild its shots and framesheet?'
+      : 'Download this video from ' + site + ' again?')
+    : (kind === 'make-shots'
+      ? 'Make shot images and framesheet from the local video? Videos over 30 minutes can take several minutes.'
+      : 'Rebuild the shot images and framesheet from the local video?');
+  if (!confirm(promptText)) return;
+  const buttons = [pngBtn, videoBtn, makeShotsBtn].filter(Boolean);
+  buttons.forEach((b) => { b.disabled = true; });
   status.className = '';
   status.textContent = 'starting…';
   const body = kind === 'video'
-    ? {url: vid, force_video: true, force_shots: true}
+    ? (regetShots ? {url: vid, force_video: true, force_shots: true} : {url: vid, force_video: true})
     : {url: vid, force_shots: true};
   try {
     const data = await post('/api/get', body);
@@ -47,11 +53,12 @@ async function reget(kind) {
   } catch (err) {
     status.className = 'error';
     status.textContent = err.message;
-    png.disabled = video.disabled = false;
+    buttons.forEach((b) => { b.disabled = false; });
   }
 }
-document.getElementById('reget-png').onclick = () => reget('png');
-document.getElementById('reget-video').onclick = () => reget('video');
+if (pngBtn) pngBtn.onclick = () => reget('png', document.getElementById('reget-status'));
+if (videoBtn) videoBtn.onclick = () => reget('video', document.getElementById('reget-status'));
+if (makeShotsBtn) makeShotsBtn.onclick = () => reget('make-shots', document.getElementById('shots-status'));
 const dumpBtn = document.getElementById('dump-audio');
 if (dumpBtn) dumpBtn.onclick = async () => {
   dumpBtn.disabled = true;

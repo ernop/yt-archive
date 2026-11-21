@@ -91,9 +91,10 @@ metadata request:
   `live_clip` (`started_at`, `ended_at`, `stopped_by`: `"stop signal"`,
   `"cap"`, or `"stream ended"`) and probes duration with `ffprobe` when
   `info.json` had `duration: null`. The job re-enters the queue with
-  `download="done"` so framesheet shots and MP3 audio still run one at a time on
-  the main worker. The video page shows the recorded time range and stop reason
-  in its facts bar; everywhere else it is an ordinary archived video.
+  `download="done"` so framesheet shots (for clips up to 30 minutes) and MP3
+  audio still run one at a time on the main worker. The video page shows the
+  recorded time range and stop reason in its facts bar; everywhere else it is
+  an ordinary archived video.
 - **Upcoming streams (`is_upcoming`)**: fail immediately with a message
   containing `"stream has not started"` instead of waiting.
 - **Finished streams (`was_live`, `post_live`)**: have a fixed duration and

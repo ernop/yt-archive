@@ -9,10 +9,19 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from yt_archive import db
+from yt_archive.cli import _get as cli_get, _shots as cli_shots
 from yt_archive.download import parse_progress
 from yt_archive.framesheet import _sheet_chunk_sizes, retile_sheets
 from yt_archive.jobs import JobQueue
-from yt_archive.paths import archive_needs, card_thumb_path, framesheet_paths, load_archive_info, preview_path
+from yt_archive.paths import (
+    AUTO_SHOTS_MAX_SECONDS,
+    archive_needs,
+    card_thumb_path,
+    framesheet_paths,
+    load_archive_info,
+    preview_path,
+    skips_default_shots,
+)
 from yt_archive.web import detail_html, make_handler
 from yt_archive.web.server import _byte_range
 
@@ -333,6 +342,183 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(_byte_range("bytes=-0", 1000), "unsatisfiable")
         self.assertIsNone(_byte_range("bytes=0-1,5-9", 1000))
         self.assertIsNone(_byte_range(None, 1000))
+
+
+class LongVideoShotsDefaultTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.data = Path(self.tmp.name)
+        self.queue = fake_queue(self.data)
+
+    def test_threshold_is_strictly_over_30_minutes(self):
+        self.assertEqual(AUTO_SHOTS_MAX_SECONDS, 1800)
+        for value in (None, 0, 1799, 1800, 1800.0, True, False, "bad"):
+            with self.subTest(value=value):
+                self.assertFalse(skips_default_shots(value))
+        for value in (1800.1, 1801, 3600):
+            with self.subTest(value=value):
+                self.assertTrue(skips_default_shots(value))
+
+    def test_archive_needs_skips_missing_shots_only_over_30_minutes(self):
+        make_video(self.data, "atlimit0001", shots=0, mp3=True, extra={"duration": 1800})
+        make_video(self.data, "longvid0001", shots=0, mp3=True, extra={"duration": 1801})
+        make_video(self.data, "longnomp301", shots=0, mp3=False, extra={"duration": 2400})
+        make_video(self.data, "longsplit01", shots=300, sheets=1, mp3=True, extra={"duration": 3600})
+        make_video(self.data, "longprev001", shots=10, preview=False, mp3=True, extra={"duration": 3600})
+
+        self.assertEqual(archive_needs(self.data, "atlimit0001"), ["shots"])
+        self.assertEqual(archive_needs(self.data, "longvid0001"), [])
+        self.assertEqual(archive_needs(self.data, "longnomp301"), ["audio"])
+        self.assertEqual(archive_needs(self.data, "longsplit01"), ["resplit"])
+        self.assertEqual(archive_needs(self.data, "longprev001"), ["preview"])
+
+        # Long video with MP3 and no shots is treated as up to date by submit and update-archive.
+        db.rebuild(self.data)
+        summary = db.archive_needs_summary(self.data)
+        self.assertNotIn("longvid0001", summary["videos"])
+        self.assertEqual(self.queue.submit("longvid0001")["status"], "complete")
+        self.assertEqual(self.queue.submit("longvid0001", force_shots=True)["status"], "queued")
+
+    def test_fresh_download_skips_shots_over_30m_and_runs_them_at_30m(self):
+        def fake_start(video_id, data_dir, **kwargs):
+            duration = 2400 if video_id.startswith("long") else 1800
+            folder = make_video(data_dir, video_id, shots=0, mp3=False, extra={"duration": duration})
+            return folder / f"{video_id}.mp4"
+
+        def fake_shots(video, data_dir, video_id, **kwargs):
+            cond = data_dir / video_id / "_condensed"
+            (cond / "framesheet.png").write_bytes(TINY_PNG)
+            (cond / "preview.jpg").write_bytes(b"preview")
+            (cond / "shots.json").write_text(
+                json.dumps({"shots_kept": 4, "framesheets": ["framesheet.png"], "shots": [], **CURRENT}),
+                encoding="utf-8",
+            )
+            return {"shots_kept": 4, "shots_detected": 4}
+
+        def fake_dump(video, data_dir, video_id, log=print):
+            (data_dir / video_id / "_condensed" / "soundtrack.mp3").write_bytes(b"mp3")
+            return True
+
+        # >30m: skips shots, still dumps MP3.
+        job_long = self.queue.submit("longdl00001")
+        claimed_long = db.claim_next_job(self.data)
+        with patch("yt_archive.jobs.start_download", side_effect=fake_start), \
+                patch("yt_archive.jobs.make_shots", side_effect=fake_shots) as shots_mock, \
+                patch("yt_archive.jobs.dump_soundtrack", side_effect=fake_dump):
+            self.queue._run_locked(claimed_long)
+        shots_mock.assert_not_called()
+        done_long = db.get_job(self.data, job_long["job_id"])
+        self.assertEqual((done_long["status"], done_long["download"], done_long["shots"], done_long["audio"]),
+                         ("done", "done", "skipped", "done"))
+        self.assertEqual(done_long["message"], "downloaded · MP3 audio")
+        self.assertEqual(archive_needs(self.data, "longdl00001"), [])
+
+        # Explicit force_shots on >30m video DOES make shots.
+        job_forced = self.queue.submit("longdl00001", force_shots=True)
+        claimed_forced = db.claim_next_job(self.data)
+        with patch("yt_archive.jobs.make_shots", side_effect=fake_shots) as shots_mock, \
+                patch("yt_archive.jobs.dump_soundtrack", side_effect=fake_dump):
+            self.queue._run_locked(claimed_forced)
+        shots_mock.assert_called_once()
+        done_forced = db.get_job(self.data, job_forced["job_id"])
+        self.assertEqual((done_forced["status"], done_forced["shots"]), ("done", "done"))
+        self.assertEqual(done_forced["message"], "4 shots")
+
+        # ==30m (1800s): makes shots by default.
+        job_exact = self.queue.submit("exact300001")
+        claimed_exact = db.claim_next_job(self.data)
+        with patch("yt_archive.jobs.start_download", side_effect=fake_start), \
+                patch("yt_archive.jobs.make_shots", side_effect=fake_shots) as shots_mock, \
+                patch("yt_archive.jobs.dump_soundtrack", side_effect=fake_dump):
+            self.queue._run_locked(claimed_exact)
+        shots_mock.assert_called_once()
+        done_exact = db.get_job(self.data, job_exact["job_id"])
+        self.assertEqual((done_exact["status"], done_exact["shots"]), ("done", "done"))
+
+    def test_force_video_respects_long_video_shot_state(self):
+        make_video(self.data, "longnosh001", shots=0, mp3=True, extra={"duration": 2400})
+        make_video(self.data, "longhas0001", shots=5, mp3=True, extra={"duration": 2400})
+        make_video(self.data, "shortre0001", shots=5, mp3=True, extra={"duration": 300})
+
+        def fake_start(video_id, data_dir, **kwargs):
+            duration = 300 if video_id.startswith("short") else 2400
+            folder = data_dir / video_id
+            (folder / "archive.json").write_text(
+                json.dumps({"video_id": video_id, "title": video_id, "duration": duration}),
+                encoding="utf-8",
+            )
+            return folder / f"{video_id}.mp4"
+
+        def fake_dump(video, data_dir, video_id, log=print):
+            (data_dir / video_id / "_condensed" / "soundtrack.mp3").write_bytes(b"mp3")
+            return True
+
+        # Long video without shots: force_video alone does not make shots.
+        self.queue.submit("longnosh001", force_video=True)
+        claimed = db.claim_next_job(self.data)
+        with patch("yt_archive.jobs.start_download", side_effect=fake_start), \
+                patch("yt_archive.jobs.make_shots", return_value={"shots_kept": 3}) as shots_mock, \
+                patch("yt_archive.jobs.dump_soundtrack", side_effect=fake_dump):
+            self.queue._run_locked(claimed)
+        shots_mock.assert_not_called()
+
+        # Long video WITH existing shots: force_video rebuilds shots.
+        self.queue.submit("longhas0001", force_video=True)
+        claimed = db.claim_next_job(self.data)
+        with patch("yt_archive.jobs.start_download", side_effect=fake_start), \
+                patch("yt_archive.jobs.make_shots", return_value={"shots_kept": 3}) as shots_mock, \
+                patch("yt_archive.jobs.dump_soundtrack", side_effect=fake_dump):
+            self.queue._run_locked(claimed)
+        shots_mock.assert_called_once()
+
+        # Short video: force_video alone rebuilds shots.
+        self.queue.submit("shortre0001", force_video=True)
+        claimed = db.claim_next_job(self.data)
+        with patch("yt_archive.jobs.start_download", side_effect=fake_start), \
+                patch("yt_archive.jobs.make_shots", return_value={"shots_kept": 3}) as shots_mock, \
+                patch("yt_archive.jobs.dump_soundtrack", side_effect=fake_dump):
+            self.queue._run_locked(claimed)
+        shots_mock.assert_called_once()
+
+    def test_cli_get_skips_shots_over_30m_while_cli_shots_always_runs(self):
+        def fake_download(video_id, data_dir, **kwargs):
+            folder = make_video(data_dir, video_id, shots=0, mp3=False, extra={"duration": 2400})
+            return folder / f"{video_id}.mp4"
+
+        with patch("yt_archive.cli.download", side_effect=fake_download), \
+                patch("yt_archive.cli.make_shots") as shots_mock, \
+                patch("yt_archive.cli.dump_soundtrack", return_value=None):
+            cli_get(self.data, "clilong0001", 0.85, skip_shots=False)
+        shots_mock.assert_not_called()
+
+        with patch("yt_archive.cli.make_shots", return_value={"video_id": "clilong0001", "shots_detected": 3, "shots_kept": 3}) as shots_mock:
+            cli_shots(self.data, "clilong0001", 0.85)
+        shots_mock.assert_called_once()
+
+    def test_detail_page_offers_make_shots_for_long_video_without_shots(self):
+        make_video(self.data, "longnosh001", shots=0, mp3=True, extra={"duration": 2400})
+        make_video(self.data, "longhas0001", shots=5, mp3=True, extra={"duration": 2400})
+        make_video(self.data, "shortno0001", shots=0, mp3=True, extra={"duration": 1800})
+
+        html_long_no = detail_html(load_archive_info(self.data, "longnosh001"), self.data).decode()
+        self.assertIn("Shots are not made by default for videos over 30 minutes.", html_long_no)
+        self.assertIn('id="make-shots">Make shots</button>', html_long_no)
+        self.assertIn('id="shots-status"', html_long_no)
+        self.assertNotIn("No framesheet yet", html_long_no)
+        self.assertNotIn('id="reget-png"', html_long_no)
+        self.assertIn('id="reget-video"', html_long_no)
+        self.assertNotIn("click a shot to play from it", html_long_no)
+
+        html_long_yes = detail_html(load_archive_info(self.data, "longhas0001"), self.data).decode()
+        self.assertNotIn('id="make-shots"', html_long_yes)
+        self.assertIn('id="reget-png">Rebuild shots</button>', html_long_yes)
+        self.assertIn('id="reget-video"', html_long_yes)
+
+        html_short_no = detail_html(load_archive_info(self.data, "shortno0001"), self.data).decode()
+        self.assertIn("No framesheet yet", html_short_no)
+        self.assertNotIn('id="make-shots"', html_short_no)
+        self.assertIn('id="reget-png">Rebuild shots</button>', html_short_no)
 
 
 if __name__ == "__main__":

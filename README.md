@@ -1,6 +1,6 @@
 # yt-archive
 
-yt-archive downloads YouTube videos, and videos posted on X, to your own computer. With each video it saves a picture of every shot and an MP3 of the sound track, and, when asked, a transcript of the speech. You use it from a web page that the same computer serves.
+yt-archive downloads YouTube videos, and videos posted on X, to your own computer. With each video it saves an MP3 of the sound track, a picture of every shot for videos up to 30 minutes, and, when asked, a transcript of the speech. You use it from a web page that the same computer serves.
 
 ## Adding videos
 
@@ -27,7 +27,7 @@ The picker lists the videos of a YouTube creator, a playlist or an X profile. No
 ## What each video gets
 
 - **The video file** at the highest resolution offered, with its thumbnail, title, channel, description and upload date.
-- **Shot pictures.** yt-archive checks the video twice a second and keeps a frame whenever it looks different from the last frame kept.
+- **Shot pictures.** yt-archive checks the video twice a second and keeps a frame whenever it looks different from the last frame kept. Videos over 30 minutes skip shots by default; **Make shots** on the video page makes them on request.
 - **A framesheet**: all of a video's shot pictures laid out together in one image. Past 250 shots it is split into several images.
 - **MP3 audio** of the sound track. A video without sound gets none.
 - **Lyrics**, when a program on the computer sends them for the video. They are kept beside the MP3.
@@ -48,8 +48,8 @@ The picker lists the videos of a YouTube creator, a playlist or an X profile. No
 - **Player.** Each shot is a mark on the seek bar, and the picture of the shot playing is outlined in red. Clicking a shot picture plays from that moment; PageUp and PageDown then step from shot to shot.
 - **Keys.** S saves the frame on screen as a full-size PNG beside the MP3. T enlarges the video from 72% to 86% of the window height. R turns repeat on or off: the video starts again each time it ends. ? lists every key. The player offers to resume where you stopped, and remembers speed, volume, captions and the enlarged view.
 - **MP3.** It plays on the page and downloads as a file named after the artist and title. **Open MP3 folder** opens its folder on the computer. **Create MP3 audio** makes one for a video that has none. Lyrics, when present, download beside it.
-- **The framesheet and every shot picture** are on the page.
-- **Redo.** **Rebuild shots** remakes the shot pictures and framesheet from the local file. **Download again** downloads the video again, rebuilds its shots, deletes its transcript, and makes a new MP3.
+- **The framesheet and every shot picture** are on the page, or **Make shots** when shots were skipped for a video over 30 minutes.
+- **Redo.** **Rebuild shots** remakes the shot pictures and framesheet from the local file. **Download again** downloads the video again, deletes its transcript, makes a new MP3, and rebuilds shots if the video has them or is 30 minutes or shorter.
 
 ## Transcripts
 

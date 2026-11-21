@@ -14,6 +14,7 @@ from ..paths import (
     read_shots_json,
     shots_dir,
     site_name,
+    skips_default_shots,
     soundtrack_path,
     transcript_is_complete,
     transcript_json_path,
@@ -90,6 +91,7 @@ def detail_html(info: dict, data_dir: Path, job: dict | None = None) -> bytes:
         except (OSError, json.JSONDecodeError):
             has_transcript = False
     sheets = framesheet_paths(data_dir, vid)
+    long_video = skips_default_shots(duration)
     shot_recs = (read_shots_json(data_dir, vid) or {}).get("shots", [])
     kept = [r for r in shot_recs if r.get("file") and r.get("kept") is not False]
     # Each kept shot's start is a marker on the player's scale; its id is the shot image's file,
@@ -134,14 +136,20 @@ def detail_html(info: dict, data_dir: Path, job: dict | None = None) -> bytes:
             if has_transcript
             else ""
         )
+        player_help = (
+            "click a shot to play from it, then PageUp and PageDown step through shots · "
+            "S saves this frame next to the MP3 · T widens the page · "
+            "shift-click a shot to open its PNG · ? lists every key"
+            if kept
+            else "S saves this frame next to the MP3 · T widens the page · ? lists every key"
+        )
         parts.append(f"""
 <div class="ytp" id="ytp" data-id="{_esc(vid)}">
   <video controls preload="metadata" src="{_esc(media_url(data_dir, video))}" data-media-player
     data-title="{_esc(title)}"{dur_attr} data-markers="{markers_attr}" data-markers-label="Shot"
     data-wide>{captions_track}</video>
 </div>
-<p class="meta">click a shot to play from it, then PageUp and PageDown step through shots · S saves this frame next to the MP3 · T widens the page ·
-shift-click a shot to open its PNG · ? lists every key</p>
+<p class="meta">{player_help}</p>
 """)
     mp3 = soundtrack_path(data_dir, vid)
     soundtrack_bits = ['<div class="soundtrack">']
@@ -270,7 +278,17 @@ shift-click a shot to open its PNG · ? lists every key</p>
     )
     parts.append(soundtrack_html)
     if video and not sheets:
-        parts.append('<p class="sheet-label">No framesheet yet — the next job for this video makes one.</p>')
+        if long_video:
+            parts.append(
+                '<div class="shots-empty">'
+                "<h2>Shots</h2>"
+                '<p class="meta">Shots are not made by default for videos over 30 minutes.</p>'
+                '<div class="row"><button type="button" class="btn" id="make-shots">Make shots</button></div>'
+                '<div id="shots-status"></div>'
+                "</div>"
+            )
+        else:
+            parts.append('<p class="sheet-label">No framesheet yet — the next job for this video makes one.</p>')
     for n, sheet in enumerate(sheets, start=1):
         label = (
             f"Squished framesheet {n}/{len(sheets)}"
@@ -308,8 +326,9 @@ shift-click a shot to open its PNG · ? lists every key</p>
             f'<p class="sheet-label">Shot images — click to play from that moment</p>'
             f'<div class="shots">{"".join(figs)}</div>'
         )
-    parts.append(
-        """
+    if sheets or not long_video:
+        parts.append(
+            """
 <div class="backup">
   <h2>Redo</h2>
   <p>If a piece came out wrong: rebuild the shots and framesheet from the local video, or download the video again.</p>
@@ -318,7 +337,18 @@ shift-click a shot to open its PNG · ? lists every key</p>
   <div id="reget-status"></div>
 </div>
 """
-    )
+        )
+    else:
+        parts.append(
+            """
+<div class="backup">
+  <h2>Redo</h2>
+  <p>If the video came out wrong, download it again.</p>
+  <button type="button" class="btn" id="reget-video">Download again</button>
+  <div id="reget-status"></div>
+</div>
+"""
+        )
     parts.append("</main>")
     return _page(
         title,

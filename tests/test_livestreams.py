@@ -396,6 +396,25 @@ class LiveStreamQueueTests(unittest.TestCase):
         self.assertTrue(normal_done)
         self.assertTrue(archive_json_path(self.data, normal_id).is_file())
 
+    def test_live_stream_over_30m_skips_shots_by_default(self):
+        vid = "livelong001"
+        self.spec[vid] = {"mode": "is_live", "end_after": 0.15}
+        self._write_spec()
+        queue = self._make_queue(live_clip_max_seconds=30.0)
+
+        with patch("yt_archive.download._probe_duration", return_value=2400.0):
+            job = queue.submit(vid)
+            done = _wait_until(
+                lambda: (j := db.get_job(self.data, job["job_id"])) and j["status"] == "done" and j
+            )
+        self.assertTrue(done)
+        self.assertEqual((done["download"], done["shots"], done["audio"]), ("done", "skipped", "done"))
+        self.assertEqual(framesheet_paths(self.data, vid), [])
+        self.assertTrue(soundtrack_path(self.data, vid).is_file())
+        info = load_archive_info(self.data, vid)
+        self.assertEqual(info["duration"], 2400.0)
+        self.assertEqual(info["needs"], [])
+
     def test_played_stop_endpoint_validation_and_guards(self):
         queue = self._make_queue()
         work_queue = SimpleNamespace(get=lambda job_id: None)
@@ -476,6 +495,13 @@ class LiveHelpersAndSettingsTests(unittest.TestCase):
             info = load_archive_info(data_dir, vid)
             self.assertEqual(info["duration"], 75.25)
             self.assertEqual(info["live_clip"]["stopped_by"], "stop signal")
+
+            # A follow-up write_archive_json (e.g. from dump_soundtrack) keeps the probed duration
+            # even though info.json still has duration: null.
+            write_archive_json(data_dir, vid, video, extra={"soundtrack": "soundtrack.mp3"})
+            info = load_archive_info(data_dir, vid)
+            self.assertEqual(info["duration"], 75.25)
+            self.assertEqual(info["soundtrack"], "soundtrack.mp3")
 
 
 if __name__ == "__main__":

@@ -375,7 +375,7 @@ def start_download(
     video = find_video_file(data_dir, video_id)
     if not video:
         raise FileNotFoundError(f"yt-dlp finished but no video in {dest}")
-    write_archive_json(data_dir, video_id, video)
+    write_archive_json(data_dir, video_id, video, probe_duration=True)
     _log_resolution(video, log)
     return video
 
@@ -702,7 +702,14 @@ def _probe_duration(video: Path) -> float | None:
         return None
 
 
-def write_archive_json(data_dir: Path, video_id: str, video: Path, extra: dict | None = None) -> Path:
+def write_archive_json(
+    data_dir: Path,
+    video_id: str,
+    video: Path,
+    extra: dict | None = None,
+    *,
+    probe_duration: bool = False,
+) -> Path:
     info = {}
     for candidate in video_dir(data_dir, video_id).glob("*.info.json"):
         raw = json.loads(candidate.read_text(encoding="utf-8"))
@@ -732,13 +739,16 @@ def write_archive_json(data_dir: Path, video_id: str, video: Path, extra: dict |
     }
     if extra:
         payload.update(extra)
-    if payload.get("duration") is None and extra and "live_clip" in extra:
-        probed = _probe_duration(video)
-        if probed is not None:
-            payload["duration"] = probed
     out = archive_json_path(data_dir, video_id)
-    if out.exists():
-        prev = json.loads(out.read_text(encoding="utf-8"))
+    prev = json.loads(out.read_text(encoding="utf-8")) if out.exists() else None
+    if payload.get("duration") is None:
+        if prev and prev.get("duration") is not None:
+            payload["duration"] = prev["duration"]
+        elif probe_duration or (extra and "live_clip" in extra):
+            probed = _probe_duration(video)
+            if probed is not None:
+                payload["duration"] = probed
+    if prev is not None:
         kept = prev.get("downloaded_at")
         prev.update(payload)
         if kept:

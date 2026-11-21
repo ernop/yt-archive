@@ -22,9 +22,11 @@ from .paths import (
     VIDEO_ID_RE,
     archive_needs,
     find_video_file,
+    framesheet_paths,
     is_tweet,
     load_archive_info,
     parse_video_id,
+    skips_default_shots,
     soundtrack_path,
     transcript_json_path,
     transcript_vtt_path,
@@ -95,8 +97,6 @@ class JobQueue:
         video_id = parse_video_id(url)
         if via is not None:
             db.check_add_route(via)
-        if force_video:
-            force_shots = True
         with self._cv:
             result = self._submit_locked(url, video_id, force_video, force_shots)
             if via is not None:
@@ -247,7 +247,13 @@ class JobQueue:
                     if path.is_file():
                         path.unlink()
                 clear_archive_extras(
-                    self.data_dir, video_id, "transcript", "captions", "audio_stream", "live_clip"
+                    self.data_dir,
+                    video_id,
+                    "transcript",
+                    "captions",
+                    "audio_stream",
+                    "live_clip",
+                    "duration",
                 )
                 db.delete_transcript(self.data_dir, video_id)
                 log("cleared stale transcript state for reget")
@@ -277,8 +283,16 @@ class JobQueue:
                 skip("download")
                 log(f"already have {video.name}")
 
-            needs = archive_needs(self.data_dir, video_id)
-            if job["force_shots"] or did_download or {"shots", "reshoot"} & set(needs):
+            info = load_archive_info(self.data_dir, video_id)
+            needs = info["needs"]
+            has_sheets = bool(framesheet_paths(self.data_dir, video_id))
+            long_video = skips_default_shots(info.get("duration"))
+            need_shots = job["shots"] != "done" and (
+                job["force_shots"]
+                or bool({"shots", "reshoot"} & set(needs))
+                or ((did_download or job["force_video"]) and (not long_video or has_sheets))
+            )
+            if need_shots:
                 db.update_job(self.data_dir, job_id, shots="running")
                 log("making squash framesheet" + (" (reget png)" if job["force_shots"] else ""))
                 summary = make_shots(
@@ -301,7 +315,10 @@ class JobQueue:
                 did["shots"] = "list thumbnail"
             else:
                 skip("shots")
-                log("framesheet already exists")
+                if long_video and not has_sheets:
+                    log("skipping shots by default (video is over 30m)")
+                else:
+                    log("framesheet already exists")
 
             if "audio" in needs:
                 db.update_job(self.data_dir, job_id, audio="running")
@@ -387,13 +404,15 @@ class JobQueue:
                     )
                     log("live stream stopped before recording started")
                     return
+                long_video = skips_default_shots(load_archive_info(self.data_dir, video_id).get("duration"))
+                waiting_for = "MP3 audio" if long_video else "shots"
                 db.update_job(
                     self.data_dir,
                     job_id,
                     status="queued",
                     download="done",
                     progress=None,
-                    message=f"live clip recorded ({live_clip['stopped_by']}) · waiting for shots",
+                    message=f"live clip recorded ({live_clip['stopped_by']}) · waiting for {waiting_for}",
                 )
             with self._cv:
                 self._cv.notify()

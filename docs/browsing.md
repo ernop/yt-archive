@@ -51,7 +51,7 @@ the list says how many and why, with one **Update N videos** button:
 
 | Need | Meaning | What the job does |
 |------|---------|-------------------|
-| no framesheet | video but no shots or sheet | full shot pipeline |
+| no framesheet | video up to 30 minutes with no shots or sheet | full shot pipeline |
 | old shot detection | `shots.json` not from the settled last-kept method | full shot pipeline |
 | framesheet to split | sheet count breaks the balanced-sheet rule | re-lay the existing shot PNGs, no CLIP |
 | no list thumbnail | no `preview.jpg`, or older than sheet 1 | resize sheet 1 |
@@ -406,8 +406,11 @@ link (an X link for a tweet's video). The description (a tweet's text)
 follows, collapsed. If a job for the video is
 waiting or running, a banner says so; the page does not wait for the job and
 shows the files as they are. A video without an audio track says so instead
-of offering **Create MP3 audio**. **Redo** at the bottom rebuilds the shots
-from the local file or downloads the video again.
+of offering **Create MP3 audio**. A video over 30 minutes without shots notes
+that shots are skipped by default and offers **Make shots** to generate them
+on demand ([framesheets.md](framesheets.md#skipped-by-default-over-30-minutes-settled-2026-11-21)).
+**Redo** at the bottom rebuilds the shots from the local file (when shots
+exist or the video is up to 30 minutes) or downloads the video again.
 
 **download MP3 audio** saves the file as `<artist>_-_<title>-<id>.mp3`
 (November 9, 2026), not as the `soundtrack.mp3` it is on disk, so a pile of

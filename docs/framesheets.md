@@ -95,17 +95,37 @@ The archive list uses it; it never uses a full sheet, which can be hundreds of
 megapixels (Pillow's decompression-bomb guard is lifted only while making the
 preview).
 
+## Skipped by default over 30 minutes (settled 2026-11-21)
+
+Videos whose duration is strictly over 30 minutes (`AUTO_SHOTS_MAX_SECONDS = 1800`
+in `paths.py`, checked via `paths.skips_default_shots()`) skip shot and
+framesheet generation on default runs:
+
+- Download jobs (queue downloads, recorded live clips, `./yt get`, and
+  **Update N videos**) skip shots for videos over 30 minutes and proceed to
+  MP3 audio.
+- `paths.archive_needs()` does not flag missing shots on videos over 30
+  minutes, so they show as up to date once the video and MP3 exist. If a
+  video over 30 minutes already has shots, `reshoot`, `resplit`, and `preview`
+  still apply to them.
+- Explicit requests still build shots for any length: **Make shots** (or
+  **Rebuild shots**) on the video page (`force_shots: true`), or
+  `./yt shots <id>`.
+- **Download again** (`force_video: true`) rebuilds shots for videos up to 30
+  minutes or long videos that already have shots, and skips shots for long
+  videos that have none.
+
 ## Is a video current? (settled 2026-10-14)
 
 `shots.json` records the method: `"sample": "change"` and
 `"compare": "last-kept"`. A file without both came from an older method
 (TransNet, adjacent dedupe, …) and counts as **old shot detection**.
 `paths.archive_needs()` names everything a plain job would still do for a
-video — no framesheet, old shot detection, framesheet to split, no list
-thumbnail, no MP3 audio — and a plain job does exactly that: full pipeline
-for the first two, `retile_sheets` for a split, a resize for the thumbnail.
-A video with nothing missing is reported complete and no job is queued. See
-[browsing.md](browsing.md#archive-status) for the UI.
+video — no framesheet (for videos up to 30 minutes), old shot detection,
+framesheet to split, no list thumbnail, no MP3 audio — and a plain job does
+exactly that: full pipeline for the first two, `retile_sheets` for a split, a
+resize for the thumbnail. A video with nothing missing is reported complete
+and no job is queued. See [browsing.md](browsing.md#archive-status) for the UI.
 
 ## Progress
 

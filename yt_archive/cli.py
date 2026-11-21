@@ -10,7 +10,13 @@ from .audio import dump_soundtrack
 from .download import download
 from .framesheet import make_shots
 from .lyrics import place_pending_lyrics
-from .paths import default_data_dir, find_video_file, parse_video_id
+from .paths import (
+    default_data_dir,
+    find_video_file,
+    load_archive_info,
+    parse_video_id,
+    skips_default_shots,
+)
 from .settings import load_settings
 from .transcribe import MODELS, transcribe_soundtrack
 from .web import serve
@@ -108,8 +114,11 @@ def _get(data_dir: Path, target: str, sim: float, skip_shots: bool) -> int:
     )
     print(f"video: {video} ({video.stat().st_size / 1e6:.1f} MB)")
     if not skip_shots:
-        summary = make_shots(video, data_dir, video_id, sim_threshold=sim, layout="squash")
-        print(json.dumps({k: summary[k] for k in ("video_id", "shots_detected", "shots_kept")}, indent=2))
+        if skips_default_shots(load_archive_info(data_dir, video_id).get("duration")):
+            print("shots: skipped by default (video is over 30m; run `./yt shots` to make them)")
+        else:
+            summary = make_shots(video, data_dir, video_id, sim_threshold=sim, layout="squash")
+            print(json.dumps({k: summary[k] for k in ("video_id", "shots_detected", "shots_kept")}, indent=2))
     mp3 = dump_soundtrack(video, data_dir, video_id)
     if mp3:
         print(f"MP3 audio: {mp3} ({mp3.stat().st_size / 1e6:.1f} MB)")

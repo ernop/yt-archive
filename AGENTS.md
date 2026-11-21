@@ -37,7 +37,7 @@ Considered on 2026-11-10 and not being built now:
 | [README.md](README.md) | Public GitHub intro: what yt-archive does, feature by feature ([its rules](#readme-settled-2026-11-15)) |
 | [docs/setup.md](docs/setup.md) | New-machine install, `.venv`, the media player copy, live service |
 | [docs/download.md](docs/download.md) | yt-dlp flags, cookies, JS runtime, live streams (`is_live` off-lane clip with `/api/played-stop` + cap, `is_upcoming` refused), its weekly self-update; X tweets (`x-<tweet id>`, no account unless X hides the tweet, own budgets) — settled, do not reinvent |
-| [docs/framesheets.md](docs/framesheets.md) | Shot pipeline, thresholds, rejected approaches |
+| [docs/framesheets.md](docs/framesheets.md) | Shot pipeline, thresholds, skipped by default over 30m, rejected approaches |
 | [docs/browsing.md](docs/browsing.md) | Download queue panel, archive status and update, single-line list rows, order and sort, creator pages, the picker for YouTube creators and playlists (and which lists use your account) and X profiles (with your X login, via gallery-dl), the hourly YouTube and X request budgets, text contrast, the video page and player |
 | [docs/bookmarklet.md](docs/bookmarklet.md) | The **+ ytarchive** bookmarklet: queue the YouTube page or tweet you're on, its key, why a pop-up |
 | [docs/transcription.md](docs/transcription.md) | Explicit local Whisper jobs, the GPU gate they hold, timed transcript UI, captions, speakers |
@@ -76,7 +76,7 @@ Watch later, Liked videos, and private playlists, and X profiles are always
 listed with the user's X login.
 The **+ ytarchive** bookmarklet on that page queues the YouTube page you are
 on in one click ([docs/bookmarklet.md](docs/bookmarklet.md)).
-Jobs run one at a time: download, then shots, then
+Jobs run one at a time: download, then shots (for videos up to 30 minutes), then
 MP3 audio, shown live in the page's **download queue** panel. The same page
 lists and searches the archive, and offers **Update N videos** when older
 videos lack current work (see [docs/browsing.md](docs/browsing.md)); each item

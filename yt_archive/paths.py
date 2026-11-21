@@ -44,6 +44,19 @@ NEEDS = {
     "audio": "no MP3 audio",
 }
 
+# Videos over 30 minutes skip automatic shot/framesheet generation (docs/framesheets.md).
+AUTO_SHOTS_MAX_SECONDS = 30 * 60
+
+
+def skips_default_shots(duration) -> bool:
+    """Whether a video's duration exceeds the automatic shots limit (> 30 minutes)."""
+    if isinstance(duration, bool) or duration is None:
+        return False
+    try:
+        return float(duration) > AUTO_SHOTS_MAX_SECONDS
+    except (TypeError, ValueError):
+        return False
+
 
 def default_data_dir() -> Path:
     env = os.environ.get("YT_ARCHIVE_DATA")
@@ -184,11 +197,18 @@ def archive_needs(data_dir: Path, video_id: str, archive: dict | None = None) ->
         return []
     from .framesheet import _sheet_chunk_sizes
 
+    if archive is None:
+        try:
+            archive = json.loads(archive_json_path(data_dir, video_id).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            archive = {}
+
     needs = []
     sheets = framesheet_paths(data_dir, video_id)
     shots = read_shots_json(data_dir, video_id)
     if not sheets or not shots:
-        needs.append("shots")
+        if not skips_default_shots(archive.get("duration")):
+            needs.append("shots")
     elif not shots_are_current(shots):
         needs.append("reshoot")
     elif len(sheets) != len(_sheet_chunk_sizes(int(shots.get("shots_kept") or 0))) or not all(
@@ -197,11 +217,6 @@ def archive_needs(data_dir: Path, video_id: str, archive: dict | None = None) ->
         needs.append("resplit")
     elif not preview_is_fresh(data_dir, video_id):
         needs.append("preview")
-    if archive is None:
-        try:
-            archive = json.loads(archive_json_path(data_dir, video_id).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            archive = {}
     if not soundtrack_path(data_dir, video_id).is_file() and archive.get("audio_stream") is not False:
         needs.append("audio")
     return needs
