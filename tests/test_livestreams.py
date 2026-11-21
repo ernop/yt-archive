@@ -210,7 +210,7 @@ class LiveStreamQueueTests(unittest.TestCase):
 
     def _make_queue(self, *, live_clip_max_seconds: float = 30.0) -> JobQueue:
         queue = JobQueue(self.data, live_clip_max_seconds=live_clip_max_seconds)
-        self.addCleanup(queue.stop_all_live)
+        self.addCleanup(queue.close)
         return queue
 
     def _request(self, handler_class, path, method="GET", payload=None, origin="http://localhost:8765"):

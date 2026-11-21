@@ -71,6 +71,8 @@ class JobQueue:
 
     def _ensure_live_state(self) -> None:
         """Initialise live-clip tracking even for JobQueue.__new__ test instances."""
+        if not hasattr(self, "_closed"):
+            self._closed = False
         if not hasattr(self, "live_clip_max_seconds"):
             self.live_clip_max_seconds = float(DEFAULT_LIVE_CLIP_MAX_SECONDS)
         if not hasattr(self, "_live_lock"):
@@ -159,6 +161,22 @@ class JobQueue:
         for session in sessions:
             session.stop(reason)
 
+    def close(self, timeout: float = 5.0) -> None:
+        """Stop the worker loop and any active live recordings (used by tests)."""
+        self._ensure_live_state()
+        self.stop_all_live("shutdown")
+        with self._cv:
+            self._closed = True
+            self._cv.notify_all()
+        worker = getattr(self, "_worker", None)
+        if worker is not None and worker.is_alive():
+            worker.join(timeout=timeout)
+        with self._live_lock:
+            threads = list(self._live_threads)
+        for thread in threads:
+            if thread.is_alive():
+                thread.join(timeout=timeout)
+
     def submit_many(
         self, video_ids: list[str], titles: dict[str, str] | None = None, *, via: str
     ) -> dict:
@@ -178,8 +196,10 @@ class JobQueue:
     def _loop(self) -> None:
         while True:
             with self._cv:
-                while not db.has_queued_jobs(self.data_dir):
+                while not self._closed and not db.has_queued_jobs(self.data_dir):
                     self._cv.wait()
+                if self._closed:
+                    return
             job = db.claim_next_job(self.data_dir)
             if job:
                 self._run(job)
