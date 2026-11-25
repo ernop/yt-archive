@@ -103,6 +103,8 @@ class ExportOverlapPageTests(unittest.TestCase):
             self.assertEqual(summary["video_id"], vid)
             self.assertEqual(summary["segments"], 2)
             self.assertEqual(summary["speakers"], ["Speaker A", "Speaker B"])
+            self.assertEqual(summary["annotations"], 0)
+            self.assertFalse((out_dir / "annotations.json").exists())
 
             index_html = (out_dir / "index.html").read_text(encoding="utf-8")
             app_js = (out_dir / "app.js").read_text(encoding="utf-8")
@@ -125,6 +127,10 @@ class ExportOverlapPageTests(unittest.TestCase):
             self.assertIn('id="lanes-minimap-wrap" hidden', index_html)
             self.assertIn('id="toggle-minimap" aria-pressed="false"', index_html)
             self.assertIn('id="toggle-badges" aria-pressed="false"', index_html)
+            self.assertIn('id="toggle-annotations" aria-pressed="false" hidden', index_html)
+            self.assertIn('id="ann-live" hidden', index_html)
+            self.assertIn('id="ann-filter-bar" hidden', index_html)
+            self.assertNotIn("data-annotations=", index_html)
             self.assertTrue(len(app_css) > 1000)
 
             self.assertEqual(tr["chapters"][1]["t"], "Discussion")
@@ -133,6 +139,85 @@ class ExportOverlapPageTests(unittest.TestCase):
 
             if shutil.which("node"):
                 subprocess.run(["node", "--check", str(out_dir / "app.js")], check=True)
+
+            # With --annotations: annotations.json exported, toggle visible and OFF by default.
+            ann_src = Path(tmp) / "seed.json"
+            ann_src.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "video_id": vid,
+                        "categories": [
+                            {"id": "overlap", "label": "Cooperative overlap", "color": "#ffd240"},
+                            {"id": "buy-in", "label": "Buy-in", "color": "#7ee787"},
+                        ],
+                        "items": [
+                            {
+                                "id": "a01",
+                                "t": 2.4,
+                                "end": 3.6,
+                                "cat": "overlap",
+                                "title": "Aligned continuer",
+                                "note": "Speaker B affirms mid-turn.",
+                                "source": "ai",
+                            },
+                            {
+                                "id": "a02",
+                                "t": 8.0,
+                                "cat": "buy-in",
+                                "title": "Confirming plan",
+                                "note": "Both agree before moving.",
+                                "source": "ai",
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            out_dir_ann = Path(tmp) / "out_ann"
+            proc_ann = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    vid,
+                    str(out_dir_ann),
+                    "--data",
+                    str(data_dir),
+                    "--annotations",
+                    str(ann_src),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            summary_ann = json.loads(proc_ann.stdout)
+            self.assertEqual(summary_ann["annotations"], 2)
+            ann_out = json.loads((out_dir_ann / "annotations.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(ann_out["items"]), 2)
+            ann_html = (out_dir_ann / "index.html").read_text(encoding="utf-8")
+            self.assertRegex(ann_html, r'data-annotations="annotations\.json\?v=[0-9a-f]{10}"')
+            self.assertIn('id="toggle-annotations" aria-pressed="false" title=', ann_html)
+            self.assertIn('id="ann-live" hidden', ann_html)
+            self.assertIn('id="ann-filter-bar" hidden', ann_html)
+
+            # Malformed annotations file fails loudly.
+            bad_ann = Path(tmp) / "bad.json"
+            bad_ann.write_text('{"items": [{"note": "missing t"}]}', encoding="utf-8")
+            bad_proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    vid,
+                    str(Path(tmp) / "out_bad"),
+                    "--data",
+                    str(data_dir),
+                    "--annotations",
+                    str(bad_ann),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(bad_proc.returncode, 0)
 
 
 if __name__ == "__main__":

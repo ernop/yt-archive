@@ -203,11 +203,29 @@ main.split-view { display: block; }
   overflow: hidden; text-overflow: clip; pointer-events: none; z-index: 3;
 }
 .ruler-note-pin {
-  position: absolute; top: 2px; bottom: 2px; min-width: 6px; padding: 0 .25rem;
-  border-radius: 3px; background: #14304a; border: 1px solid var(--accent);
+  position: absolute; top: 2px; bottom: 2px; min-width: 6px; padding: 0 .28rem;
+  border-radius: 3px; background: #141a24; border: 1px solid var(--cat-color, var(--accent));
   font: 700 .66rem/1.15rem var(--mono); color: #fff; white-space: nowrap;
   z-index: 4; cursor: pointer; transform: translateX(-2px);
 }
+.ruler-note-pin:hover { background: #1f2a3a; }
+.lane-ann-span {
+  position: absolute; top: 0; height: 3px; background: var(--cat-color, var(--accent));
+  opacity: .8; pointer-events: none; z-index: 4;
+}
+.ann-live {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .6rem;
+  padding: .42rem .65rem; background: #11151d; border-top: 1px solid #252c38;
+  border-left: 3px solid var(--cat-color, var(--accent)); font-size: .88rem;
+}
+.ann-live-cat {
+  display: inline-block; padding: .04rem .38rem; border-radius: 4px;
+  border: 1px solid var(--cat-color, var(--accent)); font-size: .76rem; font-weight: 800;
+  color: var(--cat-color, var(--accent)); white-space: nowrap;
+}
+.ann-live-title { font-weight: 800; color: #fff; }
+.ann-live-note { color: #fff; flex: 1 1 18rem; }
+.ann-live button { font-size: .76rem; padding: .12rem .4rem; margin-left: auto; }
 .lane-row { border-bottom: 1px solid #1b1f27; height: 3.05rem; }
 .lane-row:last-child { border-bottom: 0; }
 .lane-label {
@@ -346,20 +364,53 @@ main.split-view { display: block; }
   margin-top: .7rem; padding: .55rem .75rem; border: 1px solid var(--border);
   border-radius: 7px; background: var(--panel);
 }
-.notes-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
-.notes-bar h2 { margin: 0; font-size: .92rem; margin-right: .3rem; }
-.notes-bar input[type="text"] { flex: 1 1 14rem; min-width: 10rem; font-size: .86rem; }
-.notes-bar select, .notes-bar button { font-size: .84rem; }
-.notes-list { margin-top: .45rem; display: grid; gap: .28rem; }
+.notes-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .38rem; }
+.notes-bar h2 { margin: 0; font-size: .92rem; margin-right: .25rem; }
+.notes-bar input.note-title-in { flex: 0 1 12rem; min-width: 8rem; font-size: .84rem; }
+.notes-bar input.note-text-in { flex: 1 1 14rem; min-width: 10rem; font-size: .84rem; }
+.notes-bar select, .notes-bar button { font-size: .82rem; }
+.ann-filter-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .38rem;
+  margin-top: .45rem; padding-top: .45rem; border-top: 1px solid #1e232c;
+}
+.ann-filter-bar label { display: inline-flex; align-items: center; gap: .28rem; font-size: .8rem; font-weight: 700; }
+.ann-filter-bar select, .ann-filter-bar button { font-size: .8rem; padding: .18rem .46rem; }
+.ann-filter-bar .ann-actions { display: flex; flex-wrap: wrap; gap: .32rem; margin-left: auto; }
+.notes-list { margin-top: .45rem; display: grid; gap: .3rem; }
 .notes-list:empty { display: none; }
 .note-row {
-  display: grid; grid-template-columns: 4.5rem 8.5rem minmax(0, 1fr) auto; gap: .5rem;
-  align-items: baseline; padding: .28rem .45rem; border: 1px solid #222730; border-radius: 4px;
+  display: grid; grid-template-columns: 4.5rem 10.5rem minmax(0, 1fr) auto; gap: .5rem;
+  align-items: baseline; padding: .34rem .5rem; border: 1px solid #222730;
+  border-left: 3px solid var(--cat-color, var(--accent)); border-radius: 4px;
   background: #101319; font-size: .85rem;
 }
-.note-row .nt-time { font: 700 .84rem/1.3 var(--mono); color: #7cc4ff; cursor: pointer; }
-.note-row .nt-tag { font-weight: 800; color: var(--gold); }
-.note-row .nt-del { padding: .08rem .38rem; font-size: .78rem; }
+.note-row.ann-active { background: #182332; border-color: var(--cat-color, var(--accent)); }
+.note-row .nt-time { font: 700 .84rem/1.3 var(--mono); color: #7cc4ff; cursor: pointer; white-space: nowrap; }
+.note-row .nt-tag {
+  font-weight: 800; font-size: .78rem; color: var(--cat-color, var(--gold));
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.note-row .nt-body { line-height: 1.42; }
+.note-row .nt-title { font-weight: 800; color: #fff; margin-right: .35rem; }
+.note-row .nt-src {
+  display: inline-block; margin-left: .3rem; padding: 0 .28rem; border-radius: 3px;
+  border: 1px solid #3c4657; font: 700 .68rem/1.25 var(--mono); color: #fff;
+  vertical-align: middle;
+}
+.note-row .nt-btns { display: inline-flex; gap: .25rem; }
+.note-row .nt-edit, .note-row .nt-del { padding: .08rem .38rem; font-size: .76rem; }
+.note-edit-form {
+  grid-column: 1 / -1; display: grid; gap: .35rem; margin-top: .3rem;
+  padding-top: .35rem; border-top: 1px solid #242a35;
+}
+.note-edit-row { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.note-edit-form input, .note-edit-form select, .note-edit-form textarea {
+  font: inherit; font-size: .84rem; color: #fff; background: #0a0c10;
+  border: 1px solid #3f4857; border-radius: 4px; padding: .24rem .45rem;
+}
+.note-edit-form input.ed-time { width: 5.5rem; font-family: var(--mono); }
+.note-edit-form input.ed-title { flex: 1 1 12rem; }
+.note-edit-form textarea.ed-note { width: 100%; min-height: 3.2rem; resize: vertical; }
 
 @media (min-width: 1040px) {
   main.split-view {
@@ -420,8 +471,34 @@ APP_JS = r"""(() => {
   let showOverlay = localStorage.getItem('ovpub.overlay') === 'true';
   let showMinimap = localStorage.getItem('ovpub.minimap') === 'true';
   let showBadges = localStorage.getItem('ovpub.badges') === 'true';
+  let showAnnotations = false;
   let splitView = localStorage.getItem('ovpub.split') !== 'false';
   let autoScroll = localStorage.getItem('ovpub.autoScroll') !== 'false';
+
+  const DEFAULT_CATEGORIES = [
+    {id: 'overlap', label: 'Cooperative overlap', color: '#ffd240'},
+    {id: 'reaction', label: 'Vocal reaction / response cry', color: '#ff85a2'},
+    {id: 'buy-in', label: 'Decision buy-in / ratification', color: '#7ee787'},
+    {id: 'counterfactual', label: 'Challenging habit / counterfactual', color: '#7cc4ff'},
+    {id: 'humility', label: 'Post-decision humility', color: '#d2a8ff'},
+    {id: 'scoping', label: 'Scoped disagreement', color: '#66e3d8'},
+    {id: 'risk-bound', label: 'Worst-case / risk bounding', color: '#ffa07a'},
+    {id: 'repair', label: 'Self-repair & blame-free absorb', color: '#9be9a8'},
+    {id: 'shorthand', label: 'Conceptual pact / shorthand', color: '#a9d6ff'},
+    {id: 'zoom-out', label: 'Tactical ↔ macro synthesis', color: '#f5e050'},
+    {id: 'completion', label: 'Joint completion & cognitive space', color: '#c9b3ff'},
+    {id: 'banter', label: 'Tension release / humor', color: '#ff9e64'},
+    {id: 'collision', label: 'Breakdown / collision (control)', color: '#ff6b6b'},
+    {id: 'other', label: 'Other', color: '#ffffff'},
+  ];
+
+  let categories = DEFAULT_CATEGORIES;
+  let catMap = new Map(DEFAULT_CATEGORIES.map(c => [c.id, c]));
+  let seedAnnotations = [];
+  let annState = {edits: {}, deleted: [], added: []};
+  let annFilter = 'all';
+  let editingAnnId = null;
+  let lastLiveAnnId = '';
 
   let lanesWinStart = 0;
   let renderedWinStart = -1;
@@ -439,7 +516,41 @@ APP_JS = r"""(() => {
   let laneMeasureCtx = null;
   let laneMeasureFont = '';
   let rafId = 0;
-  let notes = [];
+
+  function catInfo(id) {
+    return catMap.get(id) || {id: id || 'other', label: id || 'Other', color: '#7cc4ff'};
+  }
+  function parseClockInput(str) {
+    const s = String(str || '').trim();
+    if (/^\d+(?:\.\d+)?$/.test(s)) return Number(s);
+    const parts = s.split(':').map(Number);
+    if (parts.some(n => !Number.isFinite(n) || n < 0)) return NaN;
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    return NaN;
+  }
+  function mergedAnnotations(includeSeed) {
+    const deletedSet = new Set(annState.deleted || []);
+    const edits = annState.edits || {};
+    const out = [];
+    if (includeSeed) {
+      for (const item of seedAnnotations) {
+        if (deletedSet.has(item.id)) continue;
+        const patch = edits[item.id];
+        out.push(patch ? {...item, ...patch, _origin: 'edited'} : {...item, _origin: 'ai'});
+      }
+    }
+    for (const item of (annState.added || [])) {
+      out.push({...item, _origin: 'user'});
+    }
+    out.sort((a, b) => (a.t - b.t) || String(a.id).localeCompare(String(b.id)));
+    return out;
+  }
+  function visibleTimelineAnnotations() {
+    if (!showAnnotations) return mergedAnnotations(false);
+    const list = mergedAnnotations(true);
+    return annFilter === 'all' ? list : list.filter(a => a.cat === annFilter);
+  }
 
   function html(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -847,14 +958,29 @@ APP_JS = r"""(() => {
         + '%;max-width:' + width.toFixed(3) + '%">∥ ' + dur.toFixed(1) + 's</span>';
     }).join('') : '';
 
-    const notePins = notes.filter(n => n.t >= winStart && n.t <= winEnd).map(n => {
+    const visAnns = visibleTimelineAnnotations();
+    const annSpans = visAnns.filter(a => a.end && a.end > a.t && a.end > winStart && a.t < winEnd).map(a => {
+      const ci = catInfo(a.cat);
+      const left = ((Math.max(a.t, winStart) - winStart) / winDur) * 100;
+      const right = ((Math.min(a.end, winEnd) - winStart) / winDur) * 100;
+      return '<span class="lane-ann-span" style="left:' + left.toFixed(3)
+        + '%;width:' + Math.max(0.4, right - left).toFixed(3)
+        + '%;--cat-color:' + ci.color + '"></span>';
+    }).join('');
+    const notePins = visAnns.filter(n => n.t >= winStart && n.t <= winEnd).map(n => {
+      const ci = catInfo(n.cat);
       const pct = ((n.t - winStart) / winDur) * 100;
-      const tip = clock(n.t) + ' [' + n.tag + ']' + (n.note ? ' ' + n.note : '');
-      return '<span class="ruler-note-pin" data-t="' + n.t + '" style="left:' + pct.toFixed(3) + '%" title="'
-        + html(tip) + '">' + html(clipText(n.tag, 14)) + '</span>';
+      const spanTxt = n.end && n.end > n.t ? clock(n.t) + '–' + clock(n.end) : clock(n.t);
+      const tip = spanTxt + ' [' + ci.label + ']'
+        + (n.title ? ' ' + n.title : '')
+        + (n.note ? ' — ' + n.note : '');
+      const label = clipText(n.title || ci.label, isOverlay ? 14 : 18);
+      return '<span class="ruler-note-pin" data-ann-id="' + html(n.id) + '" data-t="' + n.t
+        + '" style="left:' + pct.toFixed(3) + '%;--cat-color:' + ci.color + '" title="'
+        + html(tip) + '">' + html(label) + '</span>';
     }).join('');
 
-    ruler.innerHTML = ticks.join('') + pills + notePins + '<div class="lane-playhead"></div>';
+    ruler.innerHTML = ticks.join('') + pills + annSpans + notePins + '<div class="lane-playhead"></div>';
 
     const bands = visibleOverlaps.map(ov => {
       const left = ((Math.max(ov.start, winStart) - winStart) / winDur) * 100;
@@ -1072,6 +1198,14 @@ APP_JS = r"""(() => {
       ctx.fillRect(x0, 0, w, Math.max(3, Math.round(height * 0.22)));
       ctx.fillRect(x0, height - Math.max(3, Math.round(height * 0.22)), w, Math.max(3, Math.round(height * 0.22)));
     }
+    if (showAnnotations) {
+      for (const a of visibleTimelineAnnotations()) {
+        const x0 = (a.t / model.duration) * width;
+        const w = Math.max(3, (((a.end && a.end > a.t ? a.end : a.t) - a.t) / model.duration) * width);
+        ctx.fillStyle = catInfo(a.cat).color;
+        ctx.fillRect(x0, 0, w, Math.max(4, Math.round(height * 0.32)));
+      }
+    }
   }
 
   function chipHtml(chip) {
@@ -1170,6 +1304,7 @@ APP_JS = r"""(() => {
     syncTranscript(t, force);
     if (showOverlay) updateOverlayTimeline(t, force);
     updateLanesPlayhead(t);
+    updateLiveAnnotation(t, force);
   }
 
   function tick() {
@@ -1178,6 +1313,7 @@ APP_JS = r"""(() => {
     if (showOverlay) updateOverlayTimeline(t, false);
     updateLanesPlayhead(t);
     syncTranscript(t, false);
+    updateLiveAnnotation(t, false);
     rafId = requestAnimationFrame(tick);
   }
 
@@ -1243,41 +1379,309 @@ APP_JS = r"""(() => {
     }
   }
 
-  function loadNotes() {
-    try { notes = JSON.parse(localStorage.getItem('ovpub.notes.' + doc.video_id) || '[]'); }
-    catch { notes = []; }
-    paintNotes();
+  function annStorageKey() {
+    return 'ovpub.annState.' + doc.video_id;
   }
-  function saveNotes() {
-    localStorage.setItem('ovpub.notes.' + doc.video_id, JSON.stringify(notes));
+  function loadAnnState() {
+    annState = {edits: {}, deleted: [], added: []};
+    const raw = localStorage.getItem(annStorageKey());
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          annState = {
+            edits: parsed.edits && typeof parsed.edits === 'object' ? parsed.edits : {},
+            deleted: Array.isArray(parsed.deleted) ? parsed.deleted : [],
+            added: Array.isArray(parsed.added) ? parsed.added : [],
+          };
+          return;
+        }
+      } catch {}
+    }
+    try {
+      const legacy = JSON.parse(localStorage.getItem('ovpub.notes.' + doc.video_id) || '[]');
+      if (Array.isArray(legacy) && legacy.length) {
+        annState.added = legacy.map((n, i) => ({
+          id: 'u' + (i + 1),
+          t: Number(n.t) || 0,
+          end: Number(n.t) || 0,
+          cat: n.tag || 'other',
+          title: '',
+          note: String(n.note || n.quote || '').trim(),
+          quote: String(n.quote || ''),
+        }));
+      }
+    } catch {}
+  }
+  function saveAnnState() {
+    localStorage.setItem(annStorageKey(), JSON.stringify(annState));
+    lastLiveAnnId = '';
+    populateCategorySelects();
     paintNotes();
     renderLanesWindow(true);
     if (showOverlay) updateOverlayTimeline(currentTime(), true);
+    if (showMinimap) drawMinimap();
+    updateLiveAnnotation(currentTime(), true);
+  }
+  function populateCategorySelects() {
+    const tagSel = document.getElementById('note-tag');
+    if (tagSel) {
+      const prev = tagSel.value;
+      tagSel.innerHTML = categories.map(c =>
+        '<option value="' + html(c.id) + '">' + html(c.label) + '</option>'
+      ).join('');
+      if (prev && categories.some(c => c.id === prev)) tagSel.value = prev;
+    }
+    const fltSel = document.getElementById('ann-filter');
+    if (fltSel) {
+      const all = mergedAnnotations(true);
+      const counts = new Map();
+      for (const a of all) counts.set(a.cat, (counts.get(a.cat) || 0) + 1);
+      const prev = annFilter;
+      fltSel.innerHTML = '<option value="all">all (' + all.length + ')</option>'
+        + categories.map(c => {
+          const n = counts.get(c.id) || 0;
+          return '<option value="' + html(c.id) + '">' + html(c.label) + ' (' + n + ')</option>';
+        }).join('');
+      if (prev !== 'all' && categories.some(c => c.id === prev)) fltSel.value = prev;
+      else { annFilter = 'all'; fltSel.value = 'all'; }
+    }
+  }
+  function applyAnnotationsState() {
+    const btn = document.getElementById('toggle-annotations');
+    if (btn) {
+      btn.setAttribute('aria-pressed', String(showAnnotations));
+      const count = mergedAnnotations(true).length;
+      btn.title = 'Show or hide ' + count + ' editable behavior annotations on timeline and page';
+    }
+    const bar = document.getElementById('ann-filter-bar');
+    if (bar) bar.hidden = !showAnnotations;
+    lastLiveAnnId = '';
+    populateCategorySelects();
+    paintNotes();
+    renderLanesWindow(true);
+    if (showOverlay) updateOverlayTimeline(currentTime(), true);
+    if (showMinimap) drawMinimap();
+    updateLiveAnnotation(currentTime(), true);
+  }
+  function updateLiveAnnotation(time, force) {
+    const el = document.getElementById('ann-live');
+    if (!el) return;
+    if (!showAnnotations) {
+      if (lastLiveAnnId !== '__off__') {
+        el.hidden = true;
+        el.innerHTML = '';
+        lastLiveAnnId = '__off__';
+        document.querySelectorAll('#notes-list .note-row.ann-active')
+          .forEach(r => r.classList.remove('ann-active'));
+      }
+      return;
+    }
+    const vis = visibleTimelineAnnotations();
+    let active = null;
+    for (const a of vis) {
+      const end = Math.max(Number(a.end) || a.t, a.t + 5);
+      if (time >= a.t - 1.0 && time <= end + 1.0) {
+        if (!active || a.t >= active.t) active = a;
+      }
+    }
+    const key = active ? active.id : '';
+    if (!force && key === lastLiveAnnId) return;
+    lastLiveAnnId = key;
+    document.querySelectorAll('#notes-list .note-row').forEach(r => {
+      r.classList.toggle('ann-active', Boolean(active && r.dataset.annId === active.id));
+    });
+    if (!active) {
+      el.hidden = true;
+      el.innerHTML = '';
+      return;
+    }
+    const ci = catInfo(active.cat);
+    el.style.setProperty('--cat-color', ci.color);
+    el.hidden = false;
+    const spanTxt = active.end && active.end > active.t
+      ? clock(active.t) + '–' + clock(active.end)
+      : clock(active.t);
+    el.innerHTML =
+      '<span class="ann-live-cat">' + html(ci.label) + '</span>'
+      + '<span class="ann-live-title">' + html(active.title || spanTxt) + '</span>'
+      + '<span class="ann-live-note">' + html(active.note || active.quote || '') + '</span>'
+      + '<button type="button" data-edit-id="' + html(active.id) + '">Edit</button>';
   }
   function paintNotes() {
     const list = document.getElementById('notes-list');
-    if (!notes.length) {
+    const resetBtn = document.getElementById('reset-ann-btn');
+    if (resetBtn) {
+      const hasMods = Object.keys(annState.edits || {}).length > 0 || (annState.deleted || []).length > 0;
+      resetBtn.hidden = !hasMods;
+    }
+    const items = showAnnotations ? visibleTimelineAnnotations() : mergedAnnotations(false);
+    if (!items.length) {
       list.innerHTML = '';
       return;
     }
-    list.innerHTML = notes.map((n, i) =>
-      '<div class="note-row">'
-      + '<span class="nt-time" data-t="' + n.t + '">' + clock(n.t) + '</span>'
-      + '<span class="nt-tag">' + html(n.tag) + '</span>'
-      + '<span>' + html(n.note || n.quote) + '</span>'
-      + '<button type="button" class="nt-del" data-del="' + i + '">×</button></div>'
-    ).join('');
+    list.innerHTML = items.map(n => {
+      const ci = catInfo(n.cat);
+      const isEditing = editingAnnId === n.id;
+      const isActive = showAnnotations && lastLiveAnnId === n.id;
+      const spanTxt = n.end && n.end > n.t ? clock(n.t) + '–' + clock(n.end) : clock(n.t);
+      const srcBadge = n._origin === 'ai' ? 'AI' : n._origin === 'edited' ? 'edited' : 'yours';
+      let editForm = '';
+      if (isEditing) {
+        const endClk = n.end && n.end > n.t ? clock(n.end) : '';
+        const catOpts = categories.map(c =>
+          '<option value="' + html(c.id) + '"' + (c.id === n.cat ? ' selected' : '') + '>' + html(c.label) + '</option>'
+        ).join('') + (catMap.has(n.cat) ? '' : '<option value="' + html(n.cat) + '" selected>' + html(n.cat) + '</option>');
+        editForm = '<div class="note-edit-form" data-edit-for="' + html(n.id) + '">'
+          + '<div class="note-edit-row">'
+          + '<input type="text" class="ed-time ed-start" value="' + html(clock(n.t))
+          + '" data-orig-clock="' + html(clock(n.t)) + '" data-orig-val="' + n.t + '" placeholder="start" title="Start time (m:ss or h:mm:ss)">'
+          + '<input type="text" class="ed-time ed-end" value="' + html(endClk)
+          + '" data-orig-clock="' + html(endClk) + '" data-orig-val="' + (n.end || '') + '" placeholder="end" title="Optional end time">'
+          + '<select class="ed-cat">' + catOpts + '</select>'
+          + '<input type="text" class="ed-title" value="' + html(n.title || '') + '" placeholder="short title…">'
+          + '</div>'
+          + '<textarea class="ed-note" placeholder="note…">' + html(n.note || n.quote || '') + '</textarea>'
+          + '<div class="note-edit-row">'
+          + '<button type="button" class="ed-save">Save</button>'
+          + '<button type="button" class="ed-cancel">Cancel</button>'
+          + '</div></div>';
+      }
+      return '<div class="note-row' + (isActive ? ' ann-active' : '') + '"'
+        + ' data-ann-id="' + html(n.id) + '" style="--cat-color:' + ci.color + '">'
+        + '<span class="nt-time" data-t="' + n.t + '">' + html(spanTxt) + '</span>'
+        + '<span class="nt-tag" title="' + html(ci.label) + '">' + html(ci.label) + '</span>'
+        + '<span class="nt-body">'
+        + (n.title ? '<span class="nt-title">' + html(n.title) + '</span>' : '')
+        + html(n.note || n.quote || '')
+        + '<span class="nt-src">' + srcBadge + '</span></span>'
+        + '<span class="nt-btns">'
+        + '<button type="button" class="nt-edit" data-edit="' + html(n.id) + '">Edit</button>'
+        + '<button type="button" class="nt-del" data-del="' + html(n.id) + '" title="Remove annotation">×</button>'
+        + '</span>'
+        + editForm + '</div>';
+    }).join('');
+  }
+  function openAnnotationEditor(id) {
+    editingAnnId = id;
+    paintNotes();
+    const row = document.querySelector('#notes-list .note-row[data-ann-id="' + CSS.escape(id) + '"]');
+    if (row) {
+      row.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+      const focusEl = row.querySelector('.ed-note') || row.querySelector('.ed-title');
+      if (focusEl) focusEl.focus();
+    }
+  }
+  function saveAnnotationEdit(form) {
+    const id = form.dataset.editFor;
+    const startIn = form.querySelector('.ed-start');
+    const endIn = form.querySelector('.ed-end');
+    const cat = form.querySelector('.ed-cat').value;
+    const title = form.querySelector('.ed-title').value.trim();
+    const note = form.querySelector('.ed-note').value.trim();
+    let t = Number(startIn.dataset.origVal) || 0;
+    if (startIn.value.trim() !== startIn.dataset.origClock) {
+      const parsed = parseClockInput(startIn.value);
+      if (Number.isFinite(parsed)) t = Math.round(parsed * 10) / 10;
+    }
+    let end = 0;
+    if (endIn.value.trim() === '') {
+      end = 0;
+    } else if (endIn.value.trim() === endIn.dataset.origClock && endIn.dataset.origVal) {
+      end = Number(endIn.dataset.origVal) || 0;
+    } else {
+      const parsed = parseClockInput(endIn.value);
+      if (Number.isFinite(parsed) && parsed > t) end = Math.round(parsed * 10) / 10;
+    }
+    const addedIdx = (annState.added || []).findIndex(a => a.id === id);
+    if (addedIdx !== -1) {
+      annState.added[addedIdx] = {...annState.added[addedIdx], t, end, cat, title, note};
+    } else {
+      annState.edits[id] = {t, end, cat, title, note};
+    }
+    editingAnnId = null;
+    saveAnnState();
+  }
+  function deleteAnnotation(id) {
+    const addedIdx = (annState.added || []).findIndex(a => a.id === id);
+    if (addedIdx !== -1) {
+      annState.added.splice(addedIdx, 1);
+    } else {
+      if (!annState.deleted.includes(id)) annState.deleted.push(id);
+      delete annState.edits[id];
+    }
+    if (editingAnnId === id) editingAnnId = null;
+    saveAnnState();
   }
   function addMomentNote() {
     const t = Math.round(currentTime() * 10) / 10;
-    const tag = document.getElementById('note-tag').value;
-    const input = document.getElementById('note-text');
+    const cat = document.getElementById('note-tag').value || 'other';
+    const titleIn = document.getElementById('note-title');
+    const textIn = document.getElementById('note-text');
     const active = doc.segments.filter(s => t >= s.start - 0.5 && t <= s.end + 0.5)
       .map(s => s.speaker + ': "' + clipText(s.text, 60) + '"').join(' // ');
-    notes.push({t, tag, note: input.value.trim(), quote: active});
-    notes.sort((a, b) => a.t - b.t);
-    input.value = '';
-    saveNotes();
+    const id = 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    annState.added.push({
+      id, t, end: 0, cat,
+      title: titleIn ? titleIn.value.trim() : '',
+      note: textIn.value.trim(),
+      quote: active,
+    });
+    if (titleIn) titleIn.value = '';
+    textIn.value = '';
+    saveAnnState();
+  }
+  function jumpAnnotation(dir) {
+    const items = visibleTimelineAnnotations();
+    if (!items.length) return;
+    const t = currentTime();
+    let target = null;
+    if (dir > 0) target = items.find(a => a.t > t + 0.5) || items[0];
+    else {
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (items[i].t < t - 1.0) { target = items[i]; break; }
+      }
+      if (!target) target = items[items.length - 1];
+    }
+    lanesFollow = true;
+    document.getElementById('lanes-follow').setAttribute('aria-pressed', 'true');
+    lanesWinStart = clampWinStart(target.t - lanesWindow * 0.25);
+    renderLanesWindow(true);
+    seekAndPlay(Math.max(0, target.t - 0.3));
+  }
+  async function exportAnnotationsJson() {
+    const payload = {
+      version: 1,
+      video_id: doc.video_id,
+      categories,
+      items: mergedAnnotations(true).map(a => ({
+        id: a.id,
+        t: a.t,
+        ...(a.end && a.end > a.t ? {end: a.end} : {}),
+        cat: a.cat,
+        ...(a.title ? {title: a.title} : {}),
+        note: a.note || a.quote || '',
+        source: a._origin === 'ai' ? 'ai' : a._origin === 'edited' ? 'edited' : 'user',
+      })),
+    };
+    const jsonText = JSON.stringify(payload, null, 2) + '\n';
+    try { await navigator.clipboard.writeText(jsonText); } catch {}
+    try {
+      const blob = new Blob([jsonText], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'annotations-' + doc.video_id + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {}
+    const btn = document.getElementById('export-ann-btn');
+    if (btn) {
+      btn.textContent = 'Exported ' + payload.items.length;
+      setTimeout(() => { btn.textContent = 'Export JSON'; }, 1500);
+    }
   }
 
   async function init() {
@@ -1285,6 +1689,31 @@ APP_JS = r"""(() => {
     if (!res.ok) throw new Error('Could not load transcript.json');
     doc = expandCompact(await res.json());
     model = buildOverlapModel(doc);
+
+    const annUrl = document.querySelector('main')?.dataset.annotations || '';
+    if (annUrl) {
+      try {
+        const annRes = await fetch(annUrl);
+        if (annRes.ok) {
+          const annDoc = await annRes.json();
+          if (Array.isArray(annDoc.categories) && annDoc.categories.length) {
+            categories = annDoc.categories;
+            catMap = new Map(categories.map(c => [c.id, c]));
+          }
+          if (Array.isArray(annDoc.items)) {
+            seedAnnotations = annDoc.items.map((it, idx) => ({
+              id: String(it.id || ('s' + (idx + 1))),
+              t: Number(it.t) || 0,
+              end: Number(it.end) || 0,
+              cat: String(it.cat || 'other'),
+              title: String(it.title || ''),
+              note: String(it.note || ''),
+              quote: String(it.quote || ''),
+            }));
+          }
+        }
+      } catch {}
+    }
 
     document.title = doc.title;
     document.getElementById('vid-title').textContent = doc.title;
@@ -1313,12 +1742,16 @@ APP_JS = r"""(() => {
     winSel.value = String(lanesWindow);
     document.getElementById('toggle-autoscroll').setAttribute('aria-pressed', String(autoScroll));
 
+    loadAnnState();
+    showAnnotations = seedAnnotations.length > 0
+      && localStorage.getItem('ovpub.annotations.' + doc.video_id) === 'true';
+
     setupYouTube(doc.video_id);
-    loadNotes();
     paintTranscript();
     applyOverlayState();
     applyMinimapState();
     applyBadgesState();
+    applyAnnotationsState();
     applySplitLayout();
 
     const ovEl = document.getElementById('ov-overlay');
@@ -1368,6 +1801,14 @@ APP_JS = r"""(() => {
       localStorage.setItem('ovpub.badges', String(showBadges));
       applyBadgesState();
     };
+    const annBtn = document.getElementById('toggle-annotations');
+    if (annBtn) {
+      annBtn.onclick = () => {
+        showAnnotations = !showAnnotations;
+        localStorage.setItem('ovpub.annotations.' + doc.video_id, String(showAnnotations));
+        applyAnnotationsState();
+      };
+    }
     document.getElementById('toggle-split-view').onclick = () => {
       splitView = !splitView;
       localStorage.setItem('ovpub.split', String(splitView));
@@ -1392,22 +1833,63 @@ APP_JS = r"""(() => {
     document.getElementById('note-text').addEventListener('keydown', ev => {
       if (ev.key === 'Enter') { ev.preventDefault(); addMomentNote(); }
     });
+    const noteTitleEl = document.getElementById('note-title');
+    if (noteTitleEl) {
+      noteTitleEl.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter') { ev.preventDefault(); addMomentNote(); }
+      });
+    }
+    document.getElementById('ann-filter').addEventListener('change', ev => {
+      annFilter = ev.target.value || 'all';
+      lastLiveAnnId = '';
+      paintNotes();
+      renderLanesWindow(true);
+      if (showOverlay) updateOverlayTimeline(currentTime(), true);
+      if (showMinimap) drawMinimap();
+      updateLiveAnnotation(currentTime(), true);
+    });
+    document.getElementById('prev-ann').onclick = () => jumpAnnotation(-1);
+    document.getElementById('next-ann').onclick = () => jumpAnnotation(1);
+    document.getElementById('export-ann-btn').onclick = exportAnnotationsJson;
+    document.getElementById('reset-ann-btn').onclick = () => {
+      annState.edits = {};
+      annState.deleted = [];
+      editingAnnId = null;
+      saveAnnState();
+    };
+    document.getElementById('ann-live').addEventListener('click', ev => {
+      const btn = ev.target.closest('button[data-edit-id]');
+      if (btn) openAnnotationEditor(btn.dataset.editId);
+    });
     document.getElementById('copy-notes-btn').onclick = async () => {
       const base = location.origin + location.pathname;
-      const text = notes.map(n =>
-        '- ' + clock(n.t) + ' (' + base + '#t=' + Math.floor(n.t) + ') [' + n.tag + '] '
-        + (n.note ? n.note + ' — ' : '') + n.quote
-      ).join('\n');
+      const items = showAnnotations ? visibleTimelineAnnotations() : mergedAnnotations(false);
+      const text = items.map(n => {
+        const ci = catInfo(n.cat);
+        const spanTxt = n.end && n.end > n.t ? clock(n.t) + '–' + clock(n.end) : clock(n.t);
+        return '- ' + spanTxt + ' (' + base + '#t=' + Math.floor(n.t) + ') [' + ci.label + '] '
+          + (n.title ? '**' + n.title + '** — ' : '') + (n.note || n.quote || '');
+      }).join('\n');
       try { await navigator.clipboard.writeText(text); } catch {}
       const btn = document.getElementById('copy-notes-btn');
-      btn.textContent = 'Copied ' + notes.length + ' notes';
-      setTimeout(() => { btn.textContent = 'Copy all notes'; }, 1500);
+      btn.textContent = 'Copied ' + items.length;
+      setTimeout(() => { btn.textContent = 'Copy Markdown'; }, 1500);
     };
     document.getElementById('notes-list').addEventListener('click', ev => {
       const tm = ev.target.closest('.nt-time');
       if (tm) { seekAndPlay(Number(tm.dataset.t)); return; }
+      const edit = ev.target.closest('.nt-edit');
+      if (edit) { openAnnotationEditor(edit.dataset.edit); return; }
+      const save = ev.target.closest('.ed-save');
+      if (save) {
+        const form = save.closest('.note-edit-form');
+        if (form) saveAnnotationEdit(form);
+        return;
+      }
+      const cancel = ev.target.closest('.ed-cancel');
+      if (cancel) { editingAnnId = null; paintNotes(); return; }
       const del = ev.target.closest('.nt-del');
-      if (del) { notes.splice(Number(del.dataset.del), 1); saveNotes(); }
+      if (del) { deleteAnnotation(del.dataset.del); }
     });
 
     const captionBox = document.getElementById('caption-box');
@@ -1534,13 +2016,22 @@ APP_JS = r"""(() => {
 """
 
 
-def _index_html(title: str, back_url: str, back_label: str, css_hash: str, js_hash: str) -> str:
+def _index_html(
+    title: str,
+    back_url: str,
+    back_label: str,
+    css_hash: str,
+    js_hash: str,
+    ann_url: str = "",
+) -> str:
     back = (
         f'<a href="{html.escape(back_url, quote=True)}">← {html.escape(back_label)}</a>'
         '<span class="sep">·</span>'
         if back_url
         else ""
     )
+    ann_attr = f' data-annotations="{html.escape(ann_url, quote=True)}"' if ann_url else ""
+    ann_btn_hidden = "" if ann_url else " hidden"
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1561,7 +2052,7 @@ def _index_html(title: str, back_url: str, back_label: str, css_hash: str, js_ha
   </div>
   <div class="chapters" id="chapters" hidden></div>
 </header>
-<main class="split-view">
+<main class="split-view"{ann_attr}>
   <div class="player-wrap" id="player-wrap">
     <div class="video-box">
       <iframe id="yt-frame" title="YouTube video player"
@@ -1600,6 +2091,7 @@ def _index_html(title: str, back_url: str, back_label: str, css_hash: str, js_ha
         <div class="minimap-viewport" id="minimap-viewport"></div>
         <div class="minimap-playhead" id="minimap-playhead"></div>
       </div>
+      <div class="ann-live" id="ann-live" hidden></div>
       <div class="lanes-bar">
         <span class="lanes-status" id="lanes-status"></span>
         <div class="lanes-tools">
@@ -1617,6 +2109,7 @@ def _index_html(title: str, back_url: str, back_label: str, css_hash: str, js_ha
           <button type="button" id="toggle-overlay" aria-pressed="false" title="Show compact red-playhead swimlane over the video">Overlay</button>
           <button type="button" id="toggle-minimap" aria-pressed="false" title="Show or hide full-video overview bar">Minimap</button>
           <button type="button" id="toggle-badges" aria-pressed="false" title="Show or hide overlap duration badges and counters">Badges</button>
+          <button type="button" id="toggle-annotations" aria-pressed="false"{ann_btn_hidden} title="Show or hide editable behavior annotations on timeline and page">Annotations</button>
           <button type="button" id="toggle-split-view" aria-pressed="true" title="Toggle side-by-side or stacked layout">Split</button>
         </div>
       </div>
@@ -1626,16 +2119,22 @@ def _index_html(title: str, back_url: str, back_label: str, css_hash: str, js_ha
   <section class="notes-panel" id="notes-panel">
     <div class="notes-bar">
       <h2>Notes</h2>
-      <select id="note-tag">
-        <option value="leaving space">leaving space</option>
-        <option value="cooperative overtalk">cooperative overtalk</option>
-        <option value="info share">info share</option>
-        <option value="affirmation">affirmation</option>
-        <option value="other">other</option>
-      </select>
-      <input type="text" id="note-text" placeholder="note this moment…">
+      <select id="note-tag"></select>
+      <input type="text" class="note-title-in" id="note-title" placeholder="short title…">
+      <input type="text" class="note-text-in" id="note-text" placeholder="note this moment…">
       <button type="button" id="add-note-btn">+ Note</button>
-      <button type="button" id="copy-notes-btn">Copy all notes</button>
+      <button type="button" id="copy-notes-btn">Copy Markdown</button>
+    </div>
+    <div class="ann-filter-bar" id="ann-filter-bar" hidden>
+      <label>Category
+        <select id="ann-filter"><option value="all">all</option></select>
+      </label>
+      <button type="button" id="prev-ann" title="Jump to previous annotation">◀ Prev note</button>
+      <button type="button" id="next-ann" title="Jump to next annotation">Next note ▶</button>
+      <span class="ann-actions">
+        <button type="button" id="export-ann-btn" title="Download and copy current annotations as JSON">Export JSON</button>
+        <button type="button" id="reset-ann-btn" hidden title="Restore deleted or edited built-in annotations">Reset edits</button>
+      </span>
     </div>
     <div class="notes-list" id="notes-list"></div>
   </section>
@@ -1646,12 +2145,23 @@ def _index_html(title: str, back_url: str, back_label: str, css_hash: str, js_ha
 """
 
 
+def _load_annotations(path: Path) -> dict:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict) or not isinstance(raw.get("items"), list):
+        raise ValueError(f"Annotations file must be a JSON object with an 'items' list: {path}")
+    for i, item in enumerate(raw["items"]):
+        if not isinstance(item, dict) or "t" not in item or not isinstance(item["t"], (int, float)):
+            raise ValueError(f"Annotation item {i} in {path} must be an object with numeric 't'")
+    return raw
+
+
 def export_page(
     data_dir: Path,
     video_id: str,
     out_dir: Path,
     *,
     title: str = "",
+    annotations: Path | None = None,
     back_url: str = "",
     back_label: str = "home",
 ) -> dict:
@@ -1667,6 +2177,16 @@ def export_page(
     css_hash = hashlib.sha256(css_bytes).hexdigest()[:10]
     js_hash = hashlib.sha256(js_bytes).hexdigest()[:10]
 
+    ann_url = ""
+    ann_count = 0
+    if annotations is not None:
+        ann_doc = _load_annotations(annotations)
+        ann_bytes = json.dumps(ann_doc, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        ann_hash = hashlib.sha256(ann_bytes).hexdigest()[:10]
+        (out_dir / "annotations.json").write_bytes(ann_bytes)
+        ann_url = f"annotations.json?v={ann_hash}"
+        ann_count = len(ann_doc["items"])
+
     (out_dir / "app.css").write_bytes(css_bytes)
     (out_dir / "app.js").write_bytes(js_bytes)
     (out_dir / "transcript.json").write_text(
@@ -1674,13 +2194,14 @@ def export_page(
         encoding="utf-8",
     )
     (out_dir / "index.html").write_text(
-        _index_html(compact["title"], back_url, back_label, css_hash, js_hash),
+        _index_html(compact["title"], back_url, back_label, css_hash, js_hash, ann_url),
         encoding="utf-8",
     )
     return {
         "video_id": video_id,
         "segments": len(compact["segments"]),
         "speakers": compact["speakers"],
+        "annotations": ann_count,
         "out_dir": str(out_dir),
     }
 
@@ -1691,6 +2212,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("out_dir", type=Path, help="Output directory for static bundle")
     ap.add_argument("--data", type=Path, default=default_data_dir())
     ap.add_argument("--title", default="", help="Optional custom page title overriding video title")
+    ap.add_argument("--annotations", type=Path, default=None, help="Optional JSON file of seed annotations")
     ap.add_argument("--back-url", default="")
     ap.add_argument("--back-label", default="home")
     args = ap.parse_args(argv)
@@ -1699,6 +2221,7 @@ def main(argv: list[str] | None = None) -> int:
         args.target,
         args.out_dir.expanduser().resolve(),
         title=args.title,
+        annotations=args.annotations.expanduser().resolve() if args.annotations else None,
         back_url=args.back_url,
         back_label=args.back_label,
     )
