@@ -1,7 +1,8 @@
 const {vid, site} = JSON.parse(document.getElementById('page-data').textContent);
 const transcriptPanel = document.getElementById('transcript-panel');
 const panelData = transcriptPanel ? transcriptPanel.dataset : {};
-const hasOriginal = panelData.hasTranscript === 'true';
+const hasOriginal = panelData.hasTranscript === 'true'
+  || (panelData.hasTranscript === undefined && panelData.ready === 'true');
 const hasEnglish = panelData.hasEnglish === 'true';
 const hasEnglishDub = panelData.hasDub === 'true';
 const englishEstDub = Number(panelData.estDub) || 0;
@@ -396,15 +397,18 @@ let activeWordSpans = [];
 let hoveredIndices = null;
 let hoveredKey = '';
 
-// Swimlane state
-let lanesWindow = Number(localStorage.getItem('ytarchive.transcript.lanesWindow')) || 30;
+// Swimlane & dual-subtitle state
+let lanesWindow = Number(localStorage.getItem('ytarchive.transcript.lanesWindow')) || 20;
 let lanesHidden = localStorage.getItem('ytarchive.transcript.lanesHidden') === 'true';
+let dualOverlay = localStorage.getItem('ytarchive.transcript.dualOverlay') === 'true';
 let lanesFollow = true;
 let lanesWinStart = 0;
 let renderedWinStart = -1;
 let renderedWinDur = -1;
 let playheadEls = [];
 let blockElsByIndex = new Map();
+let dualRowBySpeaker = new Map();
+let dualHeadEl = null;
 let rafId = 0;
 
 function buildOverlapModel(data) {
@@ -927,27 +931,238 @@ if (renameSpeaker) renameSpeaker.onclick = async () => {
   setTranscriptData(data);
 };
 
-// ---------------- Speaker Swimlanes & Minimap ----------------
+// ---------------- Dual-Color Live Subtitles, Swimlanes & Minimap ----------------
+function ensureOverlapDom() {
+  if (!document.getElementById('dual-stage')) {
+    const stage = document.createElement('section');
+    stage.className = 'dual-stage';
+    stage.id = 'dual-stage';
+    stage.hidden = true;
+    stage.innerHTML =
+      '<div class="dual-subs" id="dual-subs" aria-live="polite"></div>'
+      + '<div class="speaker-lanes" id="speaker-lanes">'
+      + '  <div class="lanes-head">'
+      + '    <span class="lanes-title">Speaker overlap timeline</span>'
+      + '    <span class="lanes-status" id="lanes-status"></span>'
+      + '    <div class="lanes-tools">'
+      + '      <button type="button" id="prev-overlap" title="Jump to previous overlapping turn">◀ Prev overlap</button>'
+      + '      <button type="button" id="next-overlap" title="Jump to next overlapping turn">Next overlap ▶</button>'
+      + '      <label>Window <select id="lanes-window">'
+      + '        <option value="10">10s</option>'
+      + '        <option value="20" selected>20s</option>'
+      + '        <option value="30">30s</option>'
+      + '        <option value="60">60s</option>'
+      + '      </select></label>'
+      + '      <button type="button" id="lanes-follow" aria-pressed="true" title="Keep timeline synced to playback">Follow</button>'
+      + '      <button type="button" id="toggle-overlay-subs" aria-pressed="false" title="Show dual-color speaker subtitles over the video frame">Overlay on video</button>'
+      + '    </div>'
+      + '  </div>'
+      + '  <div class="lanes-stage" id="lanes-stage">'
+      + '    <div class="lanes-ruler-row">'
+      + '      <div class="lanes-gutter"></div>'
+      + '      <div class="lanes-ruler" id="lanes-ruler"></div>'
+      + '    </div>'
+      + '    <div class="lanes-body" id="lanes-body"></div>'
+      + '  </div>'
+      + '  <div class="lanes-minimap-wrap" id="lanes-minimap-wrap" title="Click or drag to jump anywhere in the video">'
+      + '    <canvas class="lanes-minimap" id="lanes-minimap" height="24"></canvas>'
+      + '    <div class="minimap-viewport" id="minimap-viewport"></div>'
+      + '    <div class="minimap-playhead" id="minimap-playhead"></div>'
+      + '  </div>'
+      + '</div>';
+    const ytp = document.getElementById('ytp');
+    if (ytp && ytp.parentNode) {
+      ytp.insertAdjacentElement('afterend', stage);
+    } else if (captionBox && captionBox.parentNode) {
+      captionBox.insertAdjacentElement('beforebegin', stage);
+    }
+  }
+  const controls = document.querySelector('.transcript-controls');
+  if (controls && !document.getElementById('transcript-filter')) {
+    const wrap = document.createElement('label');
+    wrap.id = 'transcript-filter-wrap';
+    wrap.hidden = true;
+    wrap.innerHTML = 'Filter <select id="transcript-filter"><option value="all">all segments</option></select>';
+    const search = document.getElementById('transcript-search');
+    if (search) search.insertAdjacentElement('afterend', wrap);
+    else controls.prepend(wrap);
+  }
+  if (controls && !document.getElementById('toggle-lanes')) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'toggle-lanes';
+    btn.hidden = true;
+    btn.textContent = 'Hide overlap view';
+    const cc = document.getElementById('toggle-cc');
+    if (cc) cc.insertAdjacentElement('beforebegin', btn);
+    else controls.appendChild(btn);
+  }
+}
+ensureOverlapDom();
+
 function clampWinStart(start) {
   if (!model) return 0;
   return Math.max(0, Math.min(start, Math.max(0, model.duration - lanesWindow)));
 }
 
+function applyDualOverlayPosition() {
+  const dualSubs = document.getElementById('dual-subs');
+  const dualStage = document.getElementById('dual-stage');
+  const ytp = document.getElementById('ytp');
+  const overlayBtn = document.getElementById('toggle-overlay-subs');
+  if (!dualSubs || !dualStage) return;
+  const activeOverlay = Boolean(dualOverlay && ytp && model && model.speakers.length >= 2 && !lanesHidden);
+  dualSubs.classList.toggle('is-overlay', activeOverlay);
+  if (activeOverlay) {
+    if (dualSubs.parentNode !== ytp) ytp.appendChild(dualSubs);
+  } else {
+    if (dualSubs.parentNode !== dualStage) dualStage.prepend(dualSubs);
+  }
+  if (overlayBtn) {
+    overlayBtn.setAttribute('aria-pressed', String(dualOverlay));
+    overlayBtn.textContent = dualOverlay ? 'Dock below video' : 'Overlay on video';
+  }
+}
+
+function renderDualSubsShell() {
+  const dualSubs = document.getElementById('dual-subs');
+  if (!dualSubs || !model || model.speakers.length < 2) return;
+  const rows = model.speakers.map(spk => {
+    const c = model.colorOf(spk);
+    return '<div class="dual-sub-row" data-speaker="' + html(spk) + '" style="--spk-color:' + c.fg + '">'
+      + '<div class="dual-sub-spk"><span class="dual-sub-dot"></span><span>' + html(spk) + '</span></div>'
+      + '<div class="dual-sub-text"></div>'
+      + '<div class="dual-sub-time"></div>'
+      + '<div class="dual-sub-prog"></div>'
+      + '</div>';
+  }).join('');
+  dualSubs.innerHTML = '<div class="dual-sub-head" id="dual-sub-head"></div>' + rows;
+  dualHeadEl = document.getElementById('dual-sub-head');
+  dualRowBySpeaker = new Map();
+  dualSubs.querySelectorAll('.dual-sub-row').forEach(row => {
+    dualRowBySpeaker.set(row.dataset.speaker, {
+      row,
+      textEl: row.querySelector('.dual-sub-text'),
+      timeEl: row.querySelector('.dual-sub-time'),
+      progEl: row.querySelector('.dual-sub-prog'),
+      renderedSegIdx: -1,
+    });
+  });
+}
+
+function dualWordsHtml(seg) {
+  const info = model.infoByIndex.get(seg.index);
+  const partners = info ? info.partners : [];
+  const words = seg.words || [];
+  if (!words.length) return html(seg.text);
+  return words.map((word, wi) => {
+    const gap = wi && !/^[,.;:!?)]/.test(word.word) ? ' ' : '';
+    const wStart = word.start != null ? Number(word.start) : Number(seg.start);
+    const wEnd = word.end != null ? Number(word.end) : wStart;
+    let ovColor = '';
+    for (const p of partners) {
+      if (wStart < p.ovEnd && wEnd > p.ovStart) {
+        ovColor = model.colorOf(p.other.speaker).fg;
+        break;
+      }
+    }
+    return gap + '<span class="word' + (ovColor ? ' word-ov' : '') + '"'
+      + ' data-t="' + wStart + '" data-e="' + wEnd + '"'
+      + (ovColor ? ' style="--ov-color:' + ovColor + '"' : '')
+      + '>' + html(word.word) + '</span>';
+  }).join('');
+}
+
+function updateDualSubs(time) {
+  if (!model || lanesHidden || model.speakers.length < 2 || !dualRowBySpeaker.size) return;
+  const activeBySpeaker = new Map();
+  for (const spk of model.speakers) {
+    const segs = model.bySpeaker.get(spk) || [];
+    let found = null;
+    for (const seg of segs) {
+      if (seg.start > time) break;
+      if (time >= seg.start && time < seg.end) {
+        found = seg;
+        break;
+      }
+    }
+    if (found) activeBySpeaker.set(spk, found);
+  }
+  const activeList = [...activeBySpeaker.values()].sort((a, b) => a.start - b.start);
+  const isOverlapping = activeList.length >= 2;
+
+  if (dualHeadEl) {
+    if (isOverlapping) {
+      const first = activeList[0];
+      const second = activeList[1];
+      const ovStart = Math.max(first.start, second.start);
+      const ovEnd = Math.min(first.end, second.end);
+      const ovDur = Math.max(0, ovEnd - ovStart);
+      const offset = Math.max(0, second.start - first.start);
+      const detail = offset >= 0.1
+        ? html(second.speaker) + ' cut in +' + offset.toFixed(1) + 's into ' + html(first.speaker)
+        : 'both started together';
+      dualHeadEl.innerHTML = '<span class="ov-live">∥ OVERLAPPING · ' + ovDur.toFixed(1)
+        + 's</span><span>' + detail + '</span>';
+    } else {
+      const legend = model.speakers.map(s => {
+        const c = model.colorOf(s).fg;
+        return '<span style="color:' + c + '">' + html(s) + '</span>';
+      }).join(' · ');
+      dualHeadEl.innerHTML = '<span>Dual speaker captions: ' + legend + '</span>';
+    }
+  }
+
+  for (const [spk, slot] of dualRowBySpeaker.entries()) {
+    const seg = activeBySpeaker.get(spk) || null;
+    if (!seg) {
+      slot.row.classList.remove('active', 'overlapping');
+      if (slot.renderedSegIdx !== -1) {
+        slot.textEl.textContent = '';
+        slot.timeEl.textContent = '';
+        slot.progEl.style.width = '0%';
+        slot.renderedSegIdx = -1;
+      }
+      continue;
+    }
+    slot.row.classList.add('active');
+    slot.row.classList.toggle('overlapping', isOverlapping);
+    if (slot.renderedSegIdx !== seg.index) {
+      slot.textEl.innerHTML = dualWordsHtml(seg);
+      const dur = Math.max(0.1, seg.end - seg.start);
+      slot.timeEl.textContent = clockPrecise(seg.start) + '–' + clockPrecise(seg.end)
+        + ' (' + dur.toFixed(1) + 's)';
+      slot.renderedSegIdx = seg.index;
+    }
+    const frac = Math.max(0, Math.min(1, (time - seg.start) / Math.max(0.05, seg.end - seg.start)));
+    slot.progEl.style.width = (frac * 100).toFixed(1) + '%';
+    slot.textEl.querySelectorAll('.word').forEach(w => {
+      const ws = Number(w.dataset.t);
+      const we = Number(w.dataset.e);
+      w.classList.toggle('word-now', time >= ws && time <= Math.max(we, ws + 0.08));
+    });
+  }
+}
+
 function setupLanes() {
-  const panel = document.getElementById('speaker-lanes');
+  const dualStage = document.getElementById('dual-stage');
   const toggleBtn = document.getElementById('toggle-lanes');
   const winSel = document.getElementById('lanes-window');
   const followBtn = document.getElementById('lanes-follow');
-  if (!panel || !toggleBtn || !model) return;
+  if (!dualStage || !model) return;
   const multi = model.speakers.length >= 2;
-  toggleBtn.hidden = !multi;
+  if (toggleBtn) toggleBtn.hidden = !multi;
   if (!multi) {
-    panel.hidden = true;
+    dualStage.hidden = true;
+    applyDualOverlayPosition();
     return;
   }
-  panel.hidden = lanesHidden;
-  toggleBtn.textContent = lanesHidden ? 'Show timeline' : 'Hide timeline';
-  if (winSel) winSel.value = String(lanesWindow);
+  dualStage.hidden = lanesHidden;
+  if (toggleBtn) toggleBtn.textContent = lanesHidden ? 'Show overlap view' : 'Hide overlap view';
+  if (winSel) {
+    if (![...winSel.options].some(o => Number(o.value) === lanesWindow)) lanesWindow = 20;
+    winSel.value = String(lanesWindow);
+  }
   if (followBtn) followBtn.setAttribute('aria-pressed', String(lanesFollow));
   const prevBtn = document.getElementById('prev-overlap');
   const nextBtn = document.getElementById('next-overlap');
@@ -956,10 +1171,14 @@ function setupLanes() {
   if (nextBtn) nextBtn.disabled = !hasOverlaps;
   renderedWinStart = -1;
   renderedWinDur = -1;
+  renderDualSubsShell();
+  applyDualOverlayPosition();
   if (!lanesHidden) {
     drawMinimap();
     renderLanesWindow(true);
     paintLanesStatus();
+    const pv = document.querySelector('#ytp video');
+    updateDualSubs(pv ? (pv.currentTime || 0) : 0);
   }
 }
 
@@ -975,7 +1194,7 @@ function drawMinimap() {
   if (!canvas || !model || lanesHidden) return;
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(200, Math.round(rect.width * (window.devicePixelRatio || 1)));
-  const height = Math.round(22 * (window.devicePixelRatio || 1));
+  const height = Math.round(24 * (window.devicePixelRatio || 1));
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
@@ -1024,7 +1243,7 @@ function renderLanesWindow(force) {
   const body = document.getElementById('lanes-body');
   if (!ruler || !body) return;
 
-  const step = winDur <= 15 ? 3 : winDur <= 30 ? 5 : 10;
+  const step = winDur <= 10 ? 2 : winDur <= 20 ? 4 : winDur <= 30 ? 5 : 10;
   const firstTick = Math.ceil(winStart / step) * step;
   const ticks = [];
   for (let t = firstTick; t <= winEnd; t += step) {
@@ -1036,7 +1255,16 @@ function renderLanesWindow(force) {
   ruler.innerHTML = ticks.join('') + '<div class="lane-playhead"></div>';
 
   const visibleOverlaps = model.overlapSpans.filter(ov => ov.end > winStart && ov.start < winEnd);
-  const ovBandsHtml = visibleOverlaps.map(ov => {
+  const ovBandsWithLabels = visibleOverlaps.map(ov => {
+    const left = ((Math.max(ov.start, winStart) - winStart) / winDur) * 100;
+    const right = ((Math.min(ov.end, winEnd) - winStart) / winDur) * 100;
+    const width = Math.max(0.25, right - left);
+    const dur = Math.max(0.1, ov.end - ov.start);
+    const label = width >= 3.2 ? '<span class="lane-ov-dur">' + dur.toFixed(1) + 's</span>' : '';
+    return '<div class="lane-ov-band" style="left:' + left.toFixed(3)
+      + '%;width:' + width.toFixed(3) + '%">' + label + '</div>';
+  }).join('');
+  const ovBandsPlain = visibleOverlaps.map(ov => {
     const left = ((Math.max(ov.start, winStart) - winStart) / winDur) * 100;
     const right = ((Math.min(ov.end, winEnd) - winStart) / winDur) * 100;
     return '<div class="lane-ov-band" style="left:' + left.toFixed(3)
@@ -1044,7 +1272,7 @@ function renderLanesWindow(force) {
   }).join('');
 
   const filter = document.getElementById('transcript-filter')?.value || 'all';
-  const rowsHtml = model.speakers.map(spk => {
+  const rowsHtml = model.speakers.map((spk, spkIdx) => {
     const c = model.colorOf(spk);
     const segs = model.bySpeaker.get(spk) || [];
     const blocks = [];
@@ -1071,7 +1299,7 @@ function renderLanesWindow(force) {
       + '<div class="lane-label' + (isFiltered ? ' filtered' : '') + '"'
       + ' data-speaker="' + html(spk) + '" style="--spk-color:' + c.fg + '"'
       + ' title="Click to filter transcript to ' + html(spk) + '">' + html(spk) + '</div>'
-      + '<div class="lane-track">' + ovBandsHtml + blocks.join('')
+      + '<div class="lane-track">' + (spkIdx === 0 ? ovBandsWithLabels : ovBandsPlain) + blocks.join('')
       + '<div class="lane-playhead"></div></div></div>';
   }).join('');
   body.innerHTML = rowsHtml;
@@ -1159,16 +1387,31 @@ function jumpOverlap(direction) {
   lanesFollow = true;
   const followBtn = document.getElementById('lanes-follow');
   if (followBtn) followBtn.setAttribute('aria-pressed', 'true');
-  const jumpTime = Math.max(0, target.start - 0.3);
+  const jumpTime = Math.max(0, target.start - 0.5);
   lanesWinStart = clampWinStart(target.start - lanesWindow * 0.25);
   renderLanesWindow(true);
   seekAndPlay(jumpTime);
   const firstIdx = Math.min(...target.indices);
   const row = rowByIndex.get(firstIdx);
-  if (row && !row.hidden) row.scrollIntoView({block: 'center'});
+  if (row && !row.hidden) row.scrollIntoView({block: 'nearest'});
 }
 
-// Swimlane controls & drag/click interactions
+// Dual-sub & swimlane controls & drag/click interactions
+const dualSubsBox = document.getElementById('dual-subs');
+if (dualSubsBox) {
+  dualSubsBox.addEventListener('click', event => {
+    const w = event.target.closest('.word');
+    if (w) seekAndPlay(Number(w.dataset.t));
+  });
+}
+const overlaySubsBtn = document.getElementById('toggle-overlay-subs');
+if (overlaySubsBtn) {
+  overlaySubsBtn.onclick = () => {
+    dualOverlay = !dualOverlay;
+    localStorage.setItem('ytarchive.transcript.dualOverlay', String(dualOverlay));
+    applyDualOverlayPosition();
+  };
+}
 const toggleLanesBtn = document.getElementById('toggle-lanes');
 if (toggleLanesBtn) {
   toggleLanesBtn.onclick = () => {
@@ -1350,6 +1593,7 @@ function syncTranscript(force) {
       }
     }
   }
+  updateDualSubs(time);
   updateLanesPlayhead();
 }
 
@@ -1359,6 +1603,8 @@ function tickLanes() {
     rafId = 0;
     return;
   }
+  const time = playerVideo.currentTime || 0;
+  updateDualSubs(time);
   updateLanesPlayhead();
   rafId = requestAnimationFrame(tickLanes);
 }

@@ -300,6 +300,9 @@ class TranscriptionTests(unittest.TestCase):
             self.data,
         ).decode()
         self.assertIn('id="engine-multitalker" value="multitalker" checked', html)
+        self.assertIn('id="dual-stage"', html)
+        self.assertIn('id="dual-subs"', html)
+        self.assertIn('id="toggle-overlay-subs"', html)
         self.assertIn('id="speaker-lanes"', html)
         self.assertIn('id="lanes-minimap"', html)
         self.assertIn('id="transcript-filter"', html)

@@ -33,12 +33,18 @@ Parent: [AGENTS.md](../AGENTS.md).
 - Speaker names are editable per segment. Reusing a name groups segments;
   speaker groups can be renamed or merged, updating the transcript, timeline,
   and WebVTT captions together.
-- When a transcript has two or more speakers, the video page adds an
-  overlap-aware visualization above the transcript list:
-  - **Speaker timeline (swimlanes):** one horizontal color-coded track per
-    speaker with a zoomable 15s / 30s / 60s window, vertical gold bands
-    marking simultaneous speech, click-to-seek and drag-to-pan, previous/next
-    overlap jump buttons, and a full-video overview minimap.
+- When a transcript has two or more speakers, the video page shows an
+  overlap-aware visualization directly under the player:
+  - **Live dual-color speaker subtitles:** one fixed color-coded caption row
+    per speaker (never merging overlapping voices onto one line), with live
+    word-level highlight, utterance timing progress bar, a live overlap header
+    showing overlap duration and who cut in when, and a toggle to overlay the
+    speaker rows over the video frame.
+  - **Speaker overlap timeline (swimlanes):** one time-proportional horizontal
+    track per speaker with a zoomable 10s / 20s / 30s / 60s window, vertical
+    gold bands showing exact overlap extent and duration, click-to-seek and
+    drag-to-pan, previous/next overlap jump buttons, and a full-video overview
+    minimap.
   - **Inline overlap markers in the transcript:** overlapped words are
     underlined in the interrupting speaker's color; mid-sentence overtalk also
     shows a compact clickable inline note (`∥ Speaker 2: "…"`) right at the

@@ -209,12 +209,54 @@ def detail_html(
             if (has_english or has_transcript)
             else ""
         )
+        dual_stage_html = (
+            """
+<section class="dual-stage" id="dual-stage" hidden>
+  <div class="dual-subs" id="dual-subs" aria-live="polite"></div>
+  <div class="speaker-lanes" id="speaker-lanes">
+    <div class="lanes-head">
+      <span class="lanes-title">Speaker overlap timeline</span>
+      <span class="lanes-status" id="lanes-status"></span>
+      <div class="lanes-tools">
+        <button type="button" id="prev-overlap" title="Jump to previous overlapping turn">◀ Prev overlap</button>
+        <button type="button" id="next-overlap" title="Jump to next overlapping turn">Next overlap ▶</button>
+        <label>Window
+          <select id="lanes-window">
+            <option value="10">10s</option>
+            <option value="20" selected>20s</option>
+            <option value="30">30s</option>
+            <option value="60">60s</option>
+          </select>
+        </label>
+        <button type="button" id="lanes-follow" aria-pressed="true" title="Keep timeline synced to playback">Follow</button>
+        <button type="button" id="toggle-overlay-subs" aria-pressed="false" title="Show dual-color speaker subtitles over the video frame">Overlay on video</button>
+      </div>
+    </div>
+    <div class="lanes-stage" id="lanes-stage">
+      <div class="lanes-ruler-row">
+        <div class="lanes-gutter"></div>
+        <div class="lanes-ruler" id="lanes-ruler"></div>
+      </div>
+      <div class="lanes-body" id="lanes-body"></div>
+    </div>
+    <div class="lanes-minimap-wrap" id="lanes-minimap-wrap" title="Click or drag to jump anywhere in the video">
+      <canvas class="lanes-minimap" id="lanes-minimap" height="24"></canvas>
+      <div class="minimap-viewport" id="minimap-viewport"></div>
+      <div class="minimap-playhead" id="minimap-playhead"></div>
+    </div>
+  </div>
+</section>
+"""
+            if (has_transcript or has_english)
+            else ""
+        )
         parts.append(f"""
 <div class="ytp" id="ytp" data-id="{_esc(vid)}">
   <video controls preload="metadata" src="{_esc(media_url(data_dir, video))}" data-media-player
     data-title="{_esc(title)}"{dur_attr} data-markers="{markers_attr}" data-markers-label="Shot"{audio_tracks_attr}
     data-wide>{captions_track}</video>
 </div>
+{dual_stage_html}
 {cover_toggle}
 <p class="meta">{player_help}</p>
 """)
@@ -310,39 +352,9 @@ def detail_html(
         <option value="large">large</option>
       </select>
     </label>
-    <button type="button" id="toggle-lanes" hidden>Hide timeline</button>
+    <button type="button" id="toggle-lanes" hidden>Hide overlap view</button>
     <button type="button" id="toggle-cc">Enable video CC</button>
     {" ".join(download_links)}
-  </div>
-  <div class="speaker-lanes" id="speaker-lanes" hidden>
-    <div class="lanes-head">
-      <span class="lanes-title">Speaker timeline</span>
-      <span class="lanes-status" id="lanes-status"></span>
-      <div class="lanes-tools">
-        <button type="button" id="prev-overlap" title="Jump to previous overlapping turn">◀ Prev overlap</button>
-        <button type="button" id="next-overlap" title="Jump to next overlapping turn">Next overlap ▶</button>
-        <label>Window
-          <select id="lanes-window">
-            <option value="15">15s</option>
-            <option value="30" selected>30s</option>
-            <option value="60">60s</option>
-          </select>
-        </label>
-        <button type="button" id="lanes-follow" aria-pressed="true" title="Keep timeline synced to playback">Follow</button>
-      </div>
-    </div>
-    <div class="lanes-stage" id="lanes-stage">
-      <div class="lanes-ruler-row">
-        <div class="lanes-gutter"></div>
-        <div class="lanes-ruler" id="lanes-ruler"></div>
-      </div>
-      <div class="lanes-body" id="lanes-body"></div>
-    </div>
-    <div class="lanes-minimap-wrap" id="lanes-minimap-wrap" title="Click or drag to jump anywhere in the video">
-      <canvas class="lanes-minimap" id="lanes-minimap" height="22"></canvas>
-      <div class="minimap-viewport" id="minimap-viewport"></div>
-      <div class="minimap-playhead" id="minimap-playhead"></div>
-    </div>
   </div>
   <div class="caption-box size-medium" id="caption-box" aria-live="polite"></div>
   <div class="speaker-tools">
