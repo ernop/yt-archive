@@ -188,9 +188,23 @@ class BrowsingTests(unittest.TestCase):
         small_shots.mkdir(parents=True, exist_ok=True)
         for i in range(3):
             (small_shots / f"{i:04d}.png").write_bytes(b"p")
+        (condensed_dir(self.data, "smallvid001") / "shots.json").write_text(
+            '{"shots":[{"file":"0000.png","t0":0.0},{"file":"0001.png","t0":5.0},{"file":"0002.png","t0":12.0}]}',
+            encoding="utf-8",
+        )
         small_html = detail_html(load_archive_info(self.data, "smallvid001"), self.data).decode()
-        self.assertIn('<details class="sheets-toggle" id="framesheets-section" open>', small_html)
-        self.assertIn('<details class="sheets-toggle" id="shots-section" open>', small_html)
+        self.assertIn(
+            '<details class="sheets-toggle" id="framesheets-section" data-default-open="true" open>',
+            small_html,
+        )
+        self.assertIn(
+            '<details class="sheets-toggle" id="shots-section" data-default-open="true" open>',
+            small_html,
+        )
+        self.assertIn('id="view-bar"', small_html)
+        self.assertIn('id="vb-frame-jumps" aria-pressed="true" title=', small_html)
+        self.assertIn('id="vb-scope-global"', small_html)
+        self.assertIn('id="vb-scope-video"', small_html)
 
         make_video(self.data, "largevid001", shots=0)
         cdir = condensed_dir(self.data, "largevid001")
@@ -202,8 +216,15 @@ class BrowsingTests(unittest.TestCase):
         for i in range(125):
             (sdir / f"{i:04d}.png").write_bytes(b"p")
         large_html = detail_html(load_archive_info(self.data, "largevid001"), self.data).decode()
-        self.assertIn('<details class="sheets-toggle" id="framesheets-section"><summary>', large_html)
-        self.assertIn('<details class="sheets-toggle" id="shots-section"><summary>', large_html)
+        self.assertIn(
+            '<details class="sheets-toggle" id="framesheets-section" data-default-open="false"><summary>',
+            large_html,
+        )
+        self.assertIn(
+            '<details class="sheets-toggle" id="shots-section" data-default-open="false"><summary>',
+            large_html,
+        )
+        self.assertIn('id="vb-frame-jumps" aria-pressed="true" hidden', large_html)
 
 
 if __name__ == "__main__":

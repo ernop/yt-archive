@@ -397,13 +397,137 @@ let activeWordSpans = [];
 let hoveredIndices = null;
 let hoveredKey = '';
 
-// Swimlane & dual-subtitle state
-let lanesWindow = Number(localStorage.getItem('ytarchive.transcript.lanesWindow')) || 20;
-let lanesHidden = localStorage.getItem('ytarchive.transcript.lanesHidden') === 'true';
-let dualOverlay = localStorage.getItem('ytarchive.transcript.dualOverlay') === 'true';
-let showDualSubs = localStorage.getItem('ytarchive.transcript.showDualSubs') !== 'false';
-let splitView = localStorage.getItem('ytarchive.transcript.splitView') !== 'false';
-let autoScroll = localStorage.getItem('ytarchive.transcript.autoScroll') !== 'false';
+// Unified page view preferences: global defaults + optional per-video overrides
+const VIEW_DEFAULTS_KEY = 'ytarchive.view.defaults';
+const VIEW_VIDEO_KEY = 'ytarchive.view.video.' + vid;
+const VIEW_BUILTIN = {
+  frameJumps: true,
+  showTranscript: true,
+  showLanes: true,
+  showDualSubs: true,
+  dualOverlay: false,
+  splitView: true,
+  autoScroll: true,
+  lanesWindow: 20,
+  showAudio: true,
+  showFramesheets: 'auto',
+  showShots: 'auto',
+  transcriptView: 'full',
+  transcriptSize: 'medium',
+  coverBurnedCc: false,
+};
+
+function readStorageJson(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStorageJson(key, obj) {
+  try {
+    if (!obj || !Object.keys(obj).length) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(obj));
+  } catch {}
+}
+
+function createViewPrefs() {
+  let globalDefaults = readStorageJson(VIEW_DEFAULTS_KEY);
+  if (globalDefaults === null) {
+    globalDefaults = {};
+    // One-time seed from pre-unified keys if present
+    const legacy = {
+      lanesWindow: localStorage.getItem('ytarchive.transcript.lanesWindow'),
+      lanesHidden: localStorage.getItem('ytarchive.transcript.lanesHidden'),
+      dualOverlay: localStorage.getItem('ytarchive.transcript.dualOverlay'),
+      showDualSubs: localStorage.getItem('ytarchive.transcript.showDualSubs'),
+      splitView: localStorage.getItem('ytarchive.transcript.splitView'),
+      autoScroll: localStorage.getItem('ytarchive.transcript.autoScroll'),
+      transcriptView: localStorage.getItem('ytarchive.transcript.view'),
+      transcriptSize: localStorage.getItem('ytarchive.transcript.size'),
+      coverBurnedCc: localStorage.getItem('ytarchive.player.coverBurnedCc'),
+    };
+    if (legacy.lanesWindow && Number(legacy.lanesWindow) && Number(legacy.lanesWindow) !== 20) {
+      globalDefaults.lanesWindow = Number(legacy.lanesWindow);
+    }
+    if (legacy.lanesHidden === 'true') globalDefaults.showLanes = false;
+    if (legacy.dualOverlay === 'true') globalDefaults.dualOverlay = true;
+    if (legacy.showDualSubs === 'false') globalDefaults.showDualSubs = false;
+    if (legacy.splitView === 'false') globalDefaults.splitView = false;
+    if (legacy.autoScroll === 'false') globalDefaults.autoScroll = false;
+    if (legacy.transcriptView && legacy.transcriptView !== 'full') globalDefaults.transcriptView = legacy.transcriptView;
+    if (legacy.transcriptSize && legacy.transcriptSize !== 'medium') globalDefaults.transcriptSize = legacy.transcriptSize;
+    if (legacy.coverBurnedCc === 'true') globalDefaults.coverBurnedCc = true;
+    writeStorageJson(VIEW_DEFAULTS_KEY, globalDefaults);
+  }
+  let videoOverrides = readStorageJson(VIEW_VIDEO_KEY) || {};
+  let scope = Object.keys(videoOverrides).length > 0 ? 'video' : 'global';
+
+  const globalEffective = key => (
+    Object.prototype.hasOwnProperty.call(globalDefaults, key) ? globalDefaults[key] : VIEW_BUILTIN[key]
+  );
+  const get = key => (
+    Object.prototype.hasOwnProperty.call(videoOverrides, key) ? videoOverrides[key] : globalEffective(key)
+  );
+  const isCustom = key => Object.prototype.hasOwnProperty.call(videoOverrides, key);
+  const customCount = () => Object.keys(videoOverrides).length;
+  const globalCustomCount = () => Object.keys(globalDefaults).length;
+  const getScope = () => scope;
+  const setScope = next => { scope = next === 'video' ? 'video' : 'global'; };
+  const set = (key, value) => {
+    if (scope === 'video') {
+      if (value === globalEffective(key)) delete videoOverrides[key];
+      else videoOverrides[key] = value;
+      writeStorageJson(VIEW_VIDEO_KEY, videoOverrides);
+    } else {
+      delete videoOverrides[key];
+      if (value === VIEW_BUILTIN[key]) delete globalDefaults[key];
+      else globalDefaults[key] = value;
+      writeStorageJson(VIEW_DEFAULTS_KEY, globalDefaults);
+      writeStorageJson(VIEW_VIDEO_KEY, videoOverrides);
+    }
+  };
+  const clearVideo = () => {
+    videoOverrides = {};
+    scope = 'global';
+    writeStorageJson(VIEW_VIDEO_KEY, videoOverrides);
+  };
+  const promoteToGlobal = () => {
+    for (const [k, v] of Object.entries(videoOverrides)) {
+      if (v === VIEW_BUILTIN[k]) delete globalDefaults[k];
+      else globalDefaults[k] = v;
+    }
+    videoOverrides = {};
+    scope = 'global';
+    writeStorageJson(VIEW_DEFAULTS_KEY, globalDefaults);
+    writeStorageJson(VIEW_VIDEO_KEY, videoOverrides);
+  };
+  const resetGlobal = () => {
+    globalDefaults = {};
+    videoOverrides = {};
+    scope = 'global';
+    writeStorageJson(VIEW_DEFAULTS_KEY, globalDefaults);
+    writeStorageJson(VIEW_VIDEO_KEY, videoOverrides);
+  };
+  return {get, isCustom, customCount, globalCustomCount, getScope, setScope, set, clearVideo, promoteToGlobal, resetGlobal};
+}
+
+const viewPrefs = createViewPrefs();
+
+// Swimlane & dual-subtitle state (synced from viewPrefs)
+let frameJumps = Boolean(viewPrefs.get('frameJumps'));
+let showTranscript = Boolean(viewPrefs.get('showTranscript'));
+let lanesWindow = Number(viewPrefs.get('lanesWindow')) || 20;
+let lanesHidden = !viewPrefs.get('showLanes');
+let dualOverlay = Boolean(viewPrefs.get('dualOverlay'));
+let showDualSubs = Boolean(viewPrefs.get('showDualSubs'));
+let splitView = Boolean(viewPrefs.get('splitView'));
+let autoScroll = Boolean(viewPrefs.get('autoScroll'));
+let showAudio = Boolean(viewPrefs.get('showAudio'));
 let lanesFollow = true;
 let lanesWinStart = 0;
 let renderedWinStart = -1;
@@ -414,6 +538,7 @@ let dualRowBySpeaker = new Map();
 let dualHeadEl = null;
 let ytpObserver = null;
 let rafId = 0;
+let suppressMarkerSync = false;
 
 function buildOverlapModel(data) {
   const segments = (data && data.segments) || [];
@@ -1054,7 +1179,9 @@ function ensureCollapsibleSheets() {
         const details = document.createElement('details');
         details.className = 'sheets-toggle';
         details.id = 'framesheets-section';
-        if (sheetImgs.length <= 1) details.open = true;
+        const defaultOpen = sheetImgs.length <= 1;
+        details.dataset.defaultOpen = String(defaultOpen);
+        if (defaultOpen) details.open = true;
         const summary = document.createElement('summary');
         summary.textContent = sheetImgs.length > 1
           ? 'Framesheets (' + sheetImgs.length + ' sheets)'
@@ -1073,7 +1200,9 @@ function ensureCollapsibleSheets() {
       const details = document.createElement('details');
       details.className = 'sheets-toggle';
       details.id = 'shots-section';
-      if (count <= 120) details.open = true;
+      const defaultOpen = count <= 120;
+      details.dataset.defaultOpen = String(defaultOpen);
+      if (defaultOpen) details.open = true;
       const summary = document.createElement('summary');
       summary.textContent = 'Shot images (' + count + ' shots) — click to play from that moment';
       details.appendChild(summary);
@@ -1084,6 +1213,199 @@ function ensureCollapsibleSheets() {
   }
 }
 ensureCollapsibleSheets();
+
+function getVideoMarkersCount() {
+  const v = document.querySelector('#ytp video');
+  if (!v || !v.dataset.markers) return 0;
+  try {
+    const arr = JSON.parse(v.dataset.markers);
+    return Array.isArray(arr) ? arr.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function ensureViewBar() {
+  const main = document.querySelector('main');
+  if (!main) return;
+  if (!document.getElementById('view-bar')) {
+    const markerCount = getVideoMarkersCount();
+    const hasSheets = Boolean(document.getElementById('framesheets-section'));
+    const hasShots = Boolean(document.getElementById('shots-section'));
+    const hasVideo = Boolean(document.querySelector('#ytp video'));
+    const bar = document.createElement('section');
+    bar.className = 'view-bar';
+    bar.id = 'view-bar';
+    bar.setAttribute('aria-label', 'Page view');
+    bar.innerHTML =
+      '<div class="view-toggles">'
+      + '<span class="view-bar-label">View</span>'
+      + '<button type="button" id="vb-frame-jumps" aria-pressed="true"'
+      + (markerCount ? '' : ' hidden')
+      + ' title="Show or hide ' + markerCount + ' orange shot-jump bars on the player timeline">'
+      + '<span class="vb-swatch" aria-hidden="true"></span>Frame jumps</button>'
+      + '<button type="button" id="vb-split-view" aria-pressed="true"'
+      + (hasVideo && transcriptReady ? '' : ' hidden')
+      + ' title="Place video and transcript side by side">Split view</button>'
+      + '<button type="button" id="vb-transcript" aria-pressed="true" title="Show or hide the transcript panel">Transcript</button>'
+      + '<button type="button" id="vb-lanes" aria-pressed="true" hidden title="Show or hide the multi-speaker overlap timeline">Overlap timeline</button>'
+      + '<button type="button" id="vb-audio" aria-pressed="true" title="Show or hide the MP3 audio section">MP3 audio</button>'
+      + '<button type="button" id="vb-framesheets" aria-pressed="true"'
+      + (hasSheets ? '' : ' hidden') + ' title="Expand or collapse framesheet images">Framesheets</button>'
+      + '<button type="button" id="vb-shots" aria-pressed="true"'
+      + (hasShots ? '' : ' hidden') + ' title="Expand or collapse shot images">Shot images</button>'
+      + '</div>'
+      + '<div class="view-scope">'
+      + '<span class="view-bar-label">Save</span>'
+      + '<span class="vb-seg" role="group" aria-label="Where view changes apply">'
+      + '<button type="button" id="vb-scope-global" aria-pressed="true" title="Changes update your default layout for all videos">All videos</button>'
+      + '<button type="button" id="vb-scope-video" aria-pressed="false" title="Changes apply only to this video">This video</button>'
+      + '</span>'
+      + '<button type="button" id="vb-promote" hidden title="Save this video’s custom layout as the default for all videos">Make default</button>'
+      + '<button type="button" id="vb-clear-video" hidden title="Clear this video’s custom overrides and use your global defaults">Use defaults</button>'
+      + '<button type="button" id="vb-reset-global" hidden title="Reset all global view defaults back to built-in defaults">Reset</button>'
+      + '</div>';
+    main.prepend(bar);
+  }
+  const fs = document.getElementById('framesheets-section');
+  if (fs && fs.dataset.defaultOpen === undefined) fs.dataset.defaultOpen = String(fs.open);
+  const sh = document.getElementById('shots-section');
+  if (sh && sh.dataset.defaultOpen === undefined) sh.dataset.defaultOpen = String(sh.open);
+}
+ensureViewBar();
+
+function applyFrameJumpsToPlayer(silent) {
+  const pv = document.querySelector('#ytp video');
+  const player = pv && window.MediaPlayer && MediaPlayer.get(pv);
+  if (!player || typeof player.toggleKind !== 'function') return;
+  suppressMarkerSync = true;
+  try {
+    player.toggleKind('', frameJumps, {silent: Boolean(silent)});
+  } finally {
+    suppressMarkerSync = false;
+  }
+}
+
+function setDetailsOpenProgrammatic(el, open) {
+  if (!el) return;
+  const target = Boolean(open);
+  if (el.open === target) return;
+  el.dataset.expectedOpen = String(target);
+  el.open = target;
+}
+
+function resolveDetailsOpen(el, prefVal) {
+  if (!el) return false;
+  if (prefVal === 'auto') return el.dataset.defaultOpen === 'true';
+  return Boolean(prefVal);
+}
+
+function paintViewBar() {
+  const setBtn = (id, pressed, prefKey) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.setAttribute('aria-pressed', String(Boolean(pressed)));
+    btn.classList.toggle('vb-custom', Boolean(prefKey && viewPrefs.isCustom(prefKey)));
+  };
+  const fs = document.getElementById('framesheets-section');
+  const sh = document.getElementById('shots-section');
+  const hasVideo = Boolean(document.querySelector('#ytp video'));
+  const multi = Boolean(model && model.speakers.length >= 2);
+
+  const markerBtn = document.getElementById('vb-frame-jumps');
+  if (markerBtn) markerBtn.hidden = getVideoMarkersCount() === 0;
+  setBtn('vb-frame-jumps', frameJumps, 'frameJumps');
+
+  const splitVb = document.getElementById('vb-split-view');
+  if (splitVb) splitVb.hidden = !(hasVideo && transcriptReady);
+  setBtn('vb-split-view', splitView, 'splitView');
+
+  const trVb = document.getElementById('vb-transcript');
+  if (trVb) trVb.hidden = !document.getElementById('transcript-panel');
+  setBtn('vb-transcript', showTranscript, 'showTranscript');
+
+  const lanesVb = document.getElementById('vb-lanes');
+  if (lanesVb) lanesVb.hidden = !multi;
+  setBtn('vb-lanes', !lanesHidden, 'showLanes');
+
+  const audioEl = document.querySelector('.soundtrack');
+  const audioVb = document.getElementById('vb-audio');
+  if (audioVb) audioVb.hidden = !audioEl;
+  setBtn('vb-audio', showAudio, 'showAudio');
+
+  const fsVb = document.getElementById('vb-framesheets');
+  if (fsVb) fsVb.hidden = !fs;
+  setBtn('vb-framesheets', fs ? fs.open : false, 'showFramesheets');
+
+  const shVb = document.getElementById('vb-shots');
+  if (shVb) shVb.hidden = !sh;
+  setBtn('vb-shots', sh ? sh.open : false, 'showShots');
+
+  const scope = viewPrefs.getScope();
+  const nCustom = viewPrefs.customCount();
+  const gBtn = document.getElementById('vb-scope-global');
+  const vBtn = document.getElementById('vb-scope-video');
+  if (gBtn) gBtn.setAttribute('aria-pressed', String(scope === 'global'));
+  if (vBtn) {
+    vBtn.setAttribute('aria-pressed', String(scope === 'video'));
+    vBtn.textContent = nCustom > 0 ? 'This video (' + nCustom + ')' : 'This video';
+  }
+  const promoteBtn = document.getElementById('vb-promote');
+  const clearBtn = document.getElementById('vb-clear-video');
+  const resetBtn = document.getElementById('vb-reset-global');
+  if (promoteBtn) promoteBtn.hidden = nCustom === 0;
+  if (clearBtn) clearBtn.hidden = nCustom === 0;
+  if (resetBtn) resetBtn.hidden = nCustom > 0 || viewPrefs.globalCustomCount() === 0;
+}
+
+function reloadStateFromViewPrefs(silentMarkers) {
+  frameJumps = Boolean(viewPrefs.get('frameJumps'));
+  showTranscript = Boolean(viewPrefs.get('showTranscript'));
+  lanesWindow = Number(viewPrefs.get('lanesWindow')) || 20;
+  lanesHidden = !viewPrefs.get('showLanes');
+  dualOverlay = Boolean(viewPrefs.get('dualOverlay'));
+  showDualSubs = Boolean(viewPrefs.get('showDualSubs'));
+  splitView = Boolean(viewPrefs.get('splitView'));
+  autoScroll = Boolean(viewPrefs.get('autoScroll'));
+  showAudio = Boolean(viewPrefs.get('showAudio'));
+
+  const panel = document.getElementById('transcript-panel');
+  if (panel) panel.hidden = !showTranscript;
+  const audioEl = document.querySelector('.soundtrack');
+  if (audioEl) audioEl.hidden = !showAudio;
+  const fs = document.getElementById('framesheets-section');
+  if (fs) setDetailsOpenProgrammatic(fs, resolveDetailsOpen(fs, viewPrefs.get('showFramesheets')));
+  const sh = document.getElementById('shots-section');
+  if (sh) setDetailsOpenProgrammatic(sh, resolveDetailsOpen(sh, viewPrefs.get('showShots')));
+
+  const autoBtn = document.getElementById('toggle-autoscroll');
+  if (autoBtn) autoBtn.setAttribute('aria-pressed', String(autoScroll));
+  const tv = document.getElementById('transcript-view');
+  if (tv) {
+    tv.value = String(viewPrefs.get('transcriptView') || 'full');
+    const box = document.getElementById('caption-box');
+    if (box) box.classList.toggle('rolling', tv.value === 'rolling');
+  }
+  const ts = document.getElementById('transcript-size');
+  if (ts) {
+    ts.value = String(viewPrefs.get('transcriptSize') || 'medium');
+    const box = document.getElementById('caption-box');
+    if (box) {
+      box.classList.remove('size-small', 'size-medium', 'size-large');
+      box.classList.add('size-' + ts.value);
+    }
+  }
+  const ccCheck = document.getElementById('cover-burned-cc');
+  if (ccCheck) {
+    ccCheck.checked = Boolean(viewPrefs.get('coverBurnedCc'));
+    ccCheck.dispatchEvent(new Event('ytarchive-sync'));
+  }
+
+  applyFrameJumpsToPlayer(silentMarkers);
+  if (model) setupLanes();
+  else applySplitLayout();
+  paintViewBar();
+}
 
 function clampWinStart(start) {
   if (!model) return 0;
@@ -1147,7 +1469,7 @@ function applySplitLayout() {
   const splitBtn = document.getElementById('toggle-split-view');
   if (!main) return;
   const active = Boolean(
-    splitView && ytp && model && model.speakers.length >= 2 && !lanesHidden
+    splitView && showTranscript && ytp && transcriptReady
   );
   main.classList.toggle('split-view', active);
   if (splitBtn) {
@@ -1446,6 +1768,7 @@ function setupLanes() {
     dualStage.hidden = true;
     applyDualOverlayPosition();
     applySplitLayout();
+    paintViewBar();
     return;
   }
   dualStage.hidden = lanesHidden;
@@ -1465,6 +1788,7 @@ function setupLanes() {
   renderDualSubsShell();
   applyDualOverlayPosition();
   applySplitLayout();
+  paintViewBar();
   if (!lanesHidden) {
     drawMinimap();
     renderLanesWindow(true);
@@ -1868,8 +2192,9 @@ if (toggleAutoScrollBtn) {
   toggleAutoScrollBtn.setAttribute('aria-pressed', String(autoScroll));
   toggleAutoScrollBtn.onclick = () => {
     autoScroll = !autoScroll;
-    localStorage.setItem('ytarchive.transcript.autoScroll', String(autoScroll));
+    viewPrefs.set('autoScroll', autoScroll);
     toggleAutoScrollBtn.setAttribute('aria-pressed', String(autoScroll));
+    paintViewBar();
     if (autoScroll) syncTranscript(true);
   };
 }
@@ -1878,16 +2203,18 @@ if (toggleDualSubsBtn) {
   toggleDualSubsBtn.setAttribute('aria-pressed', String(showDualSubs));
   toggleDualSubsBtn.onclick = () => {
     showDualSubs = !showDualSubs;
-    localStorage.setItem('ytarchive.transcript.showDualSubs', String(showDualSubs));
+    viewPrefs.set('showDualSubs', showDualSubs);
     applyDualOverlayPosition();
+    paintViewBar();
   };
 }
 const overlaySubsBtn = document.getElementById('toggle-overlay-subs');
 if (overlaySubsBtn) {
   overlaySubsBtn.onclick = () => {
     dualOverlay = !dualOverlay;
-    localStorage.setItem('ytarchive.transcript.dualOverlay', String(dualOverlay));
+    viewPrefs.set('dualOverlay', dualOverlay);
     applyDualOverlayPosition();
+    paintViewBar();
   };
 }
 const splitViewBtn = document.getElementById('toggle-split-view');
@@ -1895,23 +2222,25 @@ if (splitViewBtn) {
   splitViewBtn.setAttribute('aria-pressed', String(splitView));
   splitViewBtn.onclick = () => {
     splitView = !splitView;
-    localStorage.setItem('ytarchive.transcript.splitView', String(splitView));
+    viewPrefs.set('splitView', splitView);
     applySplitLayout();
+    paintViewBar();
   };
 }
 const toggleLanesBtn = document.getElementById('toggle-lanes');
 if (toggleLanesBtn) {
   toggleLanesBtn.onclick = () => {
     lanesHidden = !lanesHidden;
-    localStorage.setItem('ytarchive.transcript.lanesHidden', String(lanesHidden));
+    viewPrefs.set('showLanes', !lanesHidden);
     setupLanes();
   };
 }
 const lanesWindowSel = document.getElementById('lanes-window');
 if (lanesWindowSel) {
   lanesWindowSel.onchange = () => {
-    lanesWindow = Number(lanesWindowSel.value) || 30;
-    localStorage.setItem('ytarchive.transcript.lanesWindow', String(lanesWindow));
+    lanesWindow = Number(lanesWindowSel.value) || 20;
+    viewPrefs.set('lanesWindow', lanesWindow);
+    paintViewBar();
     const playerVideo = document.querySelector('#ytp video');
     const t = playerVideo ? (playerVideo.currentTime || 0) : lanesWinStart;
     lanesWinStart = clampWinStart(t - lanesWindow * 0.25);
@@ -2115,24 +2444,32 @@ const transcriptFilter = document.getElementById('transcript-filter');
 if (transcriptFilter) transcriptFilter.addEventListener('change', paintTranscript);
 const transcriptView = document.getElementById('transcript-view');
 if (transcriptView) {
-  transcriptView.value = localStorage.getItem('ytarchive.transcript.view') || 'full';
-  transcriptView.onchange = () => {
-    localStorage.setItem('ytarchive.transcript.view', transcriptView.value);
+  transcriptView.value = String(viewPrefs.get('transcriptView') || 'full');
+  const applyTranscriptView = () => {
     document.getElementById('caption-box').classList.toggle('rolling', transcriptView.value === 'rolling');
     syncTranscript(true);
   };
-  transcriptView.onchange();
+  transcriptView.onchange = () => {
+    viewPrefs.set('transcriptView', transcriptView.value);
+    paintViewBar();
+    applyTranscriptView();
+  };
+  applyTranscriptView();
 }
 const transcriptSize = document.getElementById('transcript-size');
 if (transcriptSize) {
-  transcriptSize.value = localStorage.getItem('ytarchive.transcript.size') || 'medium';
-  transcriptSize.onchange = () => {
-    localStorage.setItem('ytarchive.transcript.size', transcriptSize.value);
+  transcriptSize.value = String(viewPrefs.get('transcriptSize') || 'medium');
+  const applyTranscriptSize = () => {
     const box = document.getElementById('caption-box');
     box.classList.remove('size-small', 'size-medium', 'size-large');
     box.classList.add('size-' + transcriptSize.value);
   };
-  transcriptSize.onchange();
+  transcriptSize.onchange = () => {
+    viewPrefs.set('transcriptSize', transcriptSize.value);
+    paintViewBar();
+    applyTranscriptSize();
+  };
+  applyTranscriptSize();
 }
 const playerVideo = document.querySelector('#ytp video');
 if (playerVideo) {
@@ -2190,11 +2527,13 @@ if (coverBurnedCc && playerVideo) {
       }
     }
   };
-  coverBurnedCc.checked = localStorage.getItem('ytarchive.player.coverBurnedCc') === 'true';
+  coverBurnedCc.checked = Boolean(viewPrefs.get('coverBurnedCc'));
   coverBurnedCc.onchange = () => {
-    localStorage.setItem('ytarchive.player.coverBurnedCc', String(coverBurnedCc.checked));
+    viewPrefs.set('coverBurnedCc', Boolean(coverBurnedCc.checked));
+    paintViewBar();
     applyCueLayout();
   };
+  coverBurnedCc.addEventListener('ytarchive-sync', applyCueLayout);
   playerVideo.querySelectorAll('track').forEach(el => {
     el.addEventListener('load', applyCueLayout);
   });
@@ -2203,6 +2542,146 @@ if (coverBurnedCc && playerVideo) {
   }
   applyCueLayout();
 }
+
+// Wire unified View bar toggles, scope switch, player marker sync, and <details> sync
+(function wireViewBar() {
+  const ytp = document.getElementById('ytp');
+  const fs = document.getElementById('framesheets-section');
+  const sh = document.getElementById('shots-section');
+
+  const btnFrameJumps = document.getElementById('vb-frame-jumps');
+  if (btnFrameJumps) {
+    btnFrameJumps.onclick = () => {
+      frameJumps = !frameJumps;
+      viewPrefs.set('frameJumps', frameJumps);
+      applyFrameJumpsToPlayer(false);
+      paintViewBar();
+    };
+  }
+  const btnSplit = document.getElementById('vb-split-view');
+  if (btnSplit) {
+    btnSplit.onclick = () => {
+      splitView = !splitView;
+      viewPrefs.set('splitView', splitView);
+      applySplitLayout();
+      paintViewBar();
+    };
+  }
+  const btnTranscript = document.getElementById('vb-transcript');
+  if (btnTranscript) {
+    btnTranscript.onclick = () => {
+      showTranscript = !showTranscript;
+      viewPrefs.set('showTranscript', showTranscript);
+      const panel = document.getElementById('transcript-panel');
+      if (panel) panel.hidden = !showTranscript;
+      applySplitLayout();
+      paintViewBar();
+    };
+  }
+  const btnLanes = document.getElementById('vb-lanes');
+  if (btnLanes) {
+    btnLanes.onclick = () => {
+      lanesHidden = !lanesHidden;
+      viewPrefs.set('showLanes', !lanesHidden);
+      setupLanes();
+    };
+  }
+  const btnAudio = document.getElementById('vb-audio');
+  if (btnAudio) {
+    btnAudio.onclick = () => {
+      showAudio = !showAudio;
+      viewPrefs.set('showAudio', showAudio);
+      const audioEl = document.querySelector('.soundtrack');
+      if (audioEl) audioEl.hidden = !showAudio;
+      paintViewBar();
+    };
+  }
+  const btnFs = document.getElementById('vb-framesheets');
+  if (btnFs && fs) {
+    btnFs.onclick = () => {
+      const next = !fs.open;
+      viewPrefs.set('showFramesheets', next);
+      setDetailsOpenProgrammatic(fs, next);
+      paintViewBar();
+    };
+  }
+  const btnSh = document.getElementById('vb-shots');
+  if (btnSh && sh) {
+    btnSh.onclick = () => {
+      const next = !sh.open;
+      viewPrefs.set('showShots', next);
+      setDetailsOpenProgrammatic(sh, next);
+      paintViewBar();
+    };
+  }
+
+  if (fs) {
+    fs.addEventListener('toggle', () => {
+      if (fs.dataset.expectedOpen === String(fs.open)) {
+        delete fs.dataset.expectedOpen;
+        return;
+      }
+      viewPrefs.set('showFramesheets', fs.open);
+      paintViewBar();
+    });
+  }
+  if (sh) {
+    sh.addEventListener('toggle', () => {
+      if (sh.dataset.expectedOpen === String(sh.open)) {
+        delete sh.dataset.expectedOpen;
+        return;
+      }
+      viewPrefs.set('showShots', sh.open);
+      paintViewBar();
+    });
+  }
+
+  const gBtn = document.getElementById('vb-scope-global');
+  const vBtn = document.getElementById('vb-scope-video');
+  if (gBtn) gBtn.onclick = () => { viewPrefs.setScope('global'); paintViewBar(); };
+  if (vBtn) vBtn.onclick = () => { viewPrefs.setScope('video'); paintViewBar(); };
+
+  const promoteBtn = document.getElementById('vb-promote');
+  if (promoteBtn) {
+    promoteBtn.onclick = () => {
+      viewPrefs.promoteToGlobal();
+      reloadStateFromViewPrefs(true);
+    };
+  }
+  const clearBtn = document.getElementById('vb-clear-video');
+  if (clearBtn) {
+    clearBtn.onclick = () => {
+      viewPrefs.clearVideo();
+      reloadStateFromViewPrefs(true);
+    };
+  }
+  const resetBtn = document.getElementById('vb-reset-global');
+  if (resetBtn) {
+    resetBtn.onclick = () => {
+      viewPrefs.resetGlobal();
+      reloadStateFromViewPrefs(true);
+    };
+  }
+
+  if (ytp) {
+    ytp.addEventListener('ytarchive:player-ready', () => {
+      applyFrameJumpsToPlayer(true);
+      paintViewBar();
+    });
+    ytp.addEventListener('media-player:markers', event => {
+      if (suppressMarkerSync) return;
+      const d = event.detail || {};
+      if (d.kind === '') {
+        frameJumps = Boolean(d.shown);
+        viewPrefs.set('frameJumps', frameJumps);
+        paintViewBar();
+      }
+    });
+  }
+
+  reloadStateFromViewPrefs(true);
+})();
+
 if (transcriptReady) loadTranscript().catch(err => {
   document.getElementById('transcript-meta').textContent = err.message;
 });

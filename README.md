@@ -45,6 +45,7 @@ The picker lists the videos of a YouTube creator, a playlist or an X profile. No
 ## The video page
 
 - **Facts** on one line: creator, length, resolution, file size, number of shots, upload date, download date, and a link to the original on YouTube or X. The description follows, folded.
+- **View bar.** Controls at the top of the video page show or hide the shot marks on the seek bar (**Frame jumps**), **Split view**, **Transcript**, **Overlap timeline**, **MP3 audio**, **Framesheets**, and **Shot images**. A **Save** switch applies changes either to **All videos** or only to **This video**, with buttons to promote a video's layout to the default or return to defaults.
 - **Player.** Each shot is a mark on the seek bar, and the picture of the shot playing is outlined in red. Clicking a shot picture plays from that moment; PageUp and PageDown then step from shot to shot.
 - **Keys.** S saves the frame on screen as a full-size PNG beside the MP3. T enlarges the video from 72% to 86% of the window height. R turns repeat on or off: the video starts again each time it ends. B switches between the original audio and the English dub when a dub exists. C cycles captions. ? lists every key. The player offers to resume where you stopped, and remembers speed, volume, captions and the enlarged view.
 - **MP3.** It plays on the page and downloads as a file named after the artist and title. **Open MP3 folder** opens its folder on the computer. **Create MP3 audio** makes one for a video that has none. Lyrics, when present, download beside it.

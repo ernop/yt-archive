@@ -30,6 +30,7 @@
   });
 
   const player = MediaPlayer.enhance(video, { saveFrame });
+  root.dispatchEvent(new CustomEvent("ytarchive:player-ready", { bubbles: true, detail: { player } }));
 
   document.querySelectorAll(".shots figure[data-t]").forEach((fig) => {
     fig.addEventListener("click", (event) => {

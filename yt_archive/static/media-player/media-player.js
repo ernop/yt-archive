@@ -20,7 +20,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, function (root) {
     'use strict';
 
-    const VERSION = '1.3.0';
+    const VERSION = '1.4.0';
 
     const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
     // Notch intervals in tenths of a second, so divisibility stays in integers: 0.1 s to 12 h.
@@ -1420,21 +1420,40 @@
             }
         }
 
+        /** Whether a marker kind is currently shown on the scale. */
+        kindVisible(kind) {
+            return !this.hiddenKinds.has(kind == null ? '' : String(kind));
+        }
+
         /** Shows or hides one kind of marker on the scale; hidden markers are passed over by PageUp
-            and PageDown too. */
-        toggleKind(kind) {
-            const label = this.kindLabel(kind);
-            if (this.hiddenKinds.has(kind)) {
-                this.hiddenKinds.delete(kind);
-                this.flash(`${label}: shown`);
+            and PageDown too. `show` (true or false) sets visibility explicitly; omit it to flip.
+            Pass `{ silent: true }` to update without flashing a message. */
+        toggleKind(kind, show, opts) {
+            const k = kind == null ? '' : String(kind);
+            const currentlyShown = !this.hiddenKinds.has(k);
+            const nextShown = show === undefined ? !currentlyShown : Boolean(show);
+            if (nextShown === currentlyShown) {
+                return nextShown;
+            }
+            const label = this.kindLabel(k);
+            if (nextShown) {
+                this.hiddenKinds.delete(k);
             } else {
-                this.hiddenKinds.add(kind);
-                this.flash(`${label}: hidden`);
+                this.hiddenKinds.add(k);
+            }
+            if (!(opts && opts.silent)) {
+                this.flash(`${label}: ${nextShown ? 'shown' : 'hidden'}`);
             }
             this.renderMarkers();
             if (!this.help.hidden) {
                 this.fillHelp();
             }
+            this.notify('markers', {
+                kind: k,
+                shown: nextShown,
+                hiddenKinds: Array.from(this.hiddenKinds),
+            });
+            return nextShown;
         }
 
         /** The marker kinds in order of importance; one unnamed kind when the page gave none. */

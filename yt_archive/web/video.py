@@ -161,6 +161,49 @@ def detail_html(
             f'<div class="text">{_esc(info["description"])}</div></details>'
         )
     parts.append("</header><main>")
+    has_markers = bool(video and shot_markers)
+    has_sheets = bool(sheets or all_labeled_path(data_dir, vid).is_file())
+    has_shots_grid = any(shots_dir(data_dir, vid).glob("*.png"))
+    parts.append(
+        f'<section class="view-bar" id="view-bar" aria-label="Page view">'
+        f'<div class="view-toggles">'
+        f'<span class="view-bar-label">View</span>'
+        f'<button type="button" id="vb-frame-jumps" aria-pressed="true"'
+        f'{" hidden" if not has_markers else ""} '
+        f'title="Show or hide {len(shot_markers)} orange shot-jump bars on the player timeline">'
+        f'<span class="vb-swatch" aria-hidden="true"></span>Frame jumps</button>'
+        f'<button type="button" id="vb-split-view" aria-pressed="true"'
+        f'{" hidden" if not (video and (has_transcript or has_english)) else ""} '
+        f'title="Place video and transcript side by side">Split view</button>'
+        f'<button type="button" id="vb-transcript" aria-pressed="true" '
+        f'title="Show or hide the transcript panel">Transcript</button>'
+        f'<button type="button" id="vb-lanes" aria-pressed="true" hidden '
+        f'title="Show or hide the multi-speaker overlap timeline">Overlap timeline</button>'
+        f'<button type="button" id="vb-audio" aria-pressed="true" '
+        f'title="Show or hide the MP3 audio section">MP3 audio</button>'
+        f'<button type="button" id="vb-framesheets" aria-pressed="true"'
+        f'{" hidden" if not has_sheets else ""} '
+        f'title="Expand or collapse framesheet images">Framesheets</button>'
+        f'<button type="button" id="vb-shots" aria-pressed="true"'
+        f'{" hidden" if not has_shots_grid else ""} '
+        f'title="Expand or collapse shot images">Shot images</button>'
+        f'</div>'
+        f'<div class="view-scope">'
+        f'<span class="view-bar-label">Save</span>'
+        f'<span class="vb-seg" role="group" aria-label="Where view changes apply">'
+        f'<button type="button" id="vb-scope-global" aria-pressed="true" '
+        f'title="Changes update your default layout for all videos">All videos</button>'
+        f'<button type="button" id="vb-scope-video" aria-pressed="false" '
+        f'title="Changes apply only to this video">This video</button>'
+        f'</span>'
+        f'<button type="button" id="vb-promote" hidden '
+        f'title="Save this video’s custom layout as the default for all videos">Make default</button>'
+        f'<button type="button" id="vb-clear-video" hidden '
+        f'title="Clear this video’s custom overrides and use your global defaults">Use defaults</button>'
+        f'<button type="button" id="vb-reset-global" hidden '
+        f'title="Reset all global view defaults back to built-in defaults">Reset</button>'
+        f'</div></section>'
+    )
     if video:
         markers_attr = _esc(json.dumps(shot_markers, separators=(",", ":")))
         dur_attr = f' data-duration="{duration}"' if duration else ""
@@ -509,7 +552,8 @@ def detail_html(
         )
         size_part = f" · {_size(total_sheet_bytes)}" if _size(total_sheet_bytes) else ""
         sheet_bits = [
-            f'<details class="sheets-toggle" id="framesheets-section"{"" if huge_sheets else " open"}>'
+            f'<details class="sheets-toggle" id="framesheets-section" '
+            f'data-default-open="{str(not huge_sheets).lower()}"{"" if huge_sheets else " open"}>'
             f"<summary>{_esc(count_label + size_part + ')')}</summary>"
         ]
         for n, sheet in enumerate(sheets, start=1):
@@ -548,7 +592,8 @@ def detail_html(
     if figs:
         huge_shots = len(figs) > 120
         parts.append(
-            f'<details class="sheets-toggle" id="shots-section"{"" if huge_shots else " open"}>'
+            f'<details class="sheets-toggle" id="shots-section" '
+            f'data-default-open="{str(not huge_shots).lower()}"{"" if huge_shots else " open"}>'
             f"<summary>Shot images ({len(figs)} shots) — click to play from that moment</summary>"
             f'<div class="shots">{"".join(figs)}</div></details>'
         )

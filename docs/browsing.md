@@ -412,6 +412,13 @@ on demand ([framesheets.md](framesheets.md#skipped-by-default-over-30-minutes-se
 Framesheets and shot images live inside collapsible disclosures: single small
 framesheets and short shot grids open by default, while multi-sheet framesheets
 (or framesheets over 12 MB) and grids over 120 shots start closed.
+A **View** bar at the top of the page toggles **Frame jumps** (the orange shot
+markers on the player seek bar, synced with the player's marker legend),
+**Split view**, **Transcript**, **Overlap timeline**, **MP3 audio**,
+**Framesheets**, and **Shot images**. Its **Save** switch selects whether
+changes update defaults across **All videos** (`ytarchive.view.defaults` in
+`localStorage`) or override only **This video** (`ytarchive.view.video.<id>`),
+with **Make default**, **Use defaults**, and **Reset** controls.
 **Redo** at the bottom rebuilds the shots from the local file (when shots
 exist or the video is up to 30 minutes) or downloads the video again.
 
