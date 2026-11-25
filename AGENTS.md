@@ -163,7 +163,8 @@ list/search does not re-read every `archive.json`. `./yt reindex` rebuilds it.
 archive, only replaceable.
 
 `data/yt-dlp-update.txt` records when the service last ran `yt-dlp -U` and
-its answer, so it asks at most once a week
+its answer, gating the weekly check and the 6-hour check on YouTube player
+challenge failures
 ([docs/download.md](docs/download.md#keeping-yt-dlp-current-settled-2026-11-10)).
 
 `YT_ARCHIVE_DATA` overrides the data root. Default is `./data`.

@@ -104,17 +104,29 @@ metadata request:
 
 YouTube changes often and an old yt-dlp stops downloading (an outdated copy
 also prints "To suppress this warning, add --no-update" on every run). The
-service runs `yt-dlp -U` itself, at most once a week
+service runs `yt-dlp -U` itself, at most once a week in the background
 (`download.keep_yt_dlp_current`, checked hourly by a thread of its own):
 
 - `data/yt-dlp-update.txt` records when it last asked and yt-dlp's answer;
-  it is written before asking, so restarts and failures never ask twice in a
-  week. One question to GitHub's release list a week, plus the download when
-  there is a new release.
-- It never replaces yt-dlp under a running yt-dlp (a download or a creator
-  listing): the zipapp reads its own modules from its file as it runs. A week
-  that falls during one waits for the next hour, and no yt-dlp starts while
-  it updates (`yt_dlp_bin` waits).
+  it is written before asking, so restarts and failures never ask twice in
+  the cooldown window. When downloads are healthy, that is one question to
+  GitHub's release list a week, plus the download when there is a new release.
+- **Reactive update on YouTube player breakage (2026-11-24):** if a YouTube
+  download fails with a JS challenge warning (`n challenge solving failed` or
+  `Signature solving failed`) or an extractor `ERROR:` asking to check
+  `yt-dlp -U` (excluding DRM and upcoming-stream errors),
+  `download.update_yt_dlp_after_failure` runs `yt-dlp -U` on demand when
+  `data/yt-dlp-update.txt` is at least 6 hours old (`YT_DLP_FAILURE_UPDATE_HOURS`).
+  Only if `yt-dlp` actually upgrades (`Updated yt-dlp to …` with exit 0) does
+  the download retry once (both attempts count against the download budget).
+  When a challenge-solving warning precedes a failure, `_yt_dlp_failure`
+  puts the JS challenge failure at the front of the queue error so a broken
+  player solver is not masked as `Requested format is not available`.
+- It never replaces yt-dlp under a running yt-dlp (a download, live clip, or
+  creator listing): the zipapp reads its own modules from its file as it runs.
+  A scheduled update that falls during one waits for the next hour, a reactive
+  one skips updating without writing the stamp, and no yt-dlp starts while it
+  updates (`yt_dlp_bin` waits).
 - Only the standalone zipapp can update itself; a copy installed with pip
   answers that pip must update it, and that answer is what the file records.
 

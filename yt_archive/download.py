@@ -47,6 +47,10 @@ _LINKS_ELSEWHERE_RE = re.compile(r"No suitable extractor.* found for URL (\S+)")
 _HIDDEN_FROM_GUESTS_RE = re.compile(r"account credentials|No video could be found in this tweet")
 # YouTube's playability errors for scheduled streams and premieres that have not started yet.
 _UPCOMING_RE = re.compile(r"This live event will begin|Premieres in|Live stream offline", re.IGNORECASE)
+# YouTube's JS challenge solver failing (e.g. player script changed before yt-dlp updated)
+# or an extractor ERROR asking the user to check `yt-dlp -U`.
+_CHALLENGE_FAILED_RE = re.compile(r"(?:n challenge|Signature) solving failed", re.IGNORECASE)
+_CONFIRM_LATEST_RE = re.compile(r"Confirm you are on the latest version using\s+yt-dlp -U", re.IGNORECASE)
 
 
 class UpcomingStreamError(RuntimeError):
@@ -54,6 +58,7 @@ class UpcomingStreamError(RuntimeError):
 
 
 YT_DLP_UPDATE_DAYS = 7
+YT_DLP_FAILURE_UPDATE_HOURS = 6
 YT_DLP_UPDATE_FILE = "yt-dlp-update.txt"  # in the data root: when yt-dlp last asked, and its answer
 _updating = threading.Lock()
 
@@ -70,31 +75,77 @@ def _yt_dlp_path() -> str:
     return found
 
 
-def keep_yt_dlp_current(data_dir: Path, log=print) -> bool:
-    """`yt-dlp -U` at most once a week (docs/download.md#keeping-yt-dlp-current): YouTube
-    changes often and an old yt-dlp stops downloading. Returns whether it asked."""
+def _run_yt_dlp_update(
+    data_dir: Path,
+    min_age_seconds: float,
+    *,
+    log=print,
+    progress=None,
+    explain_skip: bool = False,
+) -> tuple[bool, bool]:
+    """Run `yt-dlp -U` if stamp is older than min_age_seconds and no yt-dlp is running.
+
+    Returns (asked, updated). Writes the stamp before asking so restarts and failures
+    never ask again inside the cooldown window.
+    """
     stamp = data_dir / YT_DLP_UPDATE_FILE
     try:
-        if time.time() - stamp.stat().st_mtime < YT_DLP_UPDATE_DAYS * 86400:
-            return False
+        if time.time() - stamp.stat().st_mtime < min_age_seconds:
+            if explain_skip:
+                log(f"yt-dlp already checked for updates within the last {YT_DLP_FAILURE_UPDATE_HOURS}h")
+            return False, False
     except FileNotFoundError:
         pass
     with _updating:
+        try:
+            if time.time() - stamp.stat().st_mtime < min_age_seconds:
+                if explain_skip:
+                    log(f"yt-dlp already checked for updates within the last {YT_DLP_FAILURE_UPDATE_HOURS}h")
+                return False, False
+        except FileNotFoundError:
+            pass
         binary = _yt_dlp_path()
         if _yt_dlp_running(binary):
-            return False
+            if explain_skip:
+                log("yt-dlp update skipped while another yt-dlp process is running")
+            return False, False
+        if progress:
+            progress(None, "checking for yt-dlp update")
         asked = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        stamp.parent.mkdir(parents=True, exist_ok=True)
         stamp.write_text(f"{asked} asking\n", encoding="utf-8")
+        updated = False
         try:
             done = subprocess.run(
                 [binary, "-U"], capture_output=True, text=True, errors="replace", timeout=300
             )
             answer = (done.stdout + done.stderr).strip()
+            updated = done.returncode == 0 and "Updated yt-dlp to " in answer
         except (OSError, subprocess.SubprocessError) as exc:
             answer = f"failed: {exc}"
         stamp.write_text(f"{asked}\n{answer}\n", encoding="utf-8")
     log(f"yt-dlp -U: {answer.splitlines()[-1] if answer else 'no answer'}")
-    return True
+    return True, updated
+
+
+def keep_yt_dlp_current(data_dir: Path, log=print) -> bool:
+    """`yt-dlp -U` at most once a week (docs/download.md#keeping-yt-dlp-current): YouTube
+    changes often and an old yt-dlp stops downloading. Returns whether it asked."""
+    asked, _ = _run_yt_dlp_update(data_dir, YT_DLP_UPDATE_DAYS * 86400, log=log)
+    return asked
+
+
+def update_yt_dlp_after_failure(data_dir: Path, log=print, progress=None) -> bool:
+    """On a YouTube challenge/extractor failure, ask `yt-dlp -U` at most once per
+    YT_DLP_FAILURE_UPDATE_HOURS. Returns whether yt-dlp actually updated."""
+    _, updated = _run_yt_dlp_update(
+        data_dir,
+        YT_DLP_FAILURE_UPDATE_HOURS * 3600,
+        log=log,
+        progress=progress,
+        explain_skip=True,
+    )
+    return updated
 
 
 def keep_yt_dlp_current_hourly(data_dir: Path) -> None:
@@ -304,28 +355,7 @@ def start_download(
     signed_in = site == "X" and db.x_hidden(data_dir, video_id)
     if signed_in:
         log("X hides this tweet from readers without an account; asking with your X login from Firefox")
-    outcome, value, lines = _attempt(video_id, dest, data_dir, site, signed_in, force, log, progress)
-    if outcome == "upcoming":
-        _cleanup_aborted_dest(dest, existed_before)
-        raise UpcomingStreamError("stream has not started")
-    if outcome == "live":
-        return LiveClipSession(
-            video_id=video_id,
-            proc=value,
-            dest=dest,
-            data_dir=data_dir,
-            site=site,
-            existed_before=existed_before,
-            log=log,
-            progress=progress,
-            lines=lines,
-            cap_seconds=live_clip_max_seconds,
-        )
-    code = value
-    if code != 0 and site == "X" and not signed_in and _HIDDEN_FROM_GUESTS_RE.search("\n".join(lines)):
-        db.mark_x_hidden(data_dir, [video_id])
-        log("X hides this tweet from readers without an account; asking again with your X login from Firefox")
-        outcome, value, lines = _attempt(video_id, dest, data_dir, site, True, False, log, progress)
+    def finish_or_session(outcome: str, value: object, attempt_lines: list[str]) -> int | LiveClipSession:
         if outcome == "upcoming":
             _cleanup_aborted_dest(dest, existed_before)
             raise UpcomingStreamError("stream has not started")
@@ -339,32 +369,41 @@ def start_download(
                 existed_before=existed_before,
                 log=log,
                 progress=progress,
-                lines=lines,
+                lines=attempt_lines,
                 cap_seconds=live_clip_max_seconds,
             )
-        code = value
+        return value
+
+    outcome, value, lines = _attempt(video_id, dest, data_dir, site, signed_in, force, log, progress)
+    code_or_session = finish_or_session(outcome, value, lines)
+    if isinstance(code_or_session, LiveClipSession):
+        return code_or_session
+    code = code_or_session
+    if code != 0 and site == "X" and not signed_in and _HIDDEN_FROM_GUESTS_RE.search("\n".join(lines)):
+        db.mark_x_hidden(data_dir, [video_id])
+        log("X hides this tweet from readers without an account; asking again with your X login from Firefox")
+        outcome, value, lines = _attempt(video_id, dest, data_dir, site, True, False, log, progress)
+        code_or_session = finish_or_session(outcome, value, lines)
+        if isinstance(code_or_session, LiveClipSession):
+            return code_or_session
+        code = code_or_session
+    if code != 0 and site == "YouTube" and _is_stale_yt_dlp_failure(lines):
+        if update_yt_dlp_after_failure(data_dir, log=log, progress=progress):
+            log("yt-dlp updated; trying download again")
+            outcome, value, lines = _attempt(video_id, dest, data_dir, site, False, False, log, progress)
+            code_or_session = finish_or_session(outcome, value, lines)
+            if isinstance(code_or_session, LiveClipSession):
+                return code_or_session
+            code = code_or_session
     if code != 0 and site == "YouTube" and _is_drm_failure(lines):
         log("Firefox-cookie playback offered only DRM streams; trying again without cookies")
         outcome, value, lines = _attempt(
             video_id, dest, data_dir, site, False, False, log, progress, youtube_cookies=False
         )
-        if outcome == "upcoming":
-            _cleanup_aborted_dest(dest, existed_before)
-            raise UpcomingStreamError("stream has not started")
-        if outcome == "live":
-            return LiveClipSession(
-                video_id=video_id,
-                proc=value,
-                dest=dest,
-                data_dir=data_dir,
-                site=site,
-                existed_before=existed_before,
-                log=log,
-                progress=progress,
-                lines=lines,
-                cap_seconds=live_clip_max_seconds,
-            )
-        code = value
+        code_or_session = finish_or_session(outcome, value, lines)
+        if isinstance(code_or_session, LiveClipSession):
+            return code_or_session
+        code = code_or_session
     if code != 0:
         _cleanup_empty(dest)
         message = _yt_dlp_failure(lines, site)
@@ -639,6 +678,32 @@ def _is_drm_failure(lines: list[str]) -> bool:
     )
 
 
+def _has_challenge_failure(lines: list[str]) -> bool:
+    return any(
+        (line.startswith("WARNING:") or line.startswith("ERROR:"))
+        and _CHALLENGE_FAILED_RE.search(line)
+        for line in lines
+    )
+
+
+def _is_stale_yt_dlp_failure(lines: list[str]) -> bool:
+    if _is_drm_failure(lines) or _UPCOMING_RE.search("\n".join(lines)):
+        return False
+    if _has_challenge_failure(lines):
+        return True
+    return any(
+        line.startswith("ERROR:") and _CONFIRM_LATEST_RE.search(line)
+        for line in lines
+    )
+
+
+def _last_error(lines: list[str]) -> str:
+    for line in reversed(lines):
+        if line.startswith("ERROR:"):
+            return line.removeprefix("ERROR:").strip()
+    return ""
+
+
 def _yt_dlp_failure(lines: list[str], site: str = "YouTube") -> str:
     blob = "\n".join(lines)
     if site == "YouTube" and _UPCOMING_RE.search(blob):
@@ -661,9 +726,12 @@ def _yt_dlp_failure(lines: list[str], site: str = "YouTube") -> str:
     elsewhere = _LINKS_ELSEWHERE_RE.search(blob) if site == "X" else None
     if elsewhere:
         return f"This tweet has no video of its own; it links to {elsewhere.group(1)}"
-    for line in reversed(lines):
-        if line.startswith("ERROR:"):
-            return line.removeprefix("ERROR:").strip()
+    detail = _last_error(lines)
+    if site == "YouTube" and _has_challenge_failure(lines) and not _is_drm_failure(lines):
+        base = "YouTube JS challenge solving failed (yt-dlp may need a newer release for YouTube's player)"
+        return f"{base}: {detail}" if detail else base
+    if detail:
+        return detail
     tail = [ln for ln in lines if not ln.startswith("Extract")][-8:]
     return "yt-dlp failed" + (": " + " | ".join(tail) if tail else "")
 
