@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from yt_archive import db, gpu_gate, transcribe
+from yt_archive import db, gpu_gate, multitalker, transcribe
 from yt_archive.paths import transcript_json_path, transcript_vtt_path
 from yt_archive.transcribe import _spoken_text, _timed_spoken_words, normalize_config
 from yt_archive.web import detail_html
@@ -239,6 +239,128 @@ class TranscriptionTests(unittest.TestCase):
         )
         self.assertEqual([word["word"] for word in cleaned], ["Hello", "again"])
 
+    def test_normalize_config_supports_multitalker_and_rejects_invalid(self):
+        whisper = normalize_config()
+        self.assertEqual(whisper["engine"], "whisper")
+        self.assertEqual(whisper["model"], "large-v3")
+
+        mt = normalize_config({"engine": "multitalker"})
+        self.assertEqual(
+            mt,
+            {"engine": "multitalker", "model": transcribe.MULTITALKER_MODEL},
+        )
+        with self.assertRaises(ValueError):
+            normalize_config({"engine": "multitalker", "language": "en"})
+        with self.assertRaises(ValueError):
+            normalize_config({"engine": "unknown"})
+
+    def test_detail_page_renders_multitalker_dialog_and_swimlanes(self):
+        vtt = (
+            "WEBVTT\n\n"
+            "00:00:01.000 --> 00:00:05.000\n<v Speaker 1>Main sentence.\n\n"
+            "00:00:02.000 --> 00:00:03.000\n<v Speaker 2>Yeah!\n"
+        )
+        artifact = {
+            "video_id": VIDEO_ID,
+            "engine": "multitalker-parakeet",
+            "model": transcribe.MULTITALKER_MODEL,
+            "language": "",
+            "vtt_sha256": hashlib.sha256(vtt.encode()).hexdigest(),
+            "full_text": "Main sentence.\nYeah!",
+            "segments": [
+                {
+                    "index": 0,
+                    "start": 1.0,
+                    "end": 5.0,
+                    "text": "Main sentence.",
+                    "speaker": "Speaker 1",
+                    "words": [],
+                },
+                {
+                    "index": 1,
+                    "start": 2.0,
+                    "end": 3.0,
+                    "text": "Yeah!",
+                    "speaker": "Speaker 2",
+                    "words": [],
+                },
+            ],
+        }
+        transcript_json_path(self.data, VIDEO_ID).write_text(
+            json.dumps(artifact), encoding="utf-8"
+        )
+        transcript_vtt_path(self.data, VIDEO_ID).write_text(vtt, encoding="utf-8")
+        html = detail_html(
+            {
+                "video_id": VIDEO_ID,
+                "title": "Test conversation",
+                "duration": 80,
+                "channel": "Channel",
+            },
+            self.data,
+        ).decode()
+        self.assertIn('id="engine-multitalker" value="multitalker" checked', html)
+        self.assertIn('id="speaker-lanes"', html)
+        self.assertIn('id="lanes-minimap"', html)
+        self.assertIn('id="transcript-filter"', html)
+        self.assertIn('id="prev-overlap"', html)
+        self.assertIn('id="next-overlap"', html)
+
+
+class MultitalkerUnitTests(unittest.TestCase):
+    def test_slaney_mel_filterbank_shape_and_bounds(self):
+        fb = multitalker._slaney_mel_filterbank(512, 128, 16000)
+        self.assertEqual(fb.shape, (128, 257))
+        self.assertGreaterEqual(float(fb.min()), 0.0)
+        self.assertTrue(all(float(row.sum()) > 0.0 for row in fb))
+
+    def test_binarize_predictions_handles_overlaps_hysteresis_and_gaps(self):
+        import numpy as np
+
+        preds = np.zeros((300, 8), dtype=np.float32)  # 3.00 s at 10 ms/frame
+        # Speaker 0 speaks 0.20..2.00 with a 0.06s dip (bridged by min_off=0.10)
+        # and stays at 0.50 between onset 0.55 and offset 0.45 (held by hysteresis).
+        preds[20:100, 0] = 0.8
+        preds[100:106, 0] = 0.2
+        preds[106:150, 0] = 0.8
+        preds[150:200, 0] = 0.50
+        # Speaker 1 overlaps 0.80..1.40 plus a 0.08s blip at 2.50 (dropped by min_on=0.15)
+        preds[80:140, 1] = 0.9
+        preds[250:258, 1] = 0.9
+
+        segs = multitalker.binarize_predictions(preds, n_samples=3 * 16000)
+        self.assertEqual(
+            segs,
+            [
+                {"start": 0.2, "end": 2.0, "speaker": 0},
+                {"start": 0.8, "end": 1.4, "speaker": 1},
+            ],
+        )
+
+    def test_group_speaker_utterances_preserves_overlaps_and_arrival_order(self):
+        words_by_spk = {
+            3: [
+                {"start": 1.0, "end": 1.4, "word": "We", "probability": 1.0},
+                {"start": 1.4, "end": 1.9, "word": "went", "probability": 1.0},
+                {"start": 2.0, "end": 2.6, "word": "outside", "probability": 1.0},
+                {"start": 2.7, "end": 3.4, "word": "yesterday.", "probability": 1.0},
+                {"start": 4.6, "end": 5.0, "word": "Right.", "probability": 1.0},
+            ],
+            0: [
+                {"start": 2.2, "end": 2.9, "word": "Yeahhhh!", "probability": 1.0},
+            ],
+        }
+        records = multitalker.group_speaker_utterances(words_by_spk)
+        self.assertEqual(len(records), 3)
+        self.assertEqual(records[0]["speaker"], "Speaker 1")
+        self.assertEqual(records[0]["text"], "We went outside yesterday.")
+        self.assertEqual(records[1]["speaker"], "Speaker 2")
+        self.assertEqual(records[1]["text"], "Yeahhhh!")
+        self.assertLess(records[1]["start"], records[0]["end"])
+        self.assertEqual(records[2]["speaker"], "Speaker 1")
+        self.assertEqual(records[2]["text"], "Right.")
+        self.assertEqual([r["index"] for r in records], [0, 1, 2])
+
 
 class GpuGateTests(unittest.TestCase):
     """Whisper on the GPU waits for the gate before loading and lets go once done
@@ -253,6 +375,7 @@ class GpuGateTests(unittest.TestCase):
                 events.append(("load", options["device"]))
 
             def transcribe(self, path, **options):
+                events.append(("transcribe_opts", options))
                 words = [SimpleNamespace(word=" Hello", start=0, end=1, probability=0.9)]
                 segment = SimpleNamespace(text=" Hello", start=0.0, end=1.0, words=words)
                 return iter([segment]), SimpleNamespace(
@@ -287,20 +410,144 @@ class GpuGateTests(unittest.TestCase):
         patches = self._fake_whisper(events) + [mock.patch.object(gpu_gate, "load", return_value=gate)]
         artifact = self._run_with(patches)
         self.assertEqual(artifact["device"], "cuda")
-        self.assertEqual([event[0] for event in events], ["hold", "load", "let go"])
+        self.assertEqual(
+            [event[0] for event in events], ["hold", "load", "transcribe_opts", "let go"]
+        )
         _, what, gb, options = events[0]
         self.assertEqual((what, gb), ("Whisper large-v3", gpu_gate.WHISPER_GB))
         self.assertEqual(options["lane"], "backfill")
         self.assertIsNone(options["wait"])
         self.assertEqual(options["minutes"], gpu_gate.whisper_minutes(80))
-        self.assertEqual(events[2], ("let go", "Whisper large-v3"))
+        self.assertFalse(events[2][1]["condition_on_previous_text"])
+        self.assertEqual(events[3], ("let go", "Whisper large-v3"))
 
     def test_whisper_on_the_cpu_leaves_the_gate_alone(self):
         events = []
         loads = mock.patch.object(gpu_gate, "load", side_effect=AssertionError("no CPU hold"))
         artifact = self._run_with(self._fake_whisper(events, cuda_devices=0) + [loads])
         self.assertEqual(artifact["device"], "cpu")
-        self.assertEqual(events, [("load", "cpu")])
+        self.assertEqual([e[0] for e in events], ["load", "transcribe_opts"])
+
+    def _fake_multitalker(self, events, *, use_cuda=True):
+        import numpy as np
+
+        class FakeDiar:
+            @staticmethod
+            def extract_features(samples):
+                events.append(("extract_features",))
+                return np.zeros((1, 100, 128), dtype=np.float32)
+
+            def __init__(self, path, *, use_cuda):
+                events.append(("load_diar", use_cuda))
+
+            def predict_features(self, feats, *, on_chunk=None):
+                events.append(("run_diar",))
+                if on_chunk:
+                    on_chunk(1, 1, 5.0)
+                return np.zeros((500, 8), dtype=np.float32)
+
+        class FakeAsr:
+            def __init__(self, model_dir, *, use_cuda):
+                events.append(("load_asr", use_cuda))
+
+            def transcribe_by_speaker(self, samples, diar_segs, *, on_chunk=None):
+                events.append(("run_asr",))
+                if on_chunk:
+                    on_chunk(1, 1, 5.0)
+                return {
+                    0: [
+                        {"start": 0.5, "end": 1.2, "word": "Hello", "probability": 1.0},
+                        {"start": 1.3, "end": 2.4, "word": "there.", "probability": 1.0},
+                    ],
+                    1: [
+                        {"start": 1.1, "end": 1.8, "word": "Yeah!", "probability": 1.0},
+                        {"start": 1.9, "end": 2.1, "word": "[Music]", "probability": 1.0},
+                    ],
+                }
+
+        return [
+            mock.patch.object(
+                multitalker,
+                "ensure_models",
+                side_effect=lambda log=print: (
+                    events.append(("ensure_models",)) or (Path("diar.onnx"), Path("asr_dir"))
+                ),
+            ),
+            mock.patch.object(
+                multitalker,
+                "decode_audio_16k",
+                side_effect=lambda path: (
+                    events.append(("decode_audio",)) or np.zeros(5 * 16000, dtype=np.float32)
+                ),
+            ),
+            mock.patch.object(multitalker, "detect_onnx_cuda", return_value=use_cuda),
+            mock.patch.object(multitalker, "NemotronDiarizer", FakeDiar),
+            mock.patch.object(
+                multitalker,
+                "binarize_predictions",
+                return_value=[
+                    {"start": 0.5, "end": 2.5, "speaker": 0},
+                    {"start": 1.1, "end": 2.1, "speaker": 1},
+                ],
+            ),
+            mock.patch.object(multitalker, "MultitalkerParakeetUltra", FakeAsr),
+        ]
+
+    def test_multitalker_holds_gpu_after_cpu_prep_and_publishes_overlaps(self):
+        events = []
+        gate = SimpleNamespace(
+            hold=lambda what, gb, **options: events.append(("hold", what, gb, options)),
+            let_go=lambda what: events.append(("let go", what)),
+        )
+        patches = self._fake_multitalker(events, use_cuda=True) + [
+            mock.patch.object(gpu_gate, "load", return_value=gate)
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+        artifact = transcribe.transcribe_soundtrack(
+            self.data, VIDEO_ID, {"engine": "multitalker"}, log=lambda m: None
+        )
+        self.assertEqual(artifact["engine"], "multitalker-parakeet")
+        self.assertEqual(artifact["device"], "cuda")
+        self.assertEqual(
+            [e[0] for e in events],
+            [
+                "ensure_models",
+                "decode_audio",
+                "extract_features",
+                "hold",
+                "load_diar",
+                "run_diar",
+                "load_asr",
+                "run_asr",
+                "let go",
+            ],
+        )
+        _, what, gb, options = events[3]
+        self.assertEqual((what, gb), ("Multitalker Parakeet + Nemotron-3", gpu_gate.MULTITALKER_GB))
+        self.assertEqual(options["minutes"], gpu_gate.multitalker_minutes(5.0))
+        self.assertEqual(len(artifact["segments"]), 2)
+        self.assertEqual(artifact["segments"][0]["speaker"], "Speaker 1")
+        self.assertEqual(artifact["segments"][1]["speaker"], "Speaker 2")
+        self.assertEqual(artifact["segments"][1]["text"], "Yeah!")
+        vtt = transcript_vtt_path(self.data, VIDEO_ID).read_text(encoding="utf-8")
+        self.assertIn("<v Speaker 1>Hello there.", vtt)
+        self.assertIn("<v Speaker 2>Yeah!", vtt)
+
+    def test_multitalker_on_cpu_leaves_gpu_gate_alone(self):
+        events = []
+        patches = self._fake_multitalker(events, use_cuda=False) + [
+            mock.patch.object(gpu_gate, "load", side_effect=AssertionError("no CPU hold"))
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+        artifact = transcribe.transcribe_soundtrack(
+            self.data, VIDEO_ID, {"engine": "multitalker"}, log=lambda m: None
+        )
+        self.assertEqual(artifact["device"], "cpu")
+        self.assertNotIn("hold", [e[0] for e in events])
 
     def test_the_gate_is_absent_without_its_file(self):
         with mock.patch.dict(os.environ, {"YT_ARCHIVE_GPU_GATE": str(self.data / "missing.py")}):

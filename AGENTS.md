@@ -111,6 +111,7 @@ server when the unit is not in play.
 ./yt shots <id> --detail       # also split on small changes (docs/framesheets.md)
 ./yt audio <id>                # create MP3 audio (video already on disk)
 ./yt transcribe <id>           # explicit local Whisper run
+./yt transcribe <id> --speakers # multi-speaker + overlap recovery (Nemotron-3 + Parakeet Ultra)
 ./yt list
 ./yt reindex                   # rebuild sqlite catalog from data/
 ./yt serve [--host 127.0.0.1] [--port 8765]
@@ -144,7 +145,8 @@ web/                   the service: server.py (routes, JSON API, media), home.py
 static/                stylesheets and page scripts (app.css, home.js, video-page.js, …),
                        the media player copy; a page's values reach its scripts as #page-data JSON
 jobs.py                download queue: download, shots, MP3 audio, lyrics
-work.py                transcript queue; transcribe.py runs Whisper (gpu_gate.py: the GPU gate)
+work.py                transcript queue; transcribe.py runs Whisper and multitalker.py (gpu_gate.py: the GPU gate)
+multitalker.py         multi-speaker diarization + overlap-preserving ASR (Nemotron-3 + Parakeet Ultra ONNX)
 download.py            yt-dlp, and its weekly self-update
 framesheet.py          shots and framesheets; audio.py the MP3; lyrics.py
 creators.py            YouTube listings for the picker; x_profiles.py X profiles
@@ -234,8 +236,9 @@ restart; **pdeploy** is ppush plus step 3.
   Never send that login with any other X request without the user's explicit
   approval.
 - Anything on the GPU holds matthoom's GPU gate first, with a measured claim
-  ([docs/transcription.md](docs/transcription.md#the-gpu-gate)). Whisper is
-  the only GPU work today; shots run CLIP on the processor.
+  ([docs/transcription.md](docs/transcription.md#the-gpu-gate)). Transcription
+  (Whisper and multi-speaker ONNX) is the only GPU work today; shots run CLIP on
+  the processor.
 - Shot and download recipes are settled. Read [docs/download.md](docs/download.md)
   and [docs/framesheets.md](docs/framesheets.md) before changing either.
   Do not reintroduce the rejected approaches.

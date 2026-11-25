@@ -53,10 +53,10 @@ The picker lists the videos of a YouTube creator, a playlist or an X profile. No
 
 ## Transcripts
 
-- **Transcribe audio…** on the video page runs Whisper speech recognition on this computer, only when asked. By default it uses Whisper's large-v3 model and detects the language; a dialog offers other models, a set language, and other settings.
+- **Transcribe audio…** on the video page runs local speech recognition on this computer, only when asked. The dialog offers two modes: single-stream Whisper (large-v3 by default, with model, language, beam-size and silence-filtering choices) and multi-speaker mode, which labels up to 8 speakers and transcribes overlapping speech across 25 European languages.
 - Transcripts hold spoken words only. Labels such as [music] or (applause) are removed.
-- The transcript panel highlights the line being spoken and scrolls with it. Clicking a word or a line plays from there. The panel searches the transcript, shows all of it or only the current line, and has three text sizes.
-- **Speakers.** Clicking a line's speaker label names its speaker. Lines with the same name form a group; a group can be renamed or merged into another.
+- The transcript panel highlights every line and word being spoken and scrolls with playback. Clicking a word or a line plays from there. The panel searches the transcript, filters by speaker or overlaps, shows all of it or only the current caption, and has three text sizes.
+- **Speakers and overlaps.** Clicking a line's speaker label names its speaker; lines with the same name form a group that can be renamed or merged. When a transcript has two or more speakers, a speaker timeline above the transcript shows one horizontal track per speaker, marks simultaneous speech, provides previous/next overlap jumps, and includes a full-video overview bar. Overlapped words in the transcript are underlined in the other speaker's color, with inline notes at mid-sentence interjections.
 - **Captions.** The transcript shows as captions in the player (C, or the CC button) and downloads as a WebVTT subtitle file.
 - **Re-transcribe…** replaces the transcript.
 

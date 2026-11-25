@@ -18,7 +18,7 @@ from .paths import (
     skips_default_shots,
 )
 from .settings import load_settings
-from .transcribe import MODELS, transcribe_soundtrack
+from .transcribe import ENGINES, MODELS, transcribe_soundtrack
 from .web import serve
 
 
@@ -52,9 +52,20 @@ def main(argv: list[str] | None = None) -> int:
     audio_p.add_argument("target", help="YouTube or X (tweet) URL, or archive id")
 
     transcribe_p = sub.add_parser(
-        "transcribe", help="explicitly run local Whisper on an existing MP3"
+        "transcribe", help="explicitly run local speech transcription on an existing MP3"
     )
     transcribe_p.add_argument("target", help="YouTube or X (tweet) URL, or archive id")
+    transcribe_p.add_argument(
+        "--speakers",
+        action="store_true",
+        help="identify speakers and overlapping speech (Nemotron-3 + Multitalker Parakeet Ultra)",
+    )
+    transcribe_p.add_argument(
+        "--engine",
+        choices=ENGINES,
+        default=None,
+        help="transcription engine: whisper (default) or multitalker",
+    )
     transcribe_p.add_argument("--model", choices=MODELS, default="large-v3")
     transcribe_p.add_argument("--language", default="", help="ISO code; blank auto-detects")
     transcribe_p.add_argument("--beam-size", type=int, default=5)
@@ -77,16 +88,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "audio":
         return _audio(data_dir, args.target)
     if args.cmd == "transcribe":
-        return _transcribe(
-            data_dir,
-            args.target,
-            {
+        engine = "multitalker" if args.speakers else (args.engine or "whisper")
+        cfg = (
+            {"engine": "multitalker", "language": args.language}
+            if engine == "multitalker"
+            else {
+                "engine": "whisper",
                 "model": args.model,
                 "language": args.language,
                 "beam_size": args.beam_size,
                 "vad_filter": True,
-            },
+            }
         )
+        return _transcribe(data_dir, args.target, cfg)
     if args.cmd == "list":
         from .db import list_videos
 
@@ -160,8 +174,11 @@ def _audio(data_dir: Path, target: str) -> int:
 def _transcribe(data_dir: Path, target: str, config: dict) -> int:
     video_id = parse_video_id(target)
     artifact = transcribe_soundtrack(data_dir, video_id, config)
+    speakers = sorted({s.get("speaker") for s in artifact["segments"] if s.get("speaker")})
+    extra = f", speakers={len(speakers)}" if speakers else ""
+    lang = f", language={artifact['language']}" if artifact.get("language") else ""
     print(
-        f"transcript: {len(artifact['segments'])} spoken segments, "
-        f"language={artifact['language']}, model={artifact['model']}"
+        f"transcript: {len(artifact['segments'])} spoken segments"
+        f"{extra}{lang}, model={artifact['model']}"
     )
     return 0

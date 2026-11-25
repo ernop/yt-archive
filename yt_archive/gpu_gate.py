@@ -16,6 +16,12 @@ WHISPER_GB = 7.0
 # processor), after a 4 to 5 s load.
 WHISPER_SPEED = 10
 
+# Nemotron-3-Diarization (~0.8 GB) followed sequentially by Multitalker Parakeet Ultra
+# (encoder on CUDA, decoder_joint on CPU): measured 3.3 GB on 2 minutes and 4.3 GB on
+# 115 minutes of dense two-speaker audio (2026-11-25, 26.6x RT end-to-end).
+MULTITALKER_GB = 5.5
+MULTITALKER_SPEED = 20
+
 # A transcript clicked for on the video page is waited on; one run by hand is backfill.
 CLICKED = {"who": "ytarchive transcripts", "lane": "now"}
 BY_HAND = {"who": "ytarchive transcribe, run by hand", "lane": "backfill"}
@@ -46,3 +52,8 @@ def load():
 def whisper_minutes(seconds: float) -> float:
     """How long a Whisper hold says it lasts, for audio of this many seconds."""
     return round(5 + float(seconds or 0) / 60 / WHISPER_SPEED, 1)
+
+
+def multitalker_minutes(seconds: float) -> float:
+    """How long a multi-speaker ONNX hold says it lasts, for audio of this many seconds."""
+    return round(3 + float(seconds or 0) / 60 / MULTITALKER_SPEED, 1)

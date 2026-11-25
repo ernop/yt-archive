@@ -1,7 +1,8 @@
-"""Local Whisper transcription. Spoken words and non-speech events stay separate."""
+"""Local speech transcription (Whisper and multi-speaker ONNX). Spoken words only."""
 from __future__ import annotations
 
 import ctypes
+import gc
 import hashlib
 import json
 import os
@@ -25,7 +26,10 @@ from .paths import (
     transcript_vtt_path,
 )
 
+ENGINES = ("whisper", "multitalker")
+MULTITALKER_MODEL = "nemotron-3-diarization+multitalker-parakeet-ultra"
 DEFAULT_CONFIG = {
+    "engine": "whisper",
     "model": "large-v3",
     "language": "",
     "beam_size": 5,
@@ -42,6 +46,19 @@ _NON_SPEECH = re.compile(
 
 def normalize_config(raw: dict | None = None) -> dict:
     raw = raw or {}
+    engine = str(raw.get("engine") or DEFAULT_CONFIG["engine"]).strip().lower()
+    if engine not in ENGINES:
+        raise ValueError(f"unsupported transcription engine: {engine}")
+    if engine == "multitalker":
+        language = str(raw.get("language") or "").strip().lower()
+        if language:
+            raise ValueError(
+                "multi-speaker mode detects language automatically across 25 European languages"
+            )
+        return {
+            "engine": "multitalker",
+            "model": MULTITALKER_MODEL,
+        }
     model = str(raw.get("model") or DEFAULT_CONFIG["model"])
     if model not in MODELS:
         raise ValueError(f"unsupported Whisper model: {model}")
@@ -55,6 +72,7 @@ def normalize_config(raw: dict | None = None) -> dict:
     if not 1 <= beam_size <= 10:
         raise ValueError("beam size must be between 1 and 10")
     return {
+        "engine": "whisper",
         "model": model,
         "language": language,
         "beam_size": beam_size,
@@ -73,7 +91,9 @@ def _whisper_model(WhisperModel, name: str, **options):
         return WhisperModel(name, **options)
 
 
-def _hold_gpu(gate, what: str, gpu: dict, seconds: float, log, progress) -> None:
+def _hold_gpu(
+    gate, what: str, gb: float, minutes: float, gpu: dict, log, progress
+) -> None:
     """Wait in line for the GPU as long as it takes, showing why: the transcript queue holds
     nothing but GPU work, so nothing behind it could go ahead meanwhile."""
     said = False
@@ -89,10 +109,10 @@ def _hold_gpu(gate, what: str, gpu: dict, seconds: float, log, progress) -> None
 
     gate.hold(
         what,
-        gpu_gate.WHISPER_GB,
+        gb,
         lane=gpu["lane"],
         who=gpu["who"],
-        minutes=gpu_gate.whisper_minutes(seconds),
+        minutes=minutes,
         wait=None,
         report=report,
     )
@@ -178,7 +198,7 @@ def transcribe_in_child(
                 log(str(event.get("log", "")))
     code = child.returncode
     if code:
-        raise RuntimeError(error or f"Whisper stopped with exit code {code}")
+        raise RuntimeError(error or f"transcription stopped with exit code {code}")
 
 
 def _child_main(argv: list[str]) -> int:
@@ -210,24 +230,16 @@ def _child_main(argv: list[str]) -> int:
     return 0
 
 
-def _transcribe_soundtrack_locked(
+def _run_whisper(
     data_dir: Path,
     video_id: str,
-    config: dict | None = None,
+    audio: Path,
+    config: dict,
     *,
-    log=print,
-    progress=None,
-    work_key: str = "",
-    source_sha256: str = "",
-    generation_id: str = "",
+    log,
+    progress,
     gpu: dict,
-) -> dict:
-    """Transcribe one existing MP3 and atomically publish JSON + WebVTT."""
-    config = normalize_config(config)
-    audio = soundtrack_path(data_dir, video_id)
-    if not audio.is_file():
-        raise FileNotFoundError("MP3 audio is missing; create it before transcribing")
-
+) -> tuple[list[dict], dict]:
     try:
         import ctranslate2
         from faster_whisper import WhisperModel
@@ -246,7 +258,15 @@ def _transcribe_soundtrack_locked(
     gate = gpu_gate.load() if has_cuda else None
     held = f"Whisper {config['model']}" if gate else ""
     if held:
-        _hold_gpu(gate, held, gpu, _audio_seconds(data_dir, video_id), log, progress)
+        _hold_gpu(
+            gate,
+            held,
+            gpu_gate.WHISPER_GB,
+            gpu_gate.whisper_minutes(_audio_seconds(data_dir, video_id)),
+            gpu,
+            log,
+            progress,
+        )
     try:
         log(
             f"loading Whisper {config['model']} on {device} "
@@ -281,7 +301,7 @@ def _transcribe_soundtrack_locked(
             "beam_size": config["beam_size"],
             "vad_filter": config["vad_filter"],
             "word_timestamps": True,
-            "condition_on_previous_text": True,
+            "condition_on_previous_text": False,
         }
         if config["language"]:
             kwargs["language"] = config["language"]
@@ -321,14 +341,7 @@ def _transcribe_soundtrack_locked(
 
     if not records:
         raise RuntimeError("Whisper found no spoken language")
-    full_text = "\n".join(record["text"] for record in records)
-    artifact = {
-        "format_version": 1,
-        "video_id": video_id,
-        "work_key": work_key,
-        "generation_id": generation_id,
-        "source_sha256": source_sha256,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+    meta = {
         "engine": "faster-whisper",
         "model": config["model"],
         "device": device,
@@ -338,6 +351,191 @@ def _transcribe_soundtrack_locked(
             float(getattr(detected, "language_probability", 0) or 0), 4
         ),
         "duration": duration,
+    }
+    return records, meta
+
+
+def _run_multitalker(
+    data_dir: Path,
+    video_id: str,
+    audio: Path,
+    config: dict,
+    *,
+    log,
+    progress,
+    gpu: dict,
+) -> tuple[list[dict], dict]:
+    from . import multitalker
+
+    if progress:
+        progress(0.01, "checking cached multi-speaker models")
+    diar_path, asr_dir = multitalker.ensure_models(log=log)
+
+    if progress:
+        progress(0.03, "decoding audio to 16 kHz")
+    log("decoding audio to 16 kHz")
+    samples = multitalker.decode_audio_16k(audio)
+    duration = _round_time(len(samples) / multitalker.SAMPLE_RATE)
+
+    if progress:
+        progress(0.05, "extracting acoustic features")
+    log(f"extracting acoustic features for {_clock(duration)} of audio")
+    feats = multitalker.NemotronDiarizer.extract_features(samples)
+
+    use_cuda = multitalker.detect_onnx_cuda()
+    device = "cuda" if use_cuda else "cpu"
+    gate = gpu_gate.load() if use_cuda else None
+    held = "Multitalker Parakeet + Nemotron-3" if gate else ""
+    if held:
+        _hold_gpu(
+            gate,
+            held,
+            gpu_gate.MULTITALKER_GB,
+            gpu_gate.multitalker_minutes(duration or _audio_seconds(data_dir, video_id)),
+            gpu,
+            log,
+            progress,
+        )
+    try:
+        log(f"loading Nemotron-3-Diarization on {device}")
+        if progress:
+            progress(0.06, f"diarizing speakers on {device}")
+        diar = multitalker.NemotronDiarizer(diar_path, use_cuda=use_cuda)
+        last_diar_pct = -1
+
+        def on_diar_chunk(done: int, total: int, sec: float) -> None:
+            nonlocal last_diar_pct
+            frac = done / max(1, total)
+            pct = int(6 + 24 * frac)
+            if pct >= last_diar_pct + 4 or done == total:
+                last_diar_pct = pct
+                msg = f"diarizing speakers {_clock(sec)} / {_clock(duration)}"
+                log(msg)
+                if progress:
+                    progress(pct / 100, msg)
+
+        preds = diar.predict_features(feats, on_chunk=on_diar_chunk)
+        diar_segments = multitalker.binarize_predictions(preds, len(samples))
+        del diar, feats, preds
+        gc.collect()
+
+        if not diar_segments:
+            raise RuntimeError("Multi-speaker transcription found no spoken language")
+
+        n_speakers = len({seg["speaker"] for seg in diar_segments})
+        log(
+            f"diarization found {n_speakers} speaker(s) across {len(diar_segments)} turns; "
+            f"loading Multitalker Parakeet Ultra on {device}"
+        )
+        if progress:
+            progress(0.30, f"found {n_speakers} speaker(s); transcribing on {device}")
+        asr = multitalker.MultitalkerParakeetUltra(asr_dir, use_cuda=use_cuda)
+        last_asr_pct = -1
+
+        def on_asr_chunk(done: int, total: int, sec: float) -> None:
+            nonlocal last_asr_pct
+            frac = done / max(1, total)
+            pct = int(30 + 68 * frac)
+            if pct >= last_asr_pct + 3 or done == total:
+                last_asr_pct = pct
+                msg = f"transcribing speakers {_clock(sec)} / {_clock(duration)}"
+                log(msg)
+                if progress:
+                    progress(pct / 100, msg)
+
+        words_by_speaker = asr.transcribe_by_speaker(
+            samples, diar_segments, on_chunk=on_asr_chunk
+        )
+        del asr
+        gc.collect()
+    finally:
+        if held:
+            gate.let_go(held)
+
+    raw_records = multitalker.group_speaker_utterances(words_by_speaker)
+    records = _clean_multitalker_records(raw_records)
+    if not records:
+        raise RuntimeError("Multi-speaker transcription found no spoken language")
+    meta = {
+        "engine": "multitalker-parakeet",
+        "model": config["model"],
+        "device": device,
+        "compute_type": "fp32",
+        "language": "",
+        "language_probability": 0.0,
+        "duration": duration,
+    }
+    return records, meta
+
+
+def _clean_multitalker_records(raw_records: list[dict]) -> list[dict]:
+    records: list[dict] = []
+    for rec in raw_records:
+        text = _spoken_text(rec.get("text", ""))
+        if not text:
+            continue
+        cleaned_words = []
+        for word in rec.get("words") or []:
+            tok = _spoken_text(word.get("word", ""))
+            if not tok:
+                continue
+            cleaned_words.append(
+                {
+                    "start": _round_time(word.get("start")),
+                    "end": _round_time(word.get("end")),
+                    "word": tok,
+                    "probability": round(float(word.get("probability", 1.0)), 4),
+                }
+            )
+        records.append(
+            {
+                "index": len(records),
+                "start": _round_time(rec.get("start")),
+                "end": _round_time(rec.get("end")),
+                "text": text,
+                "speaker": str(rec.get("speaker") or ""),
+                "words": cleaned_words,
+            }
+        )
+    return records
+
+
+def _transcribe_soundtrack_locked(
+    data_dir: Path,
+    video_id: str,
+    config: dict | None = None,
+    *,
+    log=print,
+    progress=None,
+    work_key: str = "",
+    source_sha256: str = "",
+    generation_id: str = "",
+    gpu: dict,
+) -> dict:
+    """Transcribe one existing MP3 and atomically publish JSON + WebVTT."""
+    config = normalize_config(config)
+    audio = soundtrack_path(data_dir, video_id)
+    if not audio.is_file():
+        raise FileNotFoundError("MP3 audio is missing; create it before transcribing")
+
+    if config["engine"] == "multitalker":
+        records, meta = _run_multitalker(
+            data_dir, video_id, audio, config, log=log, progress=progress, gpu=gpu
+        )
+    else:
+        records, meta = _run_whisper(
+            data_dir, video_id, audio, config, log=log, progress=progress, gpu=gpu
+        )
+
+    full_text = "\n".join(record["text"] for record in records)
+    artifact = {
+        "format_version": 1,
+        "video_id": video_id,
+        "work_key": work_key,
+        "generation_id": generation_id,
+        "source_sha256": source_sha256,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        **meta,
         "config": config,
         "full_text": full_text,
         "segments": records,
@@ -491,6 +689,8 @@ def _vtt_time(value) -> str:
 def _webvtt(records: list[dict]) -> str:
     chunks = ["WEBVTT\n"]
     for record in records:
+        start = float(record.get("start") or 0)
+        end = max(float(record.get("end") or 0), start + 0.01)
         speaker = (
             str(record.get("speaker") or "")
             .replace("&", "&amp;")
@@ -505,7 +705,7 @@ def _webvtt(records: list[dict]) -> str:
             .replace(">", "&gt;")
         )
         chunks.append(
-            f"{_vtt_time(record.get('start'))} --> {_vtt_time(record.get('end'))}\n"
+            f"{_vtt_time(start)} --> {_vtt_time(end)}\n"
             f"{prefix}{text}\n"
         )
     return "\n".join(chunks)

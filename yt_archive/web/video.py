@@ -80,14 +80,12 @@ def detail_html(info: dict, data_dir: Path, job: dict | None = None) -> bytes:
     captions_file = transcript_vtt_path(data_dir, vid)
     has_transcript = transcript_is_complete(data_dir, vid)
     transcript_language = "und"
+    transcript_engine = ""
     if has_transcript:
         try:
-            transcript_language = (
-                json.loads(transcript_file.read_text(encoding="utf-8")).get(
-                    "language"
-                )
-                or "und"
-            )
+            transcript_doc = json.loads(transcript_file.read_text(encoding="utf-8"))
+            transcript_language = transcript_doc.get("language") or "und"
+            transcript_engine = str(transcript_doc.get("engine") or "")
         except (OSError, json.JSONDecodeError):
             has_transcript = False
     sheets = framesheet_paths(data_dir, vid)
@@ -193,6 +191,11 @@ def detail_html(info: dict, data_dir: Path, job: dict | None = None) -> bytes:
   <div class="transcript-controls">
     <input class="transcript-search" id="transcript-search" type="search"
       placeholder="search every spoken word…" autocomplete="off">
+    <label id="transcript-filter-wrap" hidden>Filter
+      <select id="transcript-filter">
+        <option value="all">all segments</option>
+      </select>
+    </label>
     <label>View
       <select id="transcript-view">
         <option value="full">full transcript</option>
@@ -206,8 +209,39 @@ def detail_html(info: dict, data_dir: Path, job: dict | None = None) -> bytes:
         <option value="large">large</option>
       </select>
     </label>
+    <button type="button" id="toggle-lanes" hidden>Hide timeline</button>
     <button type="button" id="toggle-cc">Enable video CC</button>
     <a href="{_esc(media_url(data_dir, captions_file))}" download>download WebVTT</a>
+  </div>
+  <div class="speaker-lanes" id="speaker-lanes" hidden>
+    <div class="lanes-head">
+      <span class="lanes-title">Speaker timeline</span>
+      <span class="lanes-status" id="lanes-status"></span>
+      <div class="lanes-tools">
+        <button type="button" id="prev-overlap" title="Jump to previous overlapping turn">◀ Prev overlap</button>
+        <button type="button" id="next-overlap" title="Jump to next overlapping turn">Next overlap ▶</button>
+        <label>Window
+          <select id="lanes-window">
+            <option value="15">15s</option>
+            <option value="30" selected>30s</option>
+            <option value="60">60s</option>
+          </select>
+        </label>
+        <button type="button" id="lanes-follow" aria-pressed="true" title="Keep timeline synced to playback">Follow</button>
+      </div>
+    </div>
+    <div class="lanes-stage" id="lanes-stage">
+      <div class="lanes-ruler-row">
+        <div class="lanes-gutter"></div>
+        <div class="lanes-ruler" id="lanes-ruler"></div>
+      </div>
+      <div class="lanes-body" id="lanes-body"></div>
+    </div>
+    <div class="lanes-minimap-wrap" id="lanes-minimap-wrap" title="Click or drag to jump anywhere in the video">
+      <canvas class="lanes-minimap" id="lanes-minimap" height="22"></canvas>
+      <div class="minimap-viewport" id="minimap-viewport"></div>
+      <div class="minimap-playhead" id="minimap-playhead"></div>
+    </div>
   </div>
   <div class="caption-box size-medium" id="caption-box" aria-live="polite"></div>
   <div class="speaker-tools">
@@ -225,11 +259,12 @@ def detail_html(info: dict, data_dir: Path, job: dict | None = None) -> bytes:
         if has_transcript
         else ""
     )
+    use_mt_default = transcript_engine == "multitalker-parakeet"
     parts.append(
         f"""
 <section class="transcript" id="transcript-panel" data-ready="{str(has_transcript).lower()}">
   <h2>Spoken transcript</h2>
-  <p class="meta">Local Whisper · speech only; sound-effect descriptions are not mixed into spoken words.</p>
+  <p class="meta">Local speech recognition · spoken words only; sound-effect descriptions are not mixed in.</p>
   <div class="actions">
     <button type="button" id="open-transcribe">{transcript_action}</button>
   </div>
@@ -242,8 +277,18 @@ def detail_html(info: dict, data_dir: Path, job: dict | None = None) -> bytes:
 </section>
 <dialog id="transcribe-dialog">
   <h2>{'Replace transcript' if has_transcript else 'Generate transcript'}</h2>
-  <p class="meta">The default uses the highest-quality Whisper model this machine can run. Nothing starts until you confirm.</p>
-  <div class="fields">
+  <p class="meta">Choose multi-speaker mode for conversations with overlapping talk, or single-stream Whisper for 99 languages. Nothing starts until you confirm.</p>
+  <div class="engine-choices" role="radiogroup" aria-label="Transcription mode">
+    <label class="engine-choice">
+      <input type="radio" name="transcribe-engine" id="engine-multitalker" value="multitalker"{' checked' if use_mt_default else ''}>
+      <span><strong>Multi-speaker with overlaps</strong> — identifies up to 8 speakers and simultaneous talk (Nemotron-3 + Multitalker Parakeet Ultra, 25 European languages)</span>
+    </label>
+    <label class="engine-choice">
+      <input type="radio" name="transcribe-engine" id="engine-whisper" value="whisper"{'' if use_mt_default else ' checked'}>
+      <span><strong>Single stream (Whisper)</strong> — large-v3 default, 99 languages</span>
+    </label>
+  </div>
+  <div class="fields" id="whisper-fields"{' hidden' if use_mt_default else ''}>
     <label>Model
       <select id="whisper-model">
         <option value="large-v3" selected>large-v3 — highest quality</option>
@@ -270,7 +315,7 @@ def detail_html(info: dict, data_dir: Path, job: dict | None = None) -> bytes:
   </div>
   <div class="dialog-actions">
     <button type="button" id="cancel-transcribe">Cancel</button>
-    <button type="button" id="configured-transcribe">Use these settings</button>
+    <button type="button" id="configured-transcribe"{' hidden' if use_mt_default else ''}>Use these settings</button>
     <button type="button" class="primary" id="default-transcribe">{'Replace with defaults' if has_transcript else 'Yes — transcribe with defaults'}</button>
   </div>
 </dialog>
