@@ -1309,21 +1309,176 @@ function drawMinimap() {
   }
 }
 
+let laneMeasureCtx = null;
+let laneMeasureFont = '';
+let lastLaneTrackPx = 0;
+
+function getLaneMeasurer() {
+  if (!laneMeasureCtx) {
+    const canvas = document.createElement('canvas');
+    laneMeasureCtx = canvas.getContext('2d');
+  }
+  const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const family = getComputedStyle(document.body).fontFamily || 'sans-serif';
+  const font = '600 ' + (0.82 * rootPx).toFixed(2) + 'px ' + family;
+  if (laneMeasureCtx && font !== laneMeasureFont) {
+    laneMeasureCtx.font = font;
+    laneMeasureFont = font;
+  }
+  return laneMeasureCtx;
+}
+
+function laneTokensForSpan(seg, s0, s1) {
+  const rawWords = seg.words || [];
+  let tokens = [];
+  if (rawWords.length) {
+    for (const w of rawWords) {
+      const txt = String(w.word || '').trim();
+      if (!txt) continue;
+      const ws = w.start != null ? Number(w.start) : Number(seg.start);
+      const we = w.end != null ? Number(w.end) : ws;
+      if (tokens.length && /^[,.;:!?)]/.test(txt)) {
+        const prev = tokens[tokens.length - 1];
+        prev.word += txt;
+        if (we > prev.end) prev.end = we;
+      } else {
+        tokens.push({word: txt, start: ws, end: Math.max(ws, we)});
+      }
+    }
+  } else {
+    const parts = String(seg.text || '').trim().split(/\s+/).filter(Boolean);
+    const totalWeight = parts.reduce((acc, w) => acc + w.length + 1, 0) || 1;
+    const dur = Math.max(0.001, Number(seg.end) - Number(seg.start));
+    let acc = 0;
+    for (const part of parts) {
+      const wt = part.length + 1;
+      const ws = Number(seg.start) + (acc / totalWeight) * dur;
+      acc += wt;
+      const we = Number(seg.start) + (acc / totalWeight) * dur;
+      tokens.push({word: part, start: ws, end: we});
+    }
+  }
+  const visible = tokens.filter(t => t.end > s0 + 0.005 && t.start < s1 - 0.005);
+  return visible.length ? visible : tokens.slice(0, 1);
+}
+
+// 1D Pool Adjacent Violators: globally optimal least-squares alignment of words to their
+// spoken onset times inside [0, innerPx] without any pair of words overlapping.
+function solveTimedWordPositions(ideals, widths, spacePx, innerPx, totalPx) {
+  const n = ideals.length;
+  const maxShift = Math.max(0, innerPx - totalPx);
+  const cum = new Array(n);
+  const blocks = [];
+  let cur = 0;
+  for (let i = 0; i < n; i++) {
+    cum[i] = cur;
+    blocks.push({sum: ideals[i] - cur, count: 1});
+    while (
+      blocks.length >= 2
+      && (blocks[blocks.length - 2].sum / blocks[blocks.length - 2].count)
+         > (blocks[blocks.length - 1].sum / blocks[blocks.length - 1].count)
+    ) {
+      const last = blocks.pop();
+      blocks[blocks.length - 1].sum += last.sum;
+      blocks[blocks.length - 1].count += last.count;
+    }
+    cur += widths[i] + spacePx;
+  }
+  const xs = new Array(n);
+  let idx = 0;
+  for (const blk of blocks) {
+    const shift = Math.max(0, Math.min(maxShift, blk.sum / blk.count));
+    for (let k = 0; k < blk.count; k++) {
+      xs[idx] = shift + cum[idx];
+      idx += 1;
+    }
+  }
+  return xs;
+}
+
+function buildLaneBlockContent(seg, s0, s1, blockPx, info, ctx) {
+  const pad = 5;
+  const innerPx = blockPx - pad * 2;
+  if (!ctx || innerPx < 28) {
+    return {cls: '', inner: html(seg.text)};
+  }
+  const tokens = laneTokensForSpan(seg, s0, s1);
+  if (!tokens.length) return {cls: '', inner: ''};
+
+  const spacePx = Math.max(4, Math.ceil(ctx.measureText(' ').width));
+  const widths = tokens.map(t => Math.ceil(ctx.measureText(t.word).width));
+  const totalPx = widths.reduce((a, b) => a + b, 0) + Math.max(0, tokens.length - 1) * spacePx;
+  const sDur = Math.max(0.001, s1 - s0);
+  const partners = info ? info.partners : [];
+
+  let xs;
+  let clipped = false;
+  if (totalPx <= innerPx) {
+    const ideals = tokens.map((t, i) => {
+      const raw = ((t.start - s0) / sDur) * innerPx;
+      return Math.max(0, Math.min(innerPx - widths[i], raw));
+    });
+    xs = solveTimedWordPositions(ideals, widths, spacePx, innerPx, totalPx);
+  } else {
+    clipped = true;
+    xs = [];
+    let cur = 0;
+    for (let i = 0; i < tokens.length; i++) {
+      xs.push(cur);
+      cur += widths[i] + spacePx;
+    }
+  }
+
+  const spans = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (clipped && xs[i] >= innerPx) break;
+    const tok = tokens[i];
+    let ovColor = '';
+    if (partners.length) {
+      for (const p of partners) {
+        if (tok.start < p.ovEnd && tok.end > p.ovStart) {
+          ovColor = model.colorOf(p.other.speaker).fg;
+          break;
+        }
+      }
+    }
+    const leftPct = ((pad + xs[i]) / blockPx) * 100;
+    spans.push(
+      '<span class="lane-word' + (ovColor ? ' lw-ov' : '') + '"'
+      + ' data-t="' + tok.start + '" data-e="' + tok.end + '"'
+      + ' style="left:' + leftPct.toFixed(3) + '%'
+      + (ovColor ? ';--ov-color:' + ovColor : '') + '">'
+      + html(tok.word) + '</span>'
+    );
+  }
+  return {
+    cls: ' has-words' + (clipped ? ' is-clipped' : ''),
+    inner: '<div class="lane-words">' + spans.join('') + '</div>',
+  };
+}
+
 function renderLanesWindow(force) {
   if (!model || lanesHidden || model.speakers.length < 2) return;
   const winStart = clampWinStart(lanesWinStart);
   const winDur = lanesWindow;
-  if (!force && Math.abs(winStart - renderedWinStart) < 0.001 && winDur === renderedWinDur) {
+  const ruler = document.getElementById('lanes-ruler');
+  const body = document.getElementById('lanes-body');
+  if (!ruler || !body) return;
+  const trackPx = ruler.getBoundingClientRect().width || 0;
+  if (
+    !force
+    && Math.abs(winStart - renderedWinStart) < 0.001
+    && winDur === renderedWinDur
+    && Math.abs(trackPx - lastLaneTrackPx) < 1
+  ) {
     return;
   }
   lanesWinStart = winStart;
   renderedWinStart = winStart;
   renderedWinDur = winDur;
+  lastLaneTrackPx = trackPx;
   const winEnd = winStart + winDur;
-
-  const ruler = document.getElementById('lanes-ruler');
-  const body = document.getElementById('lanes-body');
-  if (!ruler || !body) return;
+  const measurer = trackPx > 0 ? getLaneMeasurer() : null;
 
   const step = winDur <= 10 ? 2 : winDur <= 20 ? 4 : winDur <= 30 ? 5 : 10;
   const firstTick = Math.ceil(winStart / step) * step;
@@ -1365,15 +1520,17 @@ function renderLanesWindow(force) {
       const s1 = Math.min(seg.end, winEnd);
       const left = ((s0 - winStart) / winDur) * 100;
       const width = Math.max(0.4, ((s1 - s0) / winDur) * 100);
+      const blockPx = trackPx > 0 ? (trackPx * width) / 100 : 0;
       const info = model.infoByIndex.get(seg.index);
       const hasOv = Boolean(info && info.partners.length);
       const title = spk + ' (' + clockPrecise(seg.start) + '–' + clockPrecise(seg.end) + '): ' + seg.text;
+      const content = buildLaneBlockContent(seg, s0, s1, blockPx, info, measurer);
       blocks.push(
-        '<div class="lane-block' + (hasOv ? ' has-ov' : '') + '"'
+        '<div class="lane-block' + (hasOv ? ' has-ov' : '') + content.cls + '"'
         + ' data-index="' + seg.index + '"'
         + ' style="left:' + left.toFixed(3) + '%;width:' + width.toFixed(3) + '%;'
         + '--spk-color:' + c.fg + ';--spk-bg:' + c.bg + ';--spk-bg-hi:' + c.bgHi + '"'
-        + ' title="' + html(title) + '">' + html(seg.text) + '</div>'
+        + ' title="' + html(title) + '">' + content.inner + '</div>'
       );
     }
     const isFiltered = filter === 'spk:' + spk;
@@ -1414,7 +1571,17 @@ function updateLanesPlayhead() {
   }
   for (const [idx, blk] of blockElsByIndex.entries()) {
     const seg = model.byIndex.get(idx);
-    blk.classList.toggle('now', Boolean(seg && time >= seg.start && time < seg.end));
+    const isNow = Boolean(seg && time >= seg.start && time < seg.end);
+    blk.classList.toggle('now', isNow);
+    if (isNow) {
+      blk.querySelectorAll('.lane-word').forEach(w => {
+        const ws = Number(w.dataset.t);
+        const we = Number(w.dataset.e);
+        w.classList.toggle('lw-now', time >= ws && time <= Math.max(we, ws + 0.08));
+      });
+    } else {
+      blk.querySelectorAll('.lane-word.lw-now').forEach(w => w.classList.remove('lw-now'));
+    }
   }
   const vp = document.getElementById('minimap-viewport');
   const mp = document.getElementById('minimap-playhead');
@@ -1662,9 +1829,21 @@ if (minimapWrap) {
   minimapWrap.addEventListener('pointercancel', () => { scrubbing = false; });
 }
 
+const lanesRulerEl = document.getElementById('lanes-ruler');
+if (lanesRulerEl && typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(() => {
+    if (model && !lanesHidden && model.speakers.length >= 2) {
+      renderLanesWindow(false);
+    }
+  }).observe(lanesRulerEl);
+}
+
 window.addEventListener('resize', () => {
   syncSplitHeight();
-  if (model && !lanesHidden && model.speakers.length >= 2) drawMinimap();
+  if (model && !lanesHidden && model.speakers.length >= 2) {
+    drawMinimap();
+    renderLanesWindow(false);
+  }
 });
 
 function syncTranscript(force) {

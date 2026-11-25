@@ -43,7 +43,13 @@ Parent: [AGENTS.md](../AGENTS.md).
     (toggleable with **Live subs** or **Overlay on video**) and the
     time-proportional **Speaker overlap timeline** (`10s / 20s / 30s / 60s`
     window, ruler overlap duration badges, click-to-seek, drag-to-pan,
-    previous/next overlap jumps, and full-video overview minimap).
+    previous/next overlap jumps, and full-video overview minimap). Words inside
+    each timeline block are positioned along the horizontal time axis at their
+    spoken onset times (using collision-free 1D isotonic placement when all
+    visible words fit, or left-to-right with a soft right-edge fade when zoomed
+    out) so vertical alignment across lanes reflects real word-level overlap,
+    overlapped words are underlined, and the active word highlights under the
+    playhead.
   - **Inline overlap markers in the transcript:** overlapped words are
     underlined in the interrupting speaker's color; mid-sentence overtalk also
     shows a compact clickable inline note (`∥ Speaker 2: "…"`) right at the
