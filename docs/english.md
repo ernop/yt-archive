@@ -115,3 +115,42 @@ transcript already exists.
   **Side-by-side** views; speaker edits on the English views update
   `transcript.en.json`, `transcript.en.vtt`, `subtitles.en.ass`, and
   `subtitles.en.srt`.
+
+## Diarization unification notes (open, 2026-11-25)
+
+Today this repo carries two diarization backends: `yt_archive/multitalker.py`
+uses NVIDIA `Nemotron-3-Diarization` (Sortformer v3 ONNX, in this repo's own
+`.venv`), while `yt_archive/english.py` optionally calls
+`pyannote/speaker-diarization-community-1` through `settings.json`'s
+`english.diarize_python` (requiring a separate CUDA PyTorch venv and a gated
+Hugging Face token). Diarization consolidation is being settled alongside the
+overlapping-speech work ([transcription.md](transcription.md#open-diarization-unification-notes-2026-11-25));
+these observations are recorded here so both tracks share the data:
+
+- **Mandarin empirical check (2026-11-25):** Ran `NemotronDiarizer` via `gpu
+  run` on the same 63-minute (3,798 s) Mandarin documentary with archival clips
+  previously diarized with `pyannote/speaker-diarization-community-1`:
+  - Wall time: **26.9 s total** (4.6 s decode, 5.3 s features, 17.0 s CUDA
+    inference — **141.4× realtime**), ~4× faster than `pyannote` (~111 s).
+  - Peak VRAM: **0.8 GB** (vs 2.3 GB on 63 min and 12.3 GB on 2 h for
+    `pyannote`).
+  - Agreement on single-speaker co-active 0.5 s frames (5,070 samples):
+    **98.5%** (`pyannote -> Nemotron-3` cluster purity) and **96.8%**
+    (`Nemotron-3 -> pyannote`), confirming Sortformer v3 is language-agnostic
+    and works accurately on Mandarin interviews.
+  - **Ceiling to keep in mind:** `Nemotron-3` caps at 8 speakers
+    (`NUM_SPEAKERS = 8`). On a documentary with 13 distinct voices including
+    5–25 s archival clips, the top 5 speakers aligned 1-to-1 and rare archival
+    voices were folded into existing slots; `pyannote` had no 8-speaker cap but
+    was already rejected for overlapping two-speaker dialogue.
+- **Integration path once one diarizer is chosen:**
+  1. For videos that already have a `multitalker` transcript (overlapping
+     European-language speech), `english.py` should preserve its existing
+     speaker labels and simultaneous turns rather than re-diarizing or
+     flattening overlaps.
+  2. For non-European languages still transcribed by Whisper `large-v3`,
+     switching `english.py` from `pyannote` (`diarize_python`) to the settled
+     in-venv ONNX diarizer removes the external Python dependency, drops
+     diarization VRAM from 13 GB to ~0.8 GB, and eliminates the gated Hugging
+     Face token requirement.
+

@@ -190,3 +190,16 @@ Explicit CLI parity is available for maintenance:
 ./yt transcribe <id> --speakers
 ./yt transcribe <id> --language en --model large-v3 --beam-size 5
 ```
+
+## Open: diarization unification notes (2026-11-25)
+
+`yt_archive/english.py` currently still uses optional external `pyannote`
+(`english.diarize_python`) while `yt_archive/multitalker.py` uses in-venv
+`Nemotron-3-Diarization`. An empirical check of `Nemotron-3-Diarization` on a
+63-minute Mandarin documentary (2026-11-25) measured **26.9 s total (141.4×
+RT), 0.8 GB peak VRAM**, and **98.5% / 96.8% purity** against `pyannote` on the
+main speakers, with the caveat that Sortformer v3 caps at 8 speakers (folding
+brief 5–25 s archival voices when >8 voices appear). Full numbers and the
+two-part consolidation plan (preserving `multitalker` overlaps in `english.py`
+and dropping `diarize_python`) live in
+[english.md](english.md#diarization-unification-notes-open-2026-11-25).
