@@ -409,6 +409,9 @@ shows the files as they are. A video without an audio track says so instead
 of offering **Create MP3 audio**. A video over 30 minutes without shots notes
 that shots are skipped by default and offers **Make shots** to generate them
 on demand ([framesheets.md](framesheets.md#skipped-by-default-over-30-minutes-settled-2026-11-21)).
+Framesheets and shot images live inside collapsible disclosures: single small
+framesheets and short shot grids open by default, while multi-sheet framesheets
+(or framesheets over 12 MB) and grids over 120 shots start closed.
 **Redo** at the bottom rebuilds the shots from the local file (when shots
 exist or the video is up to 30 minutes) or downloads the video again.
 

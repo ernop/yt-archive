@@ -1036,10 +1036,67 @@ function ensureOverlapDom() {
 }
 ensureOverlapDom();
 
+// Fallback for pre-restart server HTML: wrap huge framesheets and shot grids in collapsible <details>.
+function ensureCollapsibleSheets() {
+  const main = document.querySelector('main');
+  if (!main) return;
+  if (!document.getElementById('framesheets-section')) {
+    const sheetImgs = [...main.querySelectorAll(':scope > a > img.sheet')];
+    if (sheetImgs.length) {
+      const nodes = [];
+      for (const img of sheetImgs) {
+        const a = img.parentElement;
+        const prev = a && a.previousElementSibling;
+        if (prev && prev.classList.contains('sheet-label')) nodes.push(prev);
+        if (a) nodes.push(a);
+      }
+      if (nodes.length) {
+        const details = document.createElement('details');
+        details.className = 'sheets-toggle';
+        details.id = 'framesheets-section';
+        if (sheetImgs.length <= 1) details.open = true;
+        const summary = document.createElement('summary');
+        summary.textContent = sheetImgs.length > 1
+          ? 'Framesheets (' + sheetImgs.length + ' sheets)'
+          : 'Framesheet';
+        details.appendChild(summary);
+        nodes[0].parentNode.insertBefore(details, nodes[0]);
+        for (const n of nodes) details.appendChild(n);
+      }
+    }
+  }
+  if (!document.getElementById('shots-section')) {
+    const shotsEl = main.querySelector(':scope > .shots');
+    if (shotsEl) {
+      const count = shotsEl.querySelectorAll('figure').length;
+      const prev = shotsEl.previousElementSibling;
+      const details = document.createElement('details');
+      details.className = 'sheets-toggle';
+      details.id = 'shots-section';
+      if (count <= 120) details.open = true;
+      const summary = document.createElement('summary');
+      summary.textContent = 'Shot images (' + count + ' shots) — click to play from that moment';
+      details.appendChild(summary);
+      shotsEl.parentNode.insertBefore(details, prev && prev.classList.contains('sheet-label') ? prev : shotsEl);
+      if (prev && prev.classList.contains('sheet-label')) prev.remove();
+      details.appendChild(shotsEl);
+    }
+  }
+}
+ensureCollapsibleSheets();
+
 function clampWinStart(start) {
   if (!model) return 0;
   return Math.max(0, Math.min(start, Math.max(0, model.duration - lanesWindow)));
 }
+
+let ovWinStart = 0;
+let ovRenderedStart = -1;
+let ovRenderedTrackPx = 0;
+let ovPlayheadEls = [];
+let ovBlockElsByIndex = new Map();
+let ovResizeObserver = null;
+const OV_WINDOW_SEC = 10;
 
 function applyDualOverlayPosition() {
   const dualSubs = document.getElementById('dual-subs');
@@ -1053,7 +1110,13 @@ function applyDualOverlayPosition() {
   const activeOverlay = Boolean(visible && dualOverlay && ytp);
   dualSubs.classList.toggle('is-overlay', activeOverlay);
   if (activeOverlay) {
-    if (dualSubs.parentNode !== ytp) ytp.appendChild(dualSubs);
+    const host = ytp.querySelector('.mp') || ytp;
+    if (dualSubs.parentNode !== host) host.appendChild(dualSubs);
+    ovRenderedStart = -1;
+    requestAnimationFrame(() => {
+      const pv = document.querySelector('#ytp video');
+      updateOverlayTimeline(pv ? (pv.currentTime || 0) : 0, true);
+    });
   } else {
     if (dualSubs.parentNode !== dualStage) dualStage.prepend(dualSubs);
   }
@@ -1116,7 +1179,11 @@ function renderDualSubsShell() {
       + '<div class="dual-sub-prog"></div>'
       + '</div>';
   }).join('');
-  dualSubs.innerHTML = '<div class="dual-sub-head" id="dual-sub-head"></div>' + rows;
+  dualSubs.innerHTML = '<div class="dual-sub-head" id="dual-sub-head"></div>' + rows
+    + '<div class="ov-timeline" id="ov-timeline">'
+    + '<div class="ov-ruler-row"><div class="ov-gutter"></div><div class="ov-ruler" id="ov-ruler"></div></div>'
+    + '<div class="ov-body" id="ov-body"></div>'
+    + '</div>';
   dualHeadEl = document.getElementById('dual-sub-head');
   dualRowBySpeaker = new Map();
   dualSubs.querySelectorAll('.dual-sub-row').forEach(row => {
@@ -1128,6 +1195,145 @@ function renderDualSubsShell() {
       renderedSegIdx: -1,
     });
   });
+  ovRenderedStart = -1;
+  ovRenderedTrackPx = 0;
+  const ovTimeline = document.getElementById('ov-timeline');
+  if (ovTimeline) {
+    ovTimeline.addEventListener('pointerdown', event => {
+      event.stopPropagation();
+    });
+    ovTimeline.addEventListener('click', event => {
+      event.stopPropagation();
+      const track = event.target.closest('.ov-track, .ov-ruler');
+      if (!track || !model) return;
+      const rect = track.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const frac = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+      const winDur = Math.min(OV_WINDOW_SEC, Math.max(4, lanesWindow));
+      seekAndPlay(ovWinStart + frac * winDur);
+    });
+  }
+  const ovRuler = document.getElementById('ov-ruler');
+  if (ovRuler && typeof ResizeObserver !== 'undefined') {
+    if (ovResizeObserver) ovResizeObserver.disconnect();
+    ovResizeObserver = new ResizeObserver(() => {
+      if (dualOverlay && showDualSubs && model && !lanesHidden && model.speakers.length >= 2) {
+        const pv = document.querySelector('#ytp video');
+        updateOverlayTimeline(pv ? (pv.currentTime || 0) : 0, true);
+      }
+    });
+    ovResizeObserver.observe(ovRuler);
+  }
+}
+
+function updateOverlayTimeline(time, force) {
+  const dualSubs = document.getElementById('dual-subs');
+  if (!dualSubs || !dualSubs.classList.contains('is-overlay') || !model || model.speakers.length < 2) return;
+  const ruler = document.getElementById('ov-ruler');
+  const body = document.getElementById('ov-body');
+  if (!ruler || !body) return;
+
+  const winDur = Math.min(OV_WINDOW_SEC, Math.max(4, lanesWindow));
+  const maxStart = Math.max(0, model.duration - winDur);
+  const trackPx = ruler.getBoundingClientRect().width || 0;
+  const outOfView = ovRenderedStart < 0
+    || time < ovWinStart + winDur * 0.05
+    || time > ovWinStart + winDur * 0.84;
+
+  if (force || outOfView || Math.abs(trackPx - ovRenderedTrackPx) >= 2) {
+    if (outOfView || ovRenderedStart < 0) {
+      ovWinStart = Math.max(0, Math.min(maxStart, time - winDur * 0.14));
+    } else {
+      ovWinStart = Math.max(0, Math.min(maxStart, ovWinStart));
+    }
+    ovRenderedStart = ovWinStart;
+    ovRenderedTrackPx = trackPx;
+    const winStart = ovWinStart;
+    const winEnd = winStart + winDur;
+    const measurer = trackPx > 0 ? getLaneMeasurer() : null;
+
+    const step = winDur <= 10 ? 2 : 4;
+    const firstTick = Math.ceil(winStart / step) * step;
+    const ticks = [];
+    for (let t = firstTick; t <= winEnd; t += step) {
+      const pct = ((t - winStart) / winDur) * 100;
+      ticks.push('<span class="ruler-tick" style="left:' + pct.toFixed(3) + '%">' + clock(t) + '</span>');
+    }
+    const visibleOverlaps = model.overlapSpans.filter(ov => ov.end > winStart && ov.start < winEnd);
+    const pills = visibleOverlaps.map(ov => {
+      const left = ((Math.max(ov.start, winStart) - winStart) / winDur) * 100;
+      const right = ((Math.min(ov.end, winEnd) - winStart) / winDur) * 100;
+      const width = Math.max(0.25, right - left);
+      if (width < 3.5) return '';
+      const dur = Math.max(0.1, ov.end - ov.start);
+      return '<span class="ruler-ov-pill" style="left:' + left.toFixed(3)
+        + '%;max-width:' + width.toFixed(3) + '%">∥ ' + dur.toFixed(1) + 's</span>';
+    }).join('');
+    ruler.innerHTML = ticks.join('') + pills + '<div class="lane-playhead"></div>';
+
+    const bands = visibleOverlaps.map(ov => {
+      const left = ((Math.max(ov.start, winStart) - winStart) / winDur) * 100;
+      const right = ((Math.min(ov.end, winEnd) - winStart) / winDur) * 100;
+      return '<div class="lane-ov-band" style="left:' + left.toFixed(3)
+        + '%;width:' + Math.max(0.25, right - left).toFixed(3) + '%"></div>';
+    }).join('');
+
+    body.innerHTML = model.speakers.map(spk => {
+      const c = model.colorOf(spk);
+      const segs = model.bySpeaker.get(spk) || [];
+      const blocks = [];
+      for (const seg of segs) {
+        if (seg.end <= winStart) continue;
+        if (seg.start >= winEnd) break;
+        const s0 = Math.max(seg.start, winStart);
+        const s1 = Math.min(seg.end, winEnd);
+        const left = ((s0 - winStart) / winDur) * 100;
+        const width = Math.max(0.5, ((s1 - s0) / winDur) * 100);
+        const blockPx = trackPx > 0 ? (trackPx * width) / 100 : 0;
+        const info = model.infoByIndex.get(seg.index);
+        const hasOv = Boolean(info && info.partners.length);
+        const content = buildLaneBlockContent(seg, s0, s1, blockPx, info, measurer);
+        blocks.push(
+          '<div class="lane-block' + (hasOv ? ' has-ov' : '') + content.cls + '"'
+          + ' data-index="' + seg.index + '"'
+          + ' style="left:' + left.toFixed(3) + '%;width:' + width.toFixed(3) + '%;'
+          + '--spk-color:' + c.fg + ';--spk-bg:' + c.bg + ';--spk-bg-hi:' + c.bgHi + '">'
+          + content.inner + '</div>'
+        );
+      }
+      return '<div class="ov-row">'
+        + '<div class="ov-label" style="--spk-color:' + c.fg + '">' + html(spk) + '</div>'
+        + '<div class="ov-track">' + bands + blocks.join('')
+        + '<div class="lane-playhead"></div></div></div>';
+    }).join('');
+
+    ovPlayheadEls = [...dualSubs.querySelectorAll('.ov-timeline .lane-playhead')];
+    ovBlockElsByIndex = new Map();
+    body.querySelectorAll('.lane-block').forEach(el => {
+      ovBlockElsByIndex.set(Number(el.dataset.index), el);
+    });
+  }
+
+  const pct = ((time - ovWinStart) / winDur) * 100;
+  const visible = pct >= 0 && pct <= 100;
+  for (const el of ovPlayheadEls) {
+    el.style.display = visible ? '' : 'none';
+    if (visible) el.style.left = pct.toFixed(3) + '%';
+  }
+  for (const [idx, blk] of ovBlockElsByIndex.entries()) {
+    const seg = model.byIndex.get(idx);
+    const isNow = Boolean(seg && time >= seg.start && time < seg.end);
+    blk.classList.toggle('now', isNow);
+    if (isNow) {
+      blk.querySelectorAll('.lane-word').forEach(w => {
+        const ws = Number(w.dataset.t);
+        const we = Number(w.dataset.e);
+        w.classList.toggle('lw-now', time >= ws && time <= Math.max(we, ws + 0.08));
+      });
+    } else {
+      blk.querySelectorAll('.lane-word.lw-now').forEach(w => w.classList.remove('lw-now'));
+    }
+  }
 }
 
 function dualWordsHtml(seg) {
@@ -1155,6 +1361,10 @@ function dualWordsHtml(seg) {
 
 function updateDualSubs(time) {
   if (!model || lanesHidden || model.speakers.length < 2 || !dualRowBySpeaker.size) return;
+  if (dualOverlay && showDualSubs) {
+    updateOverlayTimeline(time, false);
+    return;
+  }
   const activeBySpeaker = new Map();
   for (const spk of model.speakers) {
     const segs = model.bySpeaker.get(spk) || [];

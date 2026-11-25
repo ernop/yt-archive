@@ -40,7 +40,10 @@ Parent: [AGENTS.md](../AGENTS.md).
     `ResizeObserver`. Transcript auto-scroll adjusts only `#caption-box.scrollTop`
     (never scrolling the outer page) and toggles on/off with **Auto-scroll**.
   - **Bottom row (100% full width):** **Live dual-color speaker subtitles**
-    (toggleable with **Live subs** or **Overlay on video**) and the
+    (toggleable with **Live subs** or **Overlay on video** — when overlaid on
+    the video, renders a compact translucent 10-second time-aligned swimlane
+    strip with ruler overlap badges, gold overlap bands, per-word timestamps,
+    click-to-seek, and fullscreen support) and the
     time-proportional **Speaker overlap timeline** (`10s / 20s / 30s / 60s`
     window, ruler overlap duration badges, click-to-seek, drag-to-pan,
     previous/next overlap jumps, and full-video overview minimap). Words inside

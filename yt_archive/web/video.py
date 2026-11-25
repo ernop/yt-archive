@@ -496,24 +496,41 @@ def detail_html(
             )
         else:
             parts.append('<p class="sheet-label">No framesheet yet — the next job for this video makes one.</p>')
-    for n, sheet in enumerate(sheets, start=1):
-        label = (
-            f"Squished framesheet {n}/{len(sheets)}"
-            if len(sheets) > 1
-            else "Squished framesheet"
-        )
-        parts.append(
-            f'<p class="sheet-label">{_esc(label)}</p>'
-            f'<a href="{_esc(media_url(data_dir, sheet))}" target="_blank" rel="noopener">'
-            f'<img class="sheet" src="{_esc(media_url(data_dir, sheet))}" alt="{_esc(label)}"></a>'
-        )
     labeled = all_labeled_path(data_dir, vid)
-    if labeled.is_file():
-        parts.append(
-            f'<p class="sheet-label">All detections (kept + dropped)</p>'
-            f'<a href="{_esc(media_url(data_dir, labeled))}" target="_blank" rel="noopener">'
-            f'<img class="sheet" src="{_esc(media_url(data_dir, labeled))}" alt="all shots labeled"></a>'
+    if sheets or labeled.is_file():
+        total_sheet_bytes = sum(s.stat().st_size for s in sheets if s.is_file())
+        if labeled.is_file():
+            total_sheet_bytes += labeled.stat().st_size
+        huge_sheets = len(sheets) > 1 or total_sheet_bytes > 12 * 1024 * 1024
+        count_label = (
+            f"Framesheets ({len(sheets)} sheets"
+            if len(sheets) > 1
+            else ("Framesheet (1 sheet" if len(sheets) == 1 else "Framesheets (detections")
         )
+        size_part = f" · {_size(total_sheet_bytes)}" if _size(total_sheet_bytes) else ""
+        sheet_bits = [
+            f'<details class="sheets-toggle" id="framesheets-section"{"" if huge_sheets else " open"}>'
+            f"<summary>{_esc(count_label + size_part + ')')}</summary>"
+        ]
+        for n, sheet in enumerate(sheets, start=1):
+            label = (
+                f"Squished framesheet {n}/{len(sheets)}"
+                if len(sheets) > 1
+                else "Squished framesheet"
+            )
+            sheet_bits.append(
+                f'<p class="sheet-label">{_esc(label)}</p>'
+                f'<a href="{_esc(media_url(data_dir, sheet))}" target="_blank" rel="noopener">'
+                f'<img class="sheet" src="{_esc(media_url(data_dir, sheet))}" alt="{_esc(label)}"></a>'
+            )
+        if labeled.is_file():
+            sheet_bits.append(
+                f'<p class="sheet-label">All detections (kept + dropped)</p>'
+                f'<a href="{_esc(media_url(data_dir, labeled))}" target="_blank" rel="noopener">'
+                f'<img class="sheet" src="{_esc(media_url(data_dir, labeled))}" alt="all shots labeled"></a>'
+            )
+        sheet_bits.append("</details>")
+        parts.append("".join(sheet_bits))
     times = {r["file"]: r for r in kept}
     figs = []
     for shot in sorted(shots_dir(data_dir, vid).glob("*.png")):
@@ -529,9 +546,11 @@ def detail_html(
             f"<figcaption>{cap}</figcaption></figure>"
         )
     if figs:
+        huge_shots = len(figs) > 120
         parts.append(
-            f'<p class="sheet-label">Shot images — click to play from that moment</p>'
-            f'<div class="shots">{"".join(figs)}</div>'
+            f'<details class="sheets-toggle" id="shots-section"{"" if huge_shots else " open"}>'
+            f"<summary>Shot images ({len(figs)} shots) — click to play from that moment</summary>"
+            f'<div class="shots">{"".join(figs)}</div></details>'
         )
     if sheets or not long_video:
         parts.append(

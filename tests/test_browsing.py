@@ -178,6 +178,33 @@ class BrowsingTests(unittest.TestCase):
         self.assertIn("--muted:#fff", CSS)
         self.assertIn("input::placeholder { color: #fff; opacity: 1; }", CSS)
 
+    def test_huge_framesheets_and_shots_collapse_by_default(self):
+        from test_queue import make_video
+        from yt_archive.paths import condensed_dir, load_archive_info, shots_dir
+        from yt_archive.web import detail_html
+
+        make_video(self.data, "smallvid001", shots=3)
+        small_shots = shots_dir(self.data, "smallvid001")
+        small_shots.mkdir(parents=True, exist_ok=True)
+        for i in range(3):
+            (small_shots / f"{i:04d}.png").write_bytes(b"p")
+        small_html = detail_html(load_archive_info(self.data, "smallvid001"), self.data).decode()
+        self.assertIn('<details class="sheets-toggle" id="framesheets-section" open>', small_html)
+        self.assertIn('<details class="sheets-toggle" id="shots-section" open>', small_html)
+
+        make_video(self.data, "largevid001", shots=0)
+        cdir = condensed_dir(self.data, "largevid001")
+        (cdir / "framesheet.png").unlink(missing_ok=True)
+        (cdir / "framesheet-1.png").write_bytes(b"png1")
+        (cdir / "framesheet-2.png").write_bytes(b"png2")
+        sdir = shots_dir(self.data, "largevid001")
+        sdir.mkdir(parents=True, exist_ok=True)
+        for i in range(125):
+            (sdir / f"{i:04d}.png").write_bytes(b"p")
+        large_html = detail_html(load_archive_info(self.data, "largevid001"), self.data).decode()
+        self.assertIn('<details class="sheets-toggle" id="framesheets-section"><summary>', large_html)
+        self.assertIn('<details class="sheets-toggle" id="shots-section"><summary>', large_html)
+
 
 if __name__ == "__main__":
     unittest.main()
