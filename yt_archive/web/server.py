@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from .. import db
+from .. import db, llm
 from ..budget import BudgetExceeded
 from ..creators import CreatorBrowser, browse_url, playlist_browse_url
 from ..db import list_creator_videos, normalize_video_sort
@@ -23,10 +23,17 @@ from ..paths import (
     bookmarklet_key,
     condensed_dir,
     default_data_dir,
+    english_ass_path,
+    english_dub_path,
+    english_has_dub,
+    english_mkv_filename,
+    english_srt_path,
+    english_transcript_vtt_path,
     is_complete_png,
     write_grab_png,
     list_items,
     load_archive_info,
+    media_url,
     parse_video_id,
     video_dir,
 )
@@ -38,6 +45,8 @@ from .creator import browse_creator_html, creator_html
 from .home import home_html
 from .html import STATIC_DIR, _esc, _page
 from .video import detail_html
+
+mimetypes.add_type("text/x-ssa", ".ass")
 
 
 # Finished files never change at a given URL (multi-image-client rule).
@@ -206,6 +215,15 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 if not transcript:
                     return self._json({"error": "no transcript"}, 404)
                 return self._json(transcript)
+            if path.startswith("/api/english/"):
+                try:
+                    video_id = parse_video_id(path.split("/", 3)[-1])
+                except ValueError:
+                    return self._json({"error": "bad id"}, 404)
+                english = db.get_english_transcript(data_dir, video_id)
+                if not english:
+                    return self._json({"error": "no English transcript"}, 404)
+                return self._json(self._english_payload(video_id, english))
             if path.startswith("/v/"):
                 video_id = path[3:].strip("/")
                 try:
@@ -216,7 +234,14 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 if not folder.is_dir():
                     return self._bytes(_page("missing", f"<main><p>No archive for {_esc(video_id)}</p></main>"), 404)
                 info = load_archive_info(data_dir, video_id)
-                return self._bytes(detail_html(info, data_dir, db.find_open_job(data_dir, video_id)))
+                return self._bytes(
+                    detail_html(
+                        info,
+                        data_dir,
+                        db.find_open_job(data_dir, video_id),
+                        english_job=db.find_open_work(data_dir, video_id, "english"),
+                    )
+                )
             if path.startswith("/media/"):
                 return self._media(path[len("/media/"):])
             if path.startswith("/static/"):
@@ -279,6 +304,14 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 return self._set_segment_speaker()
             if parsed.path == "/api/transcript/rename-speaker":
                 return self._rename_speaker()
+            if parsed.path == "/api/english":
+                return self._english()
+            if parsed.path == "/api/english/speaker":
+                return self._set_english_speaker()
+            if parsed.path == "/api/english/rename-speaker":
+                return self._rename_english_speaker()
+            if parsed.path == "/api/english/mkv":
+                return self._english_mkv()
             if parsed.path == "/api/open-folder":
                 return self._open_folder()
             if parsed.path == "/api/grab":
@@ -408,6 +441,123 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 return self._json(get_transcript(data_dir, video_id))
             except (ValueError, OSError, json.JSONDecodeError) as exc:
                 return self._json({"error": str(exc)}, 400)
+
+        def _english_payload(self, video_id: str, english: dict) -> dict:
+            out = dict(english)
+            has_dub = english_has_dub(data_dir, video_id)
+            dub = english_dub_path(data_dir, video_id)
+            vtt = english_transcript_vtt_path(data_dir, video_id)
+            ass = english_ass_path(data_dir, video_id)
+            srt = english_srt_path(data_dir, video_id)
+            info = load_archive_info(data_dir, video_id) if video_dir(data_dir, video_id).is_dir() else {}
+            out["has_dub"] = has_dub
+            out["dub_url"] = media_url(data_dir, dub) if has_dub else ""
+            out["vtt_url"] = media_url(data_dir, vtt) if vtt.is_file() else ""
+            out["ass_url"] = media_url(data_dir, ass) if ass.is_file() else ""
+            out["srt_url"] = media_url(data_dir, srt) if srt.is_file() else ""
+            out["mkv_download_name"] = english_mkv_filename(
+                video_id, info.get("title") or "", info.get("channel") or ""
+            )
+            out["open_job"] = db.find_open_work(data_dir, video_id, "english")
+            return out
+
+        def _english(self):
+            payload = self._read_json()
+            if payload is None:
+                return
+            try:
+                video_id = parse_video_id(
+                    (payload.get("video_id") or payload.get("url") or "").strip()
+                )
+                config = payload.get("config") or {}
+                if not isinstance(config, dict):
+                    raise ValueError("config must be an object")
+                lane = str(payload.get("lane") or "now").strip().lower()
+                if lane not in ("now", "backfill"):
+                    raise ValueError("lane must be now or backfill")
+                job = work_queue.submit_english(
+                    video_id, config, force=bool(payload.get("force")), lane=lane
+                )
+            except (ValueError, OSError, llm.LLMError) as exc:
+                return self._json({"error": str(exc)}, 400)
+            return self._json(job, 202 if job["status"] != "done" else 200)
+
+        def _set_english_speaker(self):
+            payload = self._read_json()
+            if payload is None:
+                return
+            try:
+                video_id = parse_video_id((payload.get("video_id") or "").strip())
+                segment_index = int(payload.get("segment_index"))
+                from ..english import update_english_segment_speaker
+
+                update_english_segment_speaker(
+                    data_dir, video_id, segment_index, payload.get("speaker") or ""
+                )
+                english = db.get_english_transcript(data_dir, video_id)
+                return self._json(self._english_payload(video_id, english))
+            except (ValueError, TypeError, OSError, json.JSONDecodeError) as exc:
+                return self._json({"error": str(exc)}, 400)
+
+        def _rename_english_speaker(self):
+            payload = self._read_json()
+            if payload is None:
+                return
+            try:
+                video_id = parse_video_id((payload.get("video_id") or "").strip())
+                from ..english import rename_english_speaker
+
+                rename_english_speaker(
+                    data_dir,
+                    video_id,
+                    payload.get("old") or "",
+                    payload.get("new") or "",
+                )
+                english = db.get_english_transcript(data_dir, video_id)
+                return self._json(self._english_payload(video_id, english))
+            except (ValueError, OSError, json.JSONDecodeError) as exc:
+                return self._json({"error": str(exc)}, 400)
+
+        def _english_mkv(self):
+            payload = self._read_json()
+            if payload is None:
+                return
+            try:
+                video_id = parse_video_id(
+                    (payload.get("video_id") or payload.get("url") or "").strip()
+                )
+                open_vlc = bool(payload.get("open_vlc"))
+                from ..english import export_english_mkv
+
+                mkv = export_english_mkv(data_dir, video_id)
+            except (ValueError, FileNotFoundError) as exc:
+                return self._json({"error": str(exc)}, 400)
+            except (OSError, subprocess.CalledProcessError) as exc:
+                return self._json({"error": f"could not build MKV: {exc}"}, 500)
+            info = load_archive_info(data_dir, video_id)
+            download_name = english_mkv_filename(
+                video_id, info.get("title") or "", info.get("channel") or ""
+            )
+            if open_vlc:
+                try:
+                    subprocess.Popen(
+                        ["vlc", str(mkv)],
+                        start_new_session=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                except OSError as exc:
+                    return self._json(
+                        {"error": f"could not open VLC: {exc}", "path": str(mkv)}, 500
+                    )
+            return self._json(
+                {
+                    "ok": True,
+                    "url": media_url(data_dir, mkv),
+                    "download": download_name,
+                    "path": str(mkv),
+                }
+            )
 
         def _update_archive(self):
             """Queue every archived video a plain job would still change (docs/browsing.md)."""

@@ -41,6 +41,7 @@ Considered on 2026-11-10 and not being built now:
 | [docs/browsing.md](docs/browsing.md) | Download queue panel, archive status and update, single-line list rows, order and sort, creator pages, the picker for YouTube creators and playlists (and which lists use your account) and X profiles (with your X login, via gallery-dl), the hourly YouTube and X request budgets, text contrast, the video page and player |
 | [docs/bookmarklet.md](docs/bookmarklet.md) | The **+ ytarchive** bookmarklet: queue the YouTube page or tweet you're on, its key, why a pop-up |
 | [docs/transcription.md](docs/transcription.md) | Explicit local Whisper jobs, the GPU gate they hold, timed transcript UI, captions, speakers |
+| [docs/english.md](docs/english.md) | On-demand English translation, dual-language captions, multi-speaker Kokoro dubbing, bilingual MKV export |
 
 Every durable note in this repo is in that list or linked from one of those
 files. Do not leave decisions only in chat.
@@ -112,6 +113,7 @@ server when the unit is not in play.
 ./yt audio <id>                # create MP3 audio (video already on disk)
 ./yt transcribe <id>           # explicit local Whisper run
 ./yt transcribe <id> --speakers # multi-speaker + overlap recovery (Nemotron-3 + Parakeet Ultra)
+./yt english <id>              # translate + captions + Kokoro dub (--no-dub, --language, --mkv)
 ./yt list
 ./yt reindex                   # rebuild sqlite catalog from data/
 ./yt serve [--host 127.0.0.1] [--port 8765]
@@ -131,6 +133,12 @@ data/<id>/
     grab-<title>-<time>.png # a frame saved from the player (S)
     transcript.json
     transcript.vtt
+    transcript.en.json      # optional English translation (docs/english.md)
+    transcript.en.vtt       # English captions
+    subtitles.en.ass        # styled English subtitles covering lower-third burned-in text
+    subtitles.en.srt        # plain English subtitles (+ subtitles.orig.srt)
+    dub.en.m4a              # optional multi-speaker Kokoro voiceover dub
+    english.mkv             # optional lossless bilingual MKV built on demand
     shots.json
     shots/0000.png …
 ```
@@ -145,15 +153,16 @@ web/                   the service: server.py (routes, JSON API, media), home.py
 static/                stylesheets and page scripts (app.css, home.js, video-page.js, …),
                        the media player copy; a page's values reach its scripts as #page-data JSON
 jobs.py                download queue: download, shots, MP3 audio, lyrics
-work.py                transcript queue; transcribe.py runs Whisper and multitalker.py (gpu_gate.py: the GPU gate)
+work.py                derived work queue (transcribe + english); transcribe.py runs Whisper and multitalker.py (gpu_gate.py: the GPU gate)
 multitalker.py         multi-speaker diarization + overlap-preserving ASR (Nemotron-3 + Parakeet Ultra ONNX)
+english.py             English translation, captions, Kokoro v1.0 dubbing, and MKV export; llm.py plain-HTTPS LLM client
 download.py            yt-dlp, and its weekly self-update
 framesheet.py          shots and framesheets; audio.py the MP3; lyrics.py
 creators.py            YouTube listings for the picker; x_profiles.py X profiles
 db/                    SQLite catalog, used as one module (db.list_videos): core.py (schema,
                        connections), videos.py, transcripts.py, adds.py, jobs.py, work.py, listings.py
 paths.py               layout, ids, file names
-settings.py            gitignored settings.json loader (settings.example.json; live_clip_max_seconds)
+settings.py            gitignored settings.json loader (settings.example.json; live_clip_max_seconds, english)
 budget.py              hourly request budgets; locks.py per-video locks
 ```
 
@@ -236,9 +245,11 @@ restart; **pdeploy** is ppush plus step 3.
   Never send that login with any other X request without the user's explicit
   approval.
 - Anything on the GPU holds matthoom's GPU gate first, with a measured claim
-  ([docs/transcription.md](docs/transcription.md#the-gpu-gate)). Transcription
-  (Whisper and multi-speaker ONNX) is the only GPU work today; shots run CLIP on
-  the processor.
+  ([docs/transcription.md](docs/transcription.md#the-gpu-gate),
+  [docs/english.md](docs/english.md#measurements-2026-11-25)). Transcription
+  (Whisper and multi-speaker ONNX) and English builds (Whisper, optional
+  pyannote diarization, Kokoro v1.0 ONNX dubbing, or local Ollama) are the GPU
+  work today; shots run CLIP on the processor.
 - Shot and download recipes are settled. Read [docs/download.md](docs/download.md)
   and [docs/framesheets.md](docs/framesheets.md) before changing either.
   Do not reintroduce the rejected approaches.

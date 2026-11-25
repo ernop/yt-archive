@@ -4,8 +4,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .. import llm
+from ..english import estimate_minutes
 from ..paths import (
     all_labeled_path,
+    english_ass_path,
+    english_dub_path,
+    english_has_dub,
+    english_is_complete,
+    english_srt_path,
+    english_transcript_json_path,
+    english_transcript_vtt_path,
     find_video_file,
     framesheet_paths,
     media_url,
@@ -21,6 +30,7 @@ from ..paths import (
     transcript_vtt_path,
     watch_url,
 )
+from ..settings import load_settings
 
 from .html import (
     _clock,
@@ -71,7 +81,13 @@ def _facts_html(info: dict, creator_link: str, shots: int) -> str:
     return f'<div class="facts">{"".join(facts)}</div>'
 
 
-def detail_html(info: dict, data_dir: Path, job: dict | None = None) -> bytes:
+def detail_html(
+    info: dict,
+    data_dir: Path,
+    job: dict | None = None,
+    *,
+    english_job: dict | None = None,
+) -> bytes:
     vid = info["video_id"]
     title = info.get("title") or vid
     duration = info.get("duration")
@@ -88,6 +104,26 @@ def detail_html(info: dict, data_dir: Path, job: dict | None = None) -> bytes:
             transcript_engine = str(transcript_doc.get("engine") or "")
         except (OSError, json.JSONDecodeError):
             has_transcript = False
+    english_file = english_transcript_json_path(data_dir, vid)
+    english_vtt = english_transcript_vtt_path(data_dir, vid)
+    english_ass = english_ass_path(data_dir, vid)
+    english_srt = english_srt_path(data_dir, vid)
+    english_dub = english_dub_path(data_dir, vid)
+    has_english = english_is_complete(data_dir, vid)
+    if has_english:
+        try:
+            json.loads(english_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            has_english = False
+    has_english_dub = english_has_dub(data_dir, vid)
+    en_cfg = load_settings()["english"]
+    en_config_error = ""
+    try:
+        llm.check_settings(en_cfg)
+    except (ValueError, llm.LLMError) as exc:
+        en_config_error = str(exc)
+    est_with_dub = estimate_minutes(duration, include_dub=True, has_transcript=has_transcript)
+    est_no_dub = estimate_minutes(duration, include_dub=False, has_transcript=has_transcript)
     sheets = framesheet_paths(data_dir, vid)
     long_video = skips_default_shots(duration)
     shot_recs = (read_shots_json(data_dir, vid) or {}).get("shots", [])
@@ -128,25 +164,58 @@ def detail_html(info: dict, data_dir: Path, job: dict | None = None) -> bytes:
     if video:
         markers_attr = _esc(json.dumps(shot_markers, separators=(",", ":")))
         dur_attr = f' data-duration="{duration}"' if duration else ""
-        captions_track = (
-            f'<track kind="captions" srclang="{_esc(transcript_language)}" label="Local transcript" '
-            f'src="{_esc(media_url(data_dir, captions_file))}">'
-            if has_transcript
+        audio_tracks_attr = ""
+        if has_english_dub:
+            tracks_json = json.dumps(
+                [{"src": media_url(data_dir, english_dub), "label": "English dub"}],
+                separators=(",", ":"),
+            )
+            audio_tracks_attr = (
+                f' data-audio-tracks="{_esc(tracks_json)}" data-original-audio-label="Original"'
+            )
+        caption_tracks = []
+        if has_english:
+            caption_tracks.append(
+                f'<track kind="captions" srclang="en" label="English" '
+                f'src="{_esc(media_url(data_dir, english_vtt))}">'
+            )
+        if has_transcript:
+            orig_label = (
+                f"Original ({transcript_language})"
+                if has_english and transcript_language != "und"
+                else ("Original" if has_english else "Local transcript")
+            )
+            caption_tracks.append(
+                f'<track kind="captions" srclang="{_esc(transcript_language)}" '
+                f'label="{_esc(orig_label)}" src="{_esc(media_url(data_dir, captions_file))}">'
+            )
+        captions_track = "".join(caption_tracks)
+        help_bits = []
+        if kept:
+            help_bits.append("click a shot to play from it, then PageUp and PageDown step through shots")
+        if has_english_dub:
+            help_bits.append("B switches audio")
+        if has_english or has_transcript:
+            help_bits.append("C cycles captions")
+        help_bits.extend(["S saves this frame next to the MP3", "T widens the page"])
+        if kept:
+            help_bits.append("shift-click a shot to open its PNG")
+        help_bits.append("? lists every key")
+        player_help = " · ".join(help_bits)
+        cover_toggle = (
+            '<div class="player-extras">'
+            '<label class="inline-check"><input type="checkbox" id="cover-burned-cc"> '
+            "Cover burned-in captions</label></div>"
+            if (has_english or has_transcript)
             else ""
-        )
-        player_help = (
-            "click a shot to play from it, then PageUp and PageDown step through shots · "
-            "S saves this frame next to the MP3 · T widens the page · "
-            "shift-click a shot to open its PNG · ? lists every key"
-            if kept
-            else "S saves this frame next to the MP3 · T widens the page · ? lists every key"
         )
         parts.append(f"""
 <div class="ytp" id="ytp" data-id="{_esc(vid)}">
   <video controls preload="metadata" src="{_esc(media_url(data_dir, video))}" data-media-player
-    data-title="{_esc(title)}"{dur_attr} data-markers="{markers_attr}" data-markers-label="Shot"
+    data-title="{_esc(title)}"{dur_attr} data-markers="{markers_attr}" data-markers-label="Shot"{audio_tracks_attr}
     data-wide>{captions_track}</video>
 </div>
+{cover_toggle}
 <p class="meta">{player_help}</p>
 """)
     mp3 = soundtrack_path(data_dir, vid)
@@ -185,12 +254,44 @@ def detail_html(info: dict, data_dir: Path, job: dict | None = None) -> bytes:
     soundtrack_bits.append("</div>")
     soundtrack_html = "".join(soundtrack_bits)
     transcript_action = "Re-transcribe…" if has_transcript else "Transcribe audio…"
+    english_action = "Rebuild English version…" if has_english else "Make English version…"
+    has_any_transcript = has_transcript or has_english
+    lang_selector = ""
+    if has_english:
+        orig_opt = '<option value="orig">Original</option>' if has_transcript else ""
+        lang_selector = (
+            '<label>Language\n'
+            '      <select id="transcript-lang">\n'
+            '        <option value="en" selected>English</option>\n'
+            f"        {orig_opt}\n"
+            '        <option value="both">Side-by-side</option>\n'
+            "      </select>\n"
+            "    </label>"
+        )
+    download_links = []
+    if has_english:
+        download_links.append(
+            f'<a href="{_esc(media_url(data_dir, english_vtt))}" download>English VTT</a>'
+        )
+        if english_ass.is_file():
+            download_links.append(
+                f'<a href="{_esc(media_url(data_dir, english_ass))}" download>English ASS</a>'
+            )
+        if english_srt.is_file():
+            download_links.append(
+                f'<a href="{_esc(media_url(data_dir, english_srt))}" download>English SRT</a>'
+            )
+    if has_transcript:
+        download_links.append(
+            f'<a href="{_esc(media_url(data_dir, captions_file))}" download>download WebVTT</a>'
+        )
     transcript_ready = (
         f"""
   <div class="transcript-meta" id="transcript-meta">Loading transcript…</div>
   <div class="transcript-controls">
     <input class="transcript-search" id="transcript-search" type="search"
       placeholder="search every spoken word…" autocomplete="off">
+    {lang_selector}
     <label id="transcript-filter-wrap" hidden>Filter
       <select id="transcript-filter">
         <option value="all">all segments</option>
@@ -211,7 +312,7 @@ def detail_html(info: dict, data_dir: Path, job: dict | None = None) -> bytes:
     </label>
     <button type="button" id="toggle-lanes" hidden>Hide timeline</button>
     <button type="button" id="toggle-cc">Enable video CC</button>
-    <a href="{_esc(media_url(data_dir, captions_file))}" download>download WebVTT</a>
+    {" ".join(download_links)}
   </div>
   <div class="speaker-lanes" id="speaker-lanes" hidden>
     <div class="lanes-head">
@@ -256,22 +357,50 @@ def detail_html(info: dict, data_dir: Path, job: dict | None = None) -> bytes:
     <span class="meta">Click a segment’s speaker label to assign it.</span>
   </div>
 """
-        if has_transcript
+        if has_any_transcript
         else ""
     )
     use_mt_default = transcript_engine == "multitalker-parakeet"
+    english_buttons = []
+    if video and not no_audio:
+        english_buttons.append(
+            f'<button type="button" id="open-english">{english_action}</button>'
+        )
+    if has_english and video:
+        english_buttons.append(
+            '<button type="button" id="export-english-mkv">Download bilingual MKV</button>'
+        )
+        english_buttons.append(
+            '<button type="button" id="open-english-vlc">Open in VLC</button>'
+        )
+    en_model_desc = f"{en_cfg['provider']} / {en_cfg['model']}"
+    en_error_html = (
+        f'<p class="dialog-error">{_esc(en_config_error)}</p>' if en_config_error else ""
+    )
+    en_source_val = "" if transcript_language == "und" else transcript_language
+    en_job_id = english_job["job_id"] if english_job else ""
     parts.append(
         f"""
-<section class="transcript" id="transcript-panel" data-ready="{str(has_transcript).lower()}">
-  <h2>Spoken transcript</h2>
-  <p class="meta">Local speech recognition · spoken words only; sound-effect descriptions are not mixed in.</p>
+<section class="transcript" id="transcript-panel" data-ready="{str(has_any_transcript).lower()}"
+  data-has-transcript="{str(has_transcript).lower()}" data-has-english="{str(has_english).lower()}"
+  data-has-dub="{str(has_english_dub).lower()}" data-est-dub="{est_with_dub}"
+  data-est-no-dub="{est_no_dub}" data-english-job-id="{_esc(en_job_id)}">
+  <h2>Spoken transcript &amp; English</h2>
+  <p class="meta">Local speech recognition · optional English captions and multi-speaker voiceover dub.</p>
   <div class="actions">
     <button type="button" id="open-transcribe">{transcript_action}</button>
+    {" ".join(english_buttons)}
   </div>
+  <div id="english-mkv-status" class="meta"></div>
   <div class="transcript-progress" id="transcript-progress" hidden>
     <span class="transcript-progress-value" id="transcript-progress-value">0%</span>
     <span class="transcript-progress-label" id="transcript-progress-label">queued</span>
     <div class="transcript-progress-track"><div class="transcript-progress-fill" id="transcript-progress-fill"></div></div>
+  </div>
+  <div class="transcript-progress" id="english-progress" hidden>
+    <span class="transcript-progress-value" id="english-progress-value">0%</span>
+    <span class="transcript-progress-label" id="english-progress-label">queued</span>
+    <div class="transcript-progress-track"><div class="transcript-progress-fill" id="english-progress-fill"></div></div>
   </div>
   {transcript_ready}
 </section>
@@ -317,6 +446,24 @@ def detail_html(info: dict, data_dir: Path, job: dict | None = None) -> bytes:
     <button type="button" id="cancel-transcribe">Cancel</button>
     <button type="button" id="configured-transcribe"{' hidden' if use_mt_default else ''}>Use these settings</button>
     <button type="button" class="primary" id="default-transcribe">{'Replace with defaults' if has_transcript else 'Yes — transcribe with defaults'}</button>
+  </div>
+</dialog>
+<dialog id="english-dialog">
+  <h2>{'Rebuild English version' if has_english else 'Make English version'}</h2>
+  <p class="meta">Translates with <strong>{_esc(en_model_desc)}</strong>{' (reusing existing local transcript)' if has_transcript else ' after local Whisper transcription'}, builds English VTT/ASS/SRT subtitles, and optionally synthesizes a multi-speaker voiceover dub.</p>
+  <p class="dialog-estimate" id="english-estimate">Estimated time: ~{est_with_dub} min with voiceover dub (~{est_no_dub} min subtitles only).</p>
+  {en_error_html}
+  <div class="fields">
+    <label><span>Voiceover dub</span>
+      <span><input type="checkbox" id="english-include-dub" checked> Include multi-speaker English voiceover dub</span>
+    </label>
+    <label>Source language
+      <input id="english-source-lang" maxlength="3" placeholder="auto-detect, or zh / ja / de" value="{_esc(en_source_val)}">
+    </label>
+  </div>
+  <div class="dialog-actions">
+    <button type="button" id="cancel-english">Cancel</button>
+    <button type="button" class="primary" id="start-english"{' disabled' if en_config_error else ''}>{'Rebuild English version' if has_english else 'Start English build'}</button>
   </div>
 </dialog>
 """

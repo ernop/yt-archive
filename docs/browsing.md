@@ -464,7 +464,12 @@ own, and a new page opens with it off. What the video page adds:
 - `T` or the wide button gives the video 86% of the window height instead of
   72%. The player remembers the choice, as it does captions.
 - With a transcript, `C`, the player's CC button and the transcript's caption
-  button all switch the same captions.
+  button all switch the same captions (cycling English, Original, and off when
+  an English version exists). **Cover burned-in captions** draws cues on an
+  opaque black band over the lower area of the video.
+- When an English voiceover dub exists, `B` or the player's **Audio** control
+  switches between Original audio and English dub in sync with the video
+  ([english.md](english.md)).
 
 Keys that scroll the page (Up, Down, Home, End, PageUp, PageDown) act on the
 player only while it has keyboard focus: after clicking it, tabbing into it or

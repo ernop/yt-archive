@@ -7,10 +7,16 @@ import sqlite3
 import uuid
 from pathlib import Path
 
-from ..paths import transcript_json_path, transcript_vtt_path
+from ..paths import (
+    english_has_dub,
+    english_transcript_json_path,
+    english_transcript_vtt_path,
+    transcript_json_path,
+    transcript_vtt_path,
+)
 
 from .core import _now, connect
-from .transcripts import _replace_transcript_conn
+from .transcripts import _replace_english_conn, _replace_transcript_conn
 
 
 def _work_public(row: sqlite3.Row) -> dict:
@@ -197,6 +203,22 @@ def append_work_log(data_dir: Path, job_id: str, line: str) -> None:
         conn.close()
 
 
+def find_open_work(data_dir: Path, video_id: str, kind: str) -> dict | None:
+    conn = connect(data_dir)
+    try:
+        row = conn.execute(
+            """
+            SELECT * FROM work_jobs
+            WHERE video_id=? AND kind=? AND status IN ('queued', 'running')
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (video_id, kind),
+        ).fetchone()
+        return _work_public(row) if row else None
+    finally:
+        conn.close()
+
+
 def has_queued_work(data_dir: Path) -> bool:
     conn = connect(data_dir)
     try:
@@ -239,6 +261,33 @@ def recover_work_jobs(data_dir: Path) -> int:
                         published = True
                 except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
                     published = False
+            elif row["kind"] == "english":
+                en_path = english_transcript_json_path(data_dir, row["video_id"])
+                en_vtt = english_transcript_vtt_path(data_dir, row["video_id"])
+                try:
+                    cfg = json.loads(row["config"] or "{}")
+                except json.JSONDecodeError:
+                    cfg = {}
+                needs_dub = bool(cfg.get("include_dub"))
+                has_dub = english_has_dub(data_dir, row["video_id"])
+                if en_path.is_file() and en_vtt.is_file() and (not needs_dub or has_dub):
+                    try:
+                        artifact = json.loads(en_path.read_text(encoding="utf-8"))
+                        vtt_sha256 = hashlib.sha256(en_vtt.read_bytes()).hexdigest()
+                        expected_generation = f"{row['id']}:{row['attempts']}"
+                        if (
+                            artifact.get("work_key") == row["work_key"]
+                            and artifact.get("generation_id") == expected_generation
+                            and artifact.get("vtt_sha256") == vtt_sha256
+                        ):
+                            _replace_english_conn(conn, artifact)
+                            conn.execute(
+                                "UPDATE videos SET has_english=1, has_english_dub=? WHERE video_id=?",
+                                (1 if has_dub else 0, row["video_id"]),
+                            )
+                            published = True
+                    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+                        published = False
             conn.execute(
                 """
                 UPDATE work_jobs SET

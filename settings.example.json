@@ -1,3 +1,14 @@
 {
-  "live_clip_max_seconds": 3600
+  "live_clip_max_seconds": 3600,
+  "english": {
+    "provider": "openai",
+    "model": "gpt-6-luna",
+    "effort": "low",
+    "api_key": "",
+    "ollama_url": "http://127.0.0.1:11434",
+    "diarize_python": "",
+    "kokoro_model_dir": "",
+    "chunk_size": 120,
+    "concurrency": 6
+  }
 }

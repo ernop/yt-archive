@@ -470,6 +470,7 @@
     box-shadow: 0 0 0 2px var(--mp-bg), 0 0 0 4px var(--mp-accent);
 }
 
+.mp-audio-track[aria-pressed="true"],
 .mp-cc[aria-pressed="true"],
 .mp-wide[aria-pressed="true"],
 .mp-repeat[aria-pressed="true"] {

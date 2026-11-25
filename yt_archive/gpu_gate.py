@@ -22,9 +22,22 @@ WHISPER_SPEED = 10
 MULTITALKER_GB = 5.5
 MULTITALKER_SPEED = 20
 
-# A transcript clicked for on the video page is waited on; one run by hand is backfill.
+# pyannote/speaker-diarization-community-1 peaked at 2.3 GB on 63 minutes of speech
+# (2026-11-24) and 12.3 GB on 2 hours in matthoom's measurements; 13 GB covers long videos.
+DIARIZE_GB = 13.0
+
+# Kokoro v1.0 ONNX on CUDA peaked at 1.3 GB on 50 segments via `gpu run` (2026-11-25,
+# 11.8x realtime); 2.5 GB keeps 1.2 GB margin.
+KOKORO_GB = 2.5
+
+# Ollama fits as many layers as free memory allows, so it holds the GPU alone.
+OLLAMA_LEAST_GB = 12.0
+
+# A transcript or English build clicked for on the video page is waited on; CLI runs are backfill.
 CLICKED = {"who": "ytarchive transcripts", "lane": "now"}
 BY_HAND = {"who": "ytarchive transcribe, run by hand", "lane": "backfill"}
+ENGLISH_CLICKED = {"who": "ytarchive english", "lane": "now"}
+ENGLISH_BY_HAND = {"who": "ytarchive english, run by hand", "lane": "backfill"}
 
 
 def gate_path() -> Path:

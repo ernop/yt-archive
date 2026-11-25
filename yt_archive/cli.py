@@ -8,6 +8,7 @@ from pathlib import Path
 from . import db
 from .audio import dump_soundtrack
 from .download import download
+from .english import build_english, export_english_mkv
 from .framesheet import make_shots
 from .lyrics import place_pending_lyrics
 from .paths import (
@@ -70,6 +71,14 @@ def main(argv: list[str] | None = None) -> int:
     transcribe_p.add_argument("--language", default="", help="ISO code; blank auto-detects")
     transcribe_p.add_argument("--beam-size", type=int, default=5)
 
+    english_p = sub.add_parser(
+        "english", help="build English subtitles, transcript, and optional voiceover dub"
+    )
+    english_p.add_argument("target", help="YouTube or X (tweet) URL, or archive id")
+    english_p.add_argument("--no-dub", action="store_true", help="skip Kokoro English voiceover dub")
+    english_p.add_argument("--language", default="", help="source ISO language code; blank auto-detects")
+    english_p.add_argument("--mkv", action="store_true", help="also export bilingual MKV for VLC")
+
     sub.add_parser("list", help="list archived videos")
     sub.add_parser("reindex", help="rebuild the sqlite catalog from data/")
 
@@ -101,6 +110,14 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
         return _transcribe(data_dir, args.target, cfg)
+    if args.cmd == "english":
+        return _english(
+            data_dir,
+            args.target,
+            include_dub=not args.no_dub,
+            source_language=args.language,
+            make_mkv=args.mkv,
+        )
     if args.cmd == "list":
         from .db import list_videos
 
@@ -181,4 +198,28 @@ def _transcribe(data_dir: Path, target: str, config: dict) -> int:
         f"transcript: {len(artifact['segments'])} spoken segments"
         f"{extra}{lang}, model={artifact['model']}"
     )
+    return 0
+
+
+def _english(
+    data_dir: Path,
+    target: str,
+    *,
+    include_dub: bool = True,
+    source_language: str = "",
+    make_mkv: bool = False,
+) -> int:
+    video_id = parse_video_id(target)
+    artifact = build_english(
+        data_dir,
+        video_id,
+        {"include_dub": include_dub, "source_language": source_language},
+    )
+    print(
+        f"english: {len(artifact['segments'])} segments, "
+        f"model={artifact.get('provider')}/{artifact.get('model')}"
+    )
+    if make_mkv:
+        mkv = export_english_mkv(data_dir, video_id)
+        print(f"mkv: {mkv} ({mkv.stat().st_size / 1e6:.1f} MB)")
     return 0

@@ -244,6 +244,61 @@ def transcript_is_complete(data_dir: Path, video_id: str) -> bool:
         return False
 
 
+def english_transcript_json_path(data_dir: Path, video_id: str) -> Path:
+    return condensed_dir(data_dir, video_id) / "transcript.en.json"
+
+
+def english_transcript_vtt_path(data_dir: Path, video_id: str) -> Path:
+    return condensed_dir(data_dir, video_id) / "transcript.en.vtt"
+
+
+def english_ass_path(data_dir: Path, video_id: str) -> Path:
+    return condensed_dir(data_dir, video_id) / "subtitles.en.ass"
+
+
+def english_srt_path(data_dir: Path, video_id: str) -> Path:
+    return condensed_dir(data_dir, video_id) / "subtitles.en.srt"
+
+
+def orig_srt_path(data_dir: Path, video_id: str) -> Path:
+    return condensed_dir(data_dir, video_id) / "subtitles.orig.srt"
+
+
+def english_dub_path(data_dir: Path, video_id: str) -> Path:
+    return condensed_dir(data_dir, video_id) / "dub.en.m4a"
+
+
+def english_mkv_path(data_dir: Path, video_id: str) -> Path:
+    return condensed_dir(data_dir, video_id) / "english.mkv"
+
+
+def english_is_complete(data_dir: Path, video_id: str) -> bool:
+    json_path = english_transcript_json_path(data_dir, video_id)
+    vtt_path = english_transcript_vtt_path(data_dir, video_id)
+    if not json_path.is_file() or not vtt_path.is_file():
+        return False
+    try:
+        artifact = json.loads(json_path.read_text(encoding="utf-8"))
+        expected = artifact.get("vtt_sha256") or ""
+        actual = hashlib.sha256(vtt_path.read_bytes()).hexdigest()
+        return bool(expected) and actual == expected
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
+def english_has_dub(data_dir: Path, video_id: str) -> bool:
+    dub = english_dub_path(data_dir, video_id)
+    try:
+        return dub.is_file() and dub.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def english_mkv_filename(video_id: str, title: str = "", channel: str = "") -> str:
+    stem = mp3_filename(video_id, title, channel).removesuffix(".mp3")
+    return f"{stem}-en.mkv"
+
+
 def restrict_filename(text: str, *, fallback: str = "untitled", max_len: int = 80) -> str:
     """Keep a title fragment in [A-Za-z0-9._-]; stricter than --restrict-filenames."""
     text = unicodedata.normalize("NFKD", text or "")
@@ -420,6 +475,8 @@ def load_archive_info(data_dir: Path, video_id: str) -> dict:
     info["has_framesheet"] = bool(framesheet_paths(data_dir, video_id))
     info["has_soundtrack"] = soundtrack_path(data_dir, video_id).is_file()
     info["has_transcript"] = transcript_is_complete(data_dir, video_id)
+    info["has_english"] = english_is_complete(data_dir, video_id)
+    info["has_english_dub"] = english_has_dub(data_dir, video_id)
     info["shot_files"] = sorted(p.name for p in shots_dir(data_dir, video_id).glob("*.png"))
     info["needs"] = archive_needs(data_dir, video_id, archive)
     return info

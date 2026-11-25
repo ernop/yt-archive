@@ -7,6 +7,8 @@ from pathlib import Path
 
 from ..paths import (
     card_thumb_path,
+    english_is_complete,
+    english_transcript_json_path,
     folder_disk_bytes,
     list_archived_ids,
     load_archive_info,
@@ -16,7 +18,7 @@ from ..paths import (
 )
 
 from .core import connect, db_path
-from .transcripts import _replace_transcript_conn
+from .transcripts import _replace_english_conn, _replace_transcript_conn
 
 
 VIDEO_SORT_ORDERS = {
@@ -50,6 +52,8 @@ def _row_from_info(info: dict, disk_bytes: int | None = None) -> dict:
         "has_framesheet": 1 if info.get("has_framesheet") else 0,
         "has_soundtrack": 1 if info.get("has_soundtrack") else 0,
         "has_transcript": 1 if info.get("has_transcript") else 0,
+        "has_english": 1 if info.get("has_english") else 0,
+        "has_english_dub": 1 if info.get("has_english_dub") else 0,
         "needs": ",".join(info.get("needs") or []),
         "added_via": info.get("added_via") or "",
     }
@@ -58,8 +62,8 @@ def _row_from_info(info: dict, disk_bytes: int | None = None) -> dict:
 _VIDEO_COLUMNS = (
     "video_id", "title", "channel", "channel_id", "duration", "upload_date",
     "description", "video_file", "file_size", "disk_bytes", "downloaded_at", "shots_detected",
-    "shots_kept", "has_video", "has_framesheet", "has_soundtrack", "has_transcript", "needs",
-    "added_via",
+    "shots_kept", "has_video", "has_framesheet", "has_soundtrack", "has_transcript",
+    "has_english", "has_english_dub", "needs", "added_via",
 )
 _UPSERT_VIDEO = (
     f"INSERT INTO videos ({', '.join(_VIDEO_COLUMNS)}) "
@@ -90,6 +94,8 @@ def rebuild(data_dir: Path) -> int:
         conn.execute("DELETE FROM videos")
         conn.execute("DELETE FROM transcripts")
         conn.execute("DELETE FROM transcript_segments")
+        conn.execute("DELETE FROM english_transcripts")
+        conn.execute("DELETE FROM english_segments")
         for video_id in ids:
             conn.execute(
                 _UPSERT_VIDEO,
@@ -102,6 +108,13 @@ def rebuild(data_dir: Path) -> int:
                 try:
                     artifact = json.loads(transcript_path.read_text(encoding="utf-8"))
                     _replace_transcript_conn(conn, artifact)
+                except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+                    pass
+            en_path = english_transcript_json_path(data_dir, video_id)
+            if english_is_complete(data_dir, video_id):
+                try:
+                    en_artifact = json.loads(en_path.read_text(encoding="utf-8"))
+                    _replace_english_conn(conn, en_artifact)
                 except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
                     pass
         conn.commit()
@@ -135,10 +148,15 @@ def list_videos(
                         WHERE ts.video_id=videos.video_id
                           AND (ts.text LIKE ? OR ts.speaker LIKE ?)
                       )
+                      OR EXISTS (
+                        SELECT 1 FROM english_segments es
+                        WHERE es.video_id=videos.video_id
+                          AND (es.text LIKE ? OR es.speaker LIKE ?)
+                      )
                     )"""
                 )
                 needle = f"%{word}%"
-                params.extend([needle, needle, needle, needle, needle, needle])
+                params.extend([needle, needle, needle, needle, needle, needle, needle, needle])
             sql += " WHERE " + " AND ".join(clauses)
         sql += f" ORDER BY {VIDEO_SORT_ORDERS[normalize_video_sort(sort)]}"
         rows = conn.execute(sql, params).fetchall()
@@ -173,10 +191,15 @@ def list_creator_videos(
                     WHERE ts.video_id=videos.video_id
                       AND (ts.text LIKE ? OR ts.speaker LIKE ?)
                   )
+                  OR EXISTS (
+                    SELECT 1 FROM english_segments es
+                    WHERE es.video_id=videos.video_id
+                      AND (es.text LIKE ? OR es.speaker LIKE ?)
+                  )
                 )"""
             )
             needle = f"%{word}%"
-            params.extend([needle, needle, needle, needle, needle])
+            params.extend([needle, needle, needle, needle, needle, needle, needle])
         sql = "SELECT * FROM videos WHERE " + " AND ".join(clauses)
         sql += f" ORDER BY {VIDEO_SORT_ORDERS[normalize_video_sort(sort)]}"
         rows = conn.execute(sql, params).fetchall()
@@ -262,6 +285,8 @@ def _public(row: sqlite3.Row) -> dict:
         "has_framesheet": bool(row["has_framesheet"]),
         "has_soundtrack": bool(row["has_soundtrack"]),
         "has_transcript": bool(row["has_transcript"]),
+        "has_english": bool(row["has_english"]),
+        "has_english_dub": bool(row["has_english_dub"]),
         "needs": [need for need in (row["needs"] or "").split(",") if need],
         "added_via": row["added_via"] or "",
     }

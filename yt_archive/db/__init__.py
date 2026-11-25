@@ -13,7 +13,14 @@ from .videos import (
     archive_disk_bytes,
     archive_needs_summary,
 )
-from .transcripts import replace_transcript, delete_transcript, get_transcript
+from .transcripts import (
+    replace_transcript,
+    delete_transcript,
+    get_transcript,
+    replace_english_transcript,
+    delete_english_transcript,
+    get_english_transcript,
+)
 from .adds import (
     ADD_ROUTES,
     check_add_route,
@@ -46,6 +53,7 @@ from .jobs import (
 )
 from .work import (
     enqueue_work,
+    find_open_work,
     get_work_job,
     claim_next_work,
     update_work_job,
@@ -83,6 +91,7 @@ __all__ = [
     "count_videos",
     "db_path",
     "defer_job",
+    "delete_english_transcript",
     "delete_transcript",
     "dismiss_failed_job",
     "drop_pending_lyrics",
@@ -90,8 +99,10 @@ __all__ = [
     "enqueue_work",
     "find_channel_listing",
     "find_open_job",
+    "find_open_work",
     "finish_job",
     "first_add",
+    "get_english_transcript",
     "get_job",
     "get_listing",
     "get_transcript",
@@ -113,6 +124,7 @@ __all__ = [
     "recover_work_jobs",
     "remove_all_waiting_jobs",
     "remove_waiting_job",
+    "replace_english_transcript",
     "replace_transcript",
     "save_listing",
     "save_pending_lyrics",

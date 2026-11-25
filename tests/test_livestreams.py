@@ -448,11 +448,11 @@ class LiveHelpersAndSettingsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "settings.json"
             self.assertEqual(
-                load_settings(path),
-                {"live_clip_max_seconds": float(DEFAULT_LIVE_CLIP_MAX_SECONDS)},
+                load_settings(path)["live_clip_max_seconds"],
+                float(DEFAULT_LIVE_CLIP_MAX_SECONDS),
             )
             path.write_text(json.dumps({"live_clip_max_seconds": 1800}), encoding="utf-8")
-            self.assertEqual(load_settings(path), {"live_clip_max_seconds": 1800.0})
+            self.assertEqual(load_settings(path)["live_clip_max_seconds"], 1800.0)
 
             for bad in (
                 "{not json",

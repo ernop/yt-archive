@@ -120,3 +120,126 @@ def get_transcript(data_dir: Path, video_id: str) -> dict | None:
         }
     finally:
         conn.close()
+
+
+def replace_english_transcript(data_dir: Path, artifact: dict, *, has_dub: bool | None = None) -> None:
+    conn = connect(data_dir)
+    try:
+        _replace_english_conn(conn, artifact)
+        if has_dub is None:
+            conn.execute(
+                "UPDATE videos SET has_english=1 WHERE video_id=?",
+                (artifact["video_id"],),
+            )
+        else:
+            conn.execute(
+                "UPDATE videos SET has_english=1, has_english_dub=? WHERE video_id=?",
+                (1 if has_dub else 0, artifact["video_id"]),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_english_transcript(data_dir: Path, video_id: str) -> None:
+    conn = connect(data_dir)
+    try:
+        conn.execute("DELETE FROM english_segments WHERE video_id=?", (video_id,))
+        conn.execute("DELETE FROM english_transcripts WHERE video_id=?", (video_id,))
+        conn.execute(
+            "UPDATE videos SET has_english=0, has_english_dub=0 WHERE video_id=?",
+            (video_id,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _replace_english_conn(conn: sqlite3.Connection, artifact: dict) -> None:
+    video_id = artifact["video_id"]
+    conn.execute(
+        """
+        INSERT INTO english_transcripts (
+          video_id, engine, provider, model, source_language,
+          duration, created_at, full_text
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(video_id) DO UPDATE SET
+          engine=excluded.engine,
+          provider=excluded.provider,
+          model=excluded.model,
+          source_language=excluded.source_language,
+          duration=excluded.duration,
+          created_at=excluded.created_at,
+          full_text=excluded.full_text
+        """,
+        (
+            video_id,
+            artifact.get("engine") or "",
+            artifact.get("provider") or "",
+            artifact.get("model") or "",
+            artifact.get("source_language") or "",
+            float(artifact.get("duration") or 0),
+            artifact.get("created_at") or "",
+            artifact.get("full_text") or "",
+        ),
+    )
+    conn.execute("DELETE FROM english_segments WHERE video_id=?", (video_id,))
+    for index, segment in enumerate(artifact.get("segments") or []):
+        conn.execute(
+            """
+            INSERT INTO english_segments (
+              video_id, segment_index, start, end, text, dub_text, speaker
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                video_id,
+                int(segment.get("index", index)),
+                float(segment.get("start") or 0),
+                float(segment.get("end") or 0),
+                segment.get("text") or "",
+                segment.get("dub_text") or "",
+                segment.get("speaker") or "",
+            ),
+        )
+
+
+def get_english_transcript(data_dir: Path, video_id: str) -> dict | None:
+    conn = connect(data_dir)
+    try:
+        row = conn.execute(
+            "SELECT * FROM english_transcripts WHERE video_id=?", (video_id,)
+        ).fetchone()
+        if not row:
+            return None
+        segments = conn.execute(
+            """
+            SELECT * FROM english_segments
+            WHERE video_id=? ORDER BY segment_index
+            """,
+            (video_id,),
+        ).fetchall()
+        return {
+            "video_id": row["video_id"],
+            "engine": row["engine"],
+            "provider": row["provider"],
+            "model": row["model"],
+            "language": "en",
+            "source_language": row["source_language"],
+            "duration": row["duration"],
+            "created_at": row["created_at"],
+            "full_text": row["full_text"],
+            "segments": [
+                {
+                    "index": segment["segment_index"],
+                    "start": segment["start"],
+                    "end": segment["end"],
+                    "text": segment["text"],
+                    "dub_text": segment["dub_text"],
+                    "speaker": segment["speaker"],
+                    "words": [],
+                }
+                for segment in segments
+            ],
+        }
+    finally:
+        conn.close()

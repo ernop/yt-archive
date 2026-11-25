@@ -1,4 +1,12 @@
 const {vid, site} = JSON.parse(document.getElementById('page-data').textContent);
+const transcriptPanel = document.getElementById('transcript-panel');
+const panelData = transcriptPanel ? transcriptPanel.dataset : {};
+const hasOriginal = panelData.hasTranscript === 'true';
+const hasEnglish = panelData.hasEnglish === 'true';
+const hasEnglishDub = panelData.hasDub === 'true';
+const englishEstDub = Number(panelData.estDub) || 0;
+const englishEstNoDub = Number(panelData.estNoDub) || 0;
+const openEnglishJobId = panelData.englishJobId || '';
 const STEP_NAMES = {download: 'downloading', shots: 'making shots', audio: 'making MP3 audio', queued: 'waiting in the queue'};
 async function post(path, body) {
   const res = await fetch(path, {
@@ -112,11 +120,11 @@ function syncTranscribeDialog() {
   if (configuredBtn) configuredBtn.hidden = isMultitalker;
   if (defaultBtn) {
     if (isMultitalker) {
-      defaultBtn.textContent = transcriptReady
+      defaultBtn.textContent = hasOriginal
         ? 'Replace with multi-speaker'
         : 'Yes — transcribe multi-speaker';
     } else {
-      defaultBtn.textContent = transcriptReady
+      defaultBtn.textContent = hasOriginal
         ? 'Replace with defaults'
         : 'Yes — transcribe with defaults';
     }
@@ -164,7 +172,7 @@ async function startTranscription(config) {
     const res = await fetch('/api/transcribe', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({video_id: vid, config, force: transcriptReady}),
+      body: JSON.stringify({video_id: vid, config, force: hasOriginal}),
     });
     const job = await res.json();
     if (!res.ok) throw new Error(job.error || res.statusText);
@@ -199,6 +207,147 @@ function setTranscribeProgress(value, label) {
   transcribeLabel.textContent = label;
   transcribeFill.style.width = pct + '%';
 }
+
+const englishDialog = document.getElementById('english-dialog');
+const openEnglishBtn = document.getElementById('open-english');
+const englishProgress = document.getElementById('english-progress');
+const englishValue = document.getElementById('english-progress-value');
+const englishLabel = document.getElementById('english-progress-label');
+const englishFill = document.getElementById('english-progress-fill');
+const englishDubCheck = document.getElementById('english-include-dub');
+const englishEstimate = document.getElementById('english-estimate');
+
+function setEnglishProgress(value, label) {
+  if (!englishValue || !englishLabel || !englishFill) return;
+  const pct = Math.max(0, Math.min(100, Math.round(Number(value || 0) * 100)));
+  englishValue.textContent = pct + '%';
+  englishLabel.textContent = label;
+  englishFill.style.width = pct + '%';
+}
+
+function updateEnglishEstimate() {
+  if (!englishEstimate || !englishDubCheck) return;
+  if (englishDubCheck.checked) {
+    englishEstimate.textContent =
+      'Estimated time: ~' + englishEstDub + ' min with voiceover dub (~'
+      + englishEstNoDub + ' min subtitles only).';
+  } else {
+    englishEstimate.textContent =
+      'Estimated time: ~' + englishEstNoDub + ' min (subtitles and transcript only).';
+  }
+}
+
+if (englishDubCheck) {
+  englishDubCheck.addEventListener('change', updateEnglishEstimate);
+}
+if (openEnglishBtn && englishDialog) {
+  openEnglishBtn.onclick = () => {
+    updateEnglishEstimate();
+    englishDialog.showModal();
+  };
+}
+const cancelEnglishBtn = document.getElementById('cancel-english');
+if (cancelEnglishBtn && englishDialog) {
+  cancelEnglishBtn.onclick = () => englishDialog.close();
+}
+
+async function watchEnglishWork(jobId) {
+  if (openEnglishBtn) openEnglishBtn.disabled = true;
+  if (englishProgress) {
+    englishProgress.hidden = false;
+    englishProgress.className = 'transcript-progress';
+  }
+  try {
+    for (;;) {
+      const jres = await fetch('/api/work/' + encodeURIComponent(jobId), {cache: 'no-store'});
+      const current = await jres.json();
+      if (!jres.ok) throw new Error(current.error || jres.statusText);
+      setEnglishProgress(current.progress || 0, current.message || current.status);
+      if (current.status === 'done') {
+        setEnglishProgress(1, 'English version ready — reloading');
+        setTimeout(() => location.reload(), 500);
+        return;
+      }
+      if (current.status === 'error') {
+        throw new Error(current.error || 'English build failed');
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  } catch (err) {
+    if (englishProgress) englishProgress.classList.add('error');
+    if (englishLabel) englishLabel.textContent = err.message;
+    if (openEnglishBtn) openEnglishBtn.disabled = false;
+  }
+}
+
+const startEnglishBtn = document.getElementById('start-english');
+if (startEnglishBtn && englishDialog) {
+  startEnglishBtn.onclick = async () => {
+    englishDialog.close();
+    if (openEnglishBtn) openEnglishBtn.disabled = true;
+    if (englishProgress) {
+      englishProgress.hidden = false;
+      englishProgress.className = 'transcript-progress';
+    }
+    setEnglishProgress(0, 'queueing English build…');
+    try {
+      const config = {
+        include_dub: Boolean(englishDubCheck && englishDubCheck.checked),
+        source_language: (document.getElementById('english-source-lang')?.value || '').trim(),
+      };
+      const job = await post('/api/english', {
+        video_id: vid,
+        config,
+        force: hasEnglish,
+      });
+      await watchEnglishWork(job.job_id);
+    } catch (err) {
+      if (englishProgress) englishProgress.classList.add('error');
+      if (englishLabel) englishLabel.textContent = err.message;
+      if (openEnglishBtn) openEnglishBtn.disabled = false;
+    }
+  };
+}
+if (openEnglishJobId) {
+  setEnglishProgress(0, 'English build in progress…');
+  watchEnglishWork(openEnglishJobId);
+}
+
+const mkvBtn = document.getElementById('export-english-mkv');
+const vlcBtn = document.getElementById('open-english-vlc');
+const mkvStatus = document.getElementById('english-mkv-status');
+
+async function exportEnglishMkv(openVlc) {
+  const buttons = [mkvBtn, vlcBtn].filter(Boolean);
+  buttons.forEach(b => { b.disabled = true; });
+  if (mkvStatus) {
+    mkvStatus.className = 'meta';
+    mkvStatus.textContent = openVlc ? 'Building MKV and opening in VLC…' : 'Building bilingual MKV…';
+  }
+  try {
+    const data = await post('/api/english/mkv', {video_id: vid, open_vlc: Boolean(openVlc)});
+    if (openVlc) {
+      if (mkvStatus) mkvStatus.textContent = 'Opened bilingual MKV in VLC.';
+    } else {
+      const a = document.createElement('a');
+      a.href = data.url;
+      a.download = data.download || 'english.mkv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      if (mkvStatus) mkvStatus.textContent = 'Bilingual MKV ready (' + (data.download || 'english.mkv') + ').';
+    }
+  } catch (err) {
+    if (mkvStatus) {
+      mkvStatus.className = 'meta error';
+      mkvStatus.textContent = err.message;
+    }
+  } finally {
+    buttons.forEach(b => { b.disabled = false; });
+  }
+}
+if (mkvBtn) mkvBtn.onclick = () => exportEnglishMkv(false);
+if (vlcBtn) vlcBtn.onclick = () => exportEnglishMkv(true);
 
 function html(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -235,6 +384,10 @@ const SPEAKER_PALETTE = [
 ];
 const UNASSIGNED_COLOR = {fg: '#a9d6ff', bg: 'rgba(169,214,255,0.16)', bgHi: 'rgba(169,214,255,0.36)'};
 
+let originalTranscript = null;
+let englishTranscript = null;
+const transcriptLangSel = document.getElementById('transcript-lang');
+let transcriptLang = hasEnglish ? 'en' : 'orig';
 let transcript = null;
 let model = null;
 let rowByIndex = new Map();
@@ -380,17 +533,64 @@ function buildOverlapModel(data) {
 
 function modelLabel(data) {
   if (!data) return '';
+  if (data.provider && data.language === 'en') {
+    const src = data.source_language || 'auto';
+    const dubTag = hasEnglishDub ? ' · voiceover dub' : '';
+    return 'English (' + src + ' → en) · ' + data.provider + '/' + data.model + dubTag;
+  }
   if (data.engine === 'multitalker-parakeet') return 'Nemotron-3 + Parakeet Ultra';
   const probability = Math.round((data.language_probability || 0) * 100);
   const lang = (data.language || 'unknown language') + (probability ? ' ' + probability + '%' : '');
   return lang + ' · ' + (data.model || 'Whisper');
 }
 
+function isEnglishMode() {
+  return (transcriptLang === 'en' || transcriptLang === 'both') && Boolean(englishTranscript);
+}
+
+function applyActiveTranscript() {
+  const active = transcriptLang === 'orig'
+    ? (originalTranscript || englishTranscript)
+    : (englishTranscript || originalTranscript);
+  if (active) setTranscriptData(active);
+}
+
 async function loadTranscript() {
-  const res = await fetch('/api/transcript/' + encodeURIComponent(vid));
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || res.statusText);
-  setTranscriptData(data);
+  const tasks = [];
+  if (hasEnglish) {
+    tasks.push(
+      fetch('/api/english/' + encodeURIComponent(vid)).then(async res => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        englishTranscript = data;
+      })
+    );
+  }
+  if (hasOriginal) {
+    tasks.push(
+      fetch('/api/transcript/' + encodeURIComponent(vid)).then(async res => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        originalTranscript = data;
+      })
+    );
+  }
+  await Promise.all(tasks);
+  if (transcriptLangSel) {
+    const saved = localStorage.getItem('ytarchive.transcript.lang');
+    if (saved && [...transcriptLangSel.options].some(o => o.value === saved)) {
+      transcriptLangSel.value = saved;
+      transcriptLang = saved;
+    } else {
+      transcriptLang = transcriptLangSel.value || 'en';
+    }
+    transcriptLangSel.onchange = () => {
+      transcriptLang = transcriptLangSel.value;
+      localStorage.setItem('ytarchive.transcript.lang', transcriptLang);
+      applyActiveTranscript();
+    };
+  }
+  applyActiveTranscript();
 }
 
 function setTranscriptData(data) {
@@ -511,9 +711,14 @@ function segmentHtml(segment, matched, hidden) {
         'Simultaneous with ' + [...new Set(partners.map(p => p.other.speaker || 'other'))].join(', ')
       ) + '">∥</span>'
     : '';
+  const showBoth = transcriptLang === 'both' && isEnglishMode();
   const cls = 'segment'
     + (matched ? ' match' : '')
-    + (info && info.overlapsPrev ? ' ov-child' : '');
+    + (info && info.overlapsPrev ? ' ov-child' : '')
+    + (showBoth ? ' segment-both' : '');
+  const origCol = showBoth
+    ? '<div class="segment-orig">' + html(segment.text_orig || '') + '</div>'
+    : '';
   return '<div class="' + cls + '"'
     + (hidden ? ' hidden' : '')
     + ' style="--spk-color:' + color.fg + '"'
@@ -523,7 +728,7 @@ function segmentHtml(segment, matched, hidden) {
     + '><span class="segment-time">' + clock(segment.start) + ovMark + '</span>'
     + '<button type="button" class="segment-speaker" title="assign or group speaker: '
     + html(segment.speaker || 'Unassigned') + '">' + html(segment.speaker || 'Unassigned') + '</button>'
-    + '<div class="segment-text">' + body + '</div></div>';
+    + '<div class="segment-text">' + body + '</div>' + origCol + '</div>';
 }
 
 function paintTranscript() {
@@ -543,6 +748,7 @@ function paintTranscript() {
     }
     const passQuery = !query
       || segment.text.toLowerCase().includes(query)
+      || (segment.text_orig || '').toLowerCase().includes(query)
       || (segment.speaker || '').toLowerCase().includes(query);
     const visible = passFilter && passQuery;
     if (visible) shown += 1;
@@ -681,13 +887,16 @@ if (captionBox) {
 }
 
 async function changeSegmentSpeaker(index, speaker) {
-  const res = await fetch('/api/transcript/speaker', {
+  const english = isEnglishMode();
+  const res = await fetch(english ? '/api/english/speaker' : '/api/transcript/speaker', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({video_id: vid, segment_index: index, speaker}),
   });
   const data = await res.json();
   if (!res.ok) return alert(data.error || res.statusText);
+  if (english) englishTranscript = data;
+  else originalTranscript = data;
   setTranscriptData(data);
 }
 
@@ -704,7 +913,8 @@ if (renameSpeaker) renameSpeaker.onclick = async () => {
   const oldName = document.getElementById('speaker-old').value;
   const newName = document.getElementById('speaker-new').value.trim();
   if (!oldName || !newName) return;
-  const res = await fetch('/api/transcript/rename-speaker', {
+  const english = isEnglishMode();
+  const res = await fetch(english ? '/api/english/rename-speaker' : '/api/transcript/rename-speaker', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({video_id: vid, old: oldName, new: newName}),
@@ -712,6 +922,8 @@ if (renameSpeaker) renameSpeaker.onclick = async () => {
   const data = await res.json();
   if (!res.ok) return alert(data.error || res.statusText);
   document.getElementById('speaker-new').value = '';
+  if (english) englishTranscript = data;
+  else originalTranscript = data;
   setTranscriptData(data);
 };
 
@@ -1193,17 +1405,57 @@ if (playerVideo) {
 }
 const toggleCc = document.getElementById('toggle-cc');
 if (toggleCc && playerVideo) {
-  const track = playerVideo.textTracks[0];
-  const paintCc = () => toggleCc.textContent =
-    track && track.mode === 'showing' ? 'Disable video CC' : 'Enable video CC';
+  const tracks = () => Array.from(playerVideo.textTracks || []);
+  const paintCc = () => {
+    const showing = tracks().find(t => t.mode === 'showing');
+    toggleCc.textContent = showing
+      ? 'CC: ' + (showing.label || 'On')
+      : 'Enable video CC';
+  };
   toggleCc.onclick = () => {
     const player = window.MediaPlayer && MediaPlayer.get(playerVideo);
     if (player) player.toggleCaptions();
-    else if (track) track.mode = track.mode === 'showing' ? 'hidden' : 'showing';
+    else {
+      const list = tracks();
+      const idx = list.findIndex(t => t.mode === 'showing');
+      list.forEach(t => { t.mode = 'hidden'; });
+      const next = idx + 1;
+      if (next < list.length) list[next].mode = 'showing';
+    }
     paintCc();
   };
   document.getElementById('ytp').addEventListener('media-player:captions', paintCc);
   paintCc();
+}
+const coverBurnedCc = document.getElementById('cover-burned-cc');
+if (coverBurnedCc && playerVideo) {
+  const ytp = document.getElementById('ytp');
+  const applyCueLayout = () => {
+    const cover = Boolean(coverBurnedCc.checked);
+    if (ytp) ytp.classList.toggle('cover-burned-cc', cover);
+    for (const track of Array.from(playerVideo.textTracks || [])) {
+      if (!track.cues) continue;
+      for (const cue of Array.from(track.cues)) {
+        if ('snapToLines' in cue) {
+          cue.snapToLines = !cover;
+          cue.line = cover ? 83 : 'auto';
+          cue.size = cover ? 86 : 100;
+        }
+      }
+    }
+  };
+  coverBurnedCc.checked = localStorage.getItem('ytarchive.player.coverBurnedCc') === 'true';
+  coverBurnedCc.onchange = () => {
+    localStorage.setItem('ytarchive.player.coverBurnedCc', String(coverBurnedCc.checked));
+    applyCueLayout();
+  };
+  playerVideo.querySelectorAll('track').forEach(el => {
+    el.addEventListener('load', applyCueLayout);
+  });
+  for (const track of Array.from(playerVideo.textTracks || [])) {
+    track.addEventListener('cuechange', applyCueLayout);
+  }
+  applyCueLayout();
 }
 if (transcriptReady) loadTranscript().catch(err => {
   document.getElementById('transcript-meta').textContent = err.message;

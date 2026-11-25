@@ -42,7 +42,8 @@ class SmokeTests(unittest.TestCase):
         self.work = db.enqueue_work(self.data, work_key="smoke", video_id=VIDEO, kind="transcribe",
                                     config={"model": "large-v3"}, force=False)
         work_queue = SimpleNamespace(get=lambda job_id: db.get_work_job(self.data, job_id),
-                                     submit_transcription=Mock(side_effect=ValueError("not in the smoke test")))
+                                     submit_transcription=Mock(side_effect=ValueError("not in the smoke test")),
+                                     submit_english=Mock(side_effect=ValueError("not in the smoke test")))
         self.handler_class = make_handler(self.data, self.queue, work_queue)
         self.key = bookmarklet_key(self.data)
         no_processes = patch("subprocess.Popen", side_effect=AssertionError("a route started a process"))
@@ -84,6 +85,7 @@ class SmokeTests(unittest.TestCase):
             f"/api/job/{self.job['job_id']}": 200, "/api/job/nope": 404,
             f"/api/work/{self.work['job_id']}": 200, "/api/work/nope": 404,
             f"/api/transcript/{VIDEO}": 200, f"/api/transcript/{TWEET}": 404, "/api/transcript/bad": 404,
+            f"/api/english/{VIDEO}": 404, f"/api/english/{TWEET}": 404, "/api/english/bad": 404,
             "/api/creators/nope": 404,
         }
         for path, expected in routes.items():
@@ -106,7 +108,9 @@ class SmokeTests(unittest.TestCase):
     def test_every_post_route_refuses_an_empty_request_without_a_server_error(self):
         for path in ("/api/creators", "/api/creators/nope/get", "/api/update-archive", "/api/jobs/clear-waiting",
                      "/api/jobs/abc123/remove", "/api/jobs/abc123/dismiss", "/api/transcribe",
-                     "/api/transcript/speaker", "/api/transcript/rename-speaker", "/api/open-folder", "/api/grab",
+                     "/api/transcript/speaker", "/api/transcript/rename-speaker", "/api/english",
+                     "/api/english/speaker", "/api/english/rename-speaker", "/api/english/mkv",
+                     "/api/open-folder", "/api/grab",
                      "/api/lyrics", "/api/played-stop", "/api/get", "/api/no-such-route"):
             with self.subTest(path=path):
                 code, _ = self.request(path, method="POST")

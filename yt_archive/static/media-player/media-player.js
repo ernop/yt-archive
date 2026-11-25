@@ -20,7 +20,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, function (root) {
     'use strict';
 
-    const VERSION = '1.2.0';
+    const VERSION = '1.3.0';
 
     const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
     // Notch intervals in tenths of a second, so divisibility stays in integers: 0.1 s to 12 h.
@@ -195,6 +195,32 @@
         });
     }
 
+    /** Alternate audio tracks as [{src: '', label: originalLabel}, {src, label, default}].
+        Index 0 is always the media element's own audio. Missing src or label is a page bug. */
+    function normalizeAudioTracks(list, originalLabel) {
+        if (list == null) {
+            return [];
+        }
+        if (!Array.isArray(list)) {
+            throw new TypeError('audioTracks must be an array of {src, label}');
+        }
+        if (!list.length) {
+            return [];
+        }
+        const extras = list.map(function (entry, index) {
+            const src = entry && entry.src;
+            const label = entry && entry.label;
+            if (typeof src !== 'string' || !src.trim()) {
+                throw new TypeError(`audio track ${index} has no src`);
+            }
+            if (typeof label !== 'string' || !label.trim()) {
+                throw new TypeError(`audio track ${index} has no label`);
+            }
+            return { src: src.trim(), label: label.trim(), default: Boolean(entry.default) };
+        });
+        return [{ src: '', label: (originalLabel && String(originalLabel).trim()) || 'Original', default: false }, ...extras];
+    }
+
     /** Index of the last of the ascending `times` at or before `t`; -1 when none is. */
     function lastAtOrBefore(times, t) {
         let low = 0;
@@ -288,7 +314,7 @@
     // players that cannot (CAPABILITIES, Player.capabilities). Letters are matched lowercase, with
     // Shift as its own flag, so Shift+J and J are different keys. A `once` entry ignores the
     // repeats of a held key: holding S saves one frame, holding Space does not flicker.
-    const CAPABILITIES = ['video', 'captions', 'pip', 'markers', 'items', 'wide', 'sound', 'frames', 'repeat'];
+    const CAPABILITIES = ['video', 'captions', 'pip', 'markers', 'items', 'wide', 'sound', 'frames', 'repeat', 'audioTracks'];
     const letter = (e, keys, shift) => keys.includes(e.key) && e.key.length === 1 && e.shiftKey === shift;
     const KEYS = [
         { keys: 'Space, K', once: true, help: 'Play or pause', scope: 'page',
@@ -330,6 +356,8 @@
             run: (p, e) => p.nudgeVolume(e.key === 'ArrowUp' ? VOLUME_STEP : -VOLUME_STEP) },
         { keys: 'M', once: true, help: 'Mute or unmute', scope: 'page', needs: ['sound'],
             match: (e) => letter(e, 'm', false), run: (p) => p.toggleMute() },
+        { keys: 'B', once: true, help: 'Switch audio track', scope: 'page', needs: ['audioTracks'],
+            match: (e) => letter(e, 'b', false), run: (p) => p.cycleAudioTrack() },
         { keys: 'C', once: true, help: 'Captions on or off', scope: 'page', needs: ['video', 'captions'],
             match: (e) => letter(e, 'c', false), run: (p) => p.toggleCaptions() },
         { keys: 'S', once: true, help: 'Save this frame as a picture', scope: 'page', needs: ['video', 'frames'],
@@ -485,6 +513,13 @@
             this.sound = options.sound !== false;
             // The page's own level, before any remembered volume: unmuting a silent player returns to it.
             this.pageVolume = media.volume || 1;
+            this.userVolume = media.volume;
+            this.userMuted = Boolean(media.muted);
+            this.internalMute = false;
+            this.originalAudioLabel = options.originalAudioLabel || 'Original';
+            this.audioTracks = this.sound ? normalizeAudioTracks(options.audioTracks, this.originalAudioLabel) : [];
+            this.audioTrackIndex = 0;
+            this.dubAudio = null;
             this.wide = Boolean(options.wide);
             this.halfButtons = Boolean(options.halfJumps);
             this.skipSeconds = skipAmounts(options.skips);
@@ -666,6 +701,8 @@
             this.resumeBtn.hidden = true;
             this.repeatBtn = iconButton('mp-repeat', 'repeat', 'Repeat (R)');
             this.repeatBtn.hidden = true;
+            this.audioTrackBtn = textButton('mp-audio-track', '', 'Switch audio track (B)');
+            this.audioTrackBtn.hidden = true;
             this.ccBtn = textButton('mp-cc', 'CC', 'Captions (C)');
             this.ccBtn.hidden = true;
             this.frameBtn = iconButton('mp-frame', 'camera', 'Save this frame as a picture (S)');
@@ -681,8 +718,8 @@
 
             this.grow = this.isVideo ? el('span', 'mp-grow') : this.flashEl;
             controls.append(this.prevItemBtn, this.playBtn, this.nextItemBtn, skips, half, speed, volume, this.legend,
-                this.grow, this.resumeBtn, this.repeatBtn, this.ccBtn, this.frameBtn, this.wideBtn, this.pipBtn,
-                this.fullBtn, this.helpBtn);
+                this.grow, this.resumeBtn, this.repeatBtn, this.audioTrackBtn, this.ccBtn, this.frameBtn, this.wideBtn,
+                this.pipBtn, this.fullBtn, this.helpBtn);
             return controls;
         }
 
@@ -743,12 +780,19 @@
             }
             const volume = store.get('volume');
             if (this.sound && volume !== null && Number.isFinite(Number(volume))) {
-                this.media.volume = clamp(Number(volume), 0, 1);
+                this.userVolume = clamp(Number(volume), 0, 1);
+                this.media.volume = this.userVolume;
             }
-            const track = this.isVideo ? this.captionTrack() : null;
-            if (track && store.get('captions') === '1') {
-                track.mode = 'showing';
-                this.notify('captions', { showing: true });
+            const tracks = this.isVideo ? this.captionTracks() : [];
+            if (tracks.length && store.get('captions') === '1') {
+                tracks.forEach((track, index) => {
+                    track.mode = index === 0 ? 'showing' : 'hidden';
+                });
+                this.notify('captions', { showing: true, index: 0, track: tracks[0] });
+            }
+            const defaultAudio = this.audioTracks.findIndex((track, index) => index > 0 && track.default);
+            if (defaultAudio > 0) {
+                this.setAudioTrack(defaultAudio, { silent: true });
             }
             if (this.wide && store.get('wide') === '1') {
                 document.documentElement.classList.add('mp-wide');
@@ -764,6 +808,7 @@
                 this.started = true;
                 active = this;
                 this.paintPlayState();
+                this.syncDubState('play');
                 this.loop();
                 this.claimSession();
                 this.watchFrames();
@@ -771,12 +816,14 @@
             });
             on(media, 'pause', () => {
                 this.paintPlayState();
+                this.syncDubState('pause');
                 this.paint();
                 this.savePosition();
                 this.poke();
             });
             on(media, 'ended', () => {
                 this.paintPlayState();
+                this.syncDubState('pause');
                 this.savePosition();
                 // An element with loop starts again by itself and never ends. A source cannot, so it
                 // starts again here, after the page's own handlers for the end have run.
@@ -792,8 +839,12 @@
                     this.paint();
                 }
             });
-            on(media, 'seeking', () => this.noteSeek());
+            on(media, 'seeking', () => {
+                this.noteSeek();
+                this.syncDubState('seek');
+            });
             on(media, 'seeked', () => {
+                this.syncDubState('seek');
                 this.paint();
                 this.paintBuffered();
                 this.sessionPosition();
@@ -805,9 +856,22 @@
             }));
             on(media, 'loadedmetadata', () => this.afterMetadata());
             on(media, 'progress', () => this.paintBuffered());
-            on(media, 'ratechange', () => this.paintSpeed());
-            on(media, 'volumechange', () => this.paintVolume());
-            on(media, 'waiting', () => this.root.classList.add('is-waiting'));
+            on(media, 'ratechange', () => {
+                this.syncDubState('rate');
+                this.paintSpeed();
+            });
+            on(media, 'volumechange', () => {
+                if (!this.internalMute && this.audioTrackIndex === 0) {
+                    this.userVolume = media.volume;
+                    this.userMuted = Boolean(media.muted);
+                }
+                this.paintVolume();
+            });
+            on(media, 'waiting', () => {
+                this.root.classList.add('is-waiting');
+                this.syncDubState('pause');
+            });
+            on(media, 'playing', () => this.syncDubState('play'));
             ['playing', 'canplay', 'pause', 'error'].forEach((type) => on(media, type, () => this.root.classList.remove('is-waiting')));
             on(media, 'error', () => this.showError());
             on(media, 'loadstart', () => this.clearError());
@@ -817,6 +881,7 @@
                 this.jumpFrom = null;
                 this.settled = 0;
                 this.resumeBtn.hidden = true;
+                this.syncDubState('pause');
                 if (this.ownResumeKey) {
                     this.resumeKey = defaultResumeKey(media);
                 }
@@ -848,11 +913,12 @@
             on(this.fasterBtn, 'click', () => this.bumpSpeed(1));
             on(this.muteBtn, 'click', () => this.toggleMute());
             on(this.volumeInput, 'input', () => {
-                media.volume = Number(this.volumeInput.value) / 100;
-                media.muted = media.volume === 0;
+                const level = Number(this.volumeInput.value) / 100;
+                this.applyAudioLevel(level, level === 0);
             });
             on(this.resumeBtn, 'click', () => this.resume());
             on(this.repeatBtn, 'click', () => this.toggleRepeat());
+            on(this.audioTrackBtn, 'click', () => this.cycleAudioTrack());
             on(this.prevItemBtn, 'click', () => this.stepItem(-1));
             on(this.nextItemBtn, 'click', () => this.stepItem(1));
             on(this.halfBackBtn, 'click', () => this.halfJump(-1));
@@ -1096,41 +1162,195 @@
             this.flash(formatSpeed(this.media.playbackRate));
         }
 
-        toggleMute() {
-            const media = this.media;
-            if (media.muted || media.volume === 0) {
-                media.muted = false;
-                if (media.volume === 0) {
-                    media.volume = this.pageVolume;
-                }
+        applyAudioLevel(volume, muted) {
+            this.userVolume = clamp(volume, 0, 1);
+            this.userMuted = Boolean(muted);
+            if (this.audioTrackIndex > 0 && this.dubAudio) {
+                this.dubAudio.volume = this.userVolume;
+                this.dubAudio.muted = this.userMuted;
+                this.internalMute = true;
+                this.media.muted = true;
+                this.internalMute = false;
+                this.paintVolume();
             } else {
-                media.muted = true;
+                this.media.volume = this.userVolume;
+                this.media.muted = this.userMuted;
             }
-            this.flash(media.muted ? 'Muted' : `Volume ${Math.round(media.volume * 100)}%`);
+        }
+
+        toggleMute() {
+            if (this.userMuted || this.userVolume === 0) {
+                const level = this.userVolume === 0 ? this.pageVolume : this.userVolume;
+                this.applyAudioLevel(level, false);
+            } else {
+                this.applyAudioLevel(this.userVolume, true);
+            }
+            this.flash(this.userMuted ? 'Muted' : `Volume ${Math.round(this.userVolume * 100)}%`);
         }
 
         nudgeVolume(delta) {
-            const media = this.media;
-            media.muted = false;
-            media.volume = clamp(Math.round((media.volume + delta) * 100) / 100, 0, 1);
-            this.flash(`Volume ${Math.round(media.volume * 100)}%`);
+            const next = clamp(Math.round((this.userVolume + delta) * 100) / 100, 0, 1);
+            this.applyAudioLevel(next, false);
+            this.flash(`Volume ${Math.round(this.userVolume * 100)}%`);
+        }
+
+        /** Replaces alternate audio tracks at runtime. Index 0 stays the media's original audio. */
+        setAudioTracks(list, originalLabel) {
+            if (originalLabel !== undefined) {
+                this.originalAudioLabel = originalLabel || 'Original';
+            }
+            this.audioTracks = this.sound ? normalizeAudioTracks(list, this.originalAudioLabel) : [];
+            const defaultIndex = this.audioTracks.findIndex((track, index) => index > 0 && track.default);
+            this.setAudioTrack(defaultIndex > 0 ? defaultIndex : 0, { silent: true });
+        }
+
+        /** Switches between Original (0) and a synced alternate audio track (1..N). */
+        setAudioTrack(index, opts) {
+            if (!this.audioTracks.length) {
+                this.audioTrackIndex = 0;
+                this.paintAudioTrack();
+                return;
+            }
+            const next = clamp(Math.trunc(Number(index) || 0), 0, this.audioTracks.length - 1);
+            const track = this.audioTracks[next];
+            this.audioTrackIndex = next;
+            if (next === 0) {
+                if (this.dubAudio) {
+                    this.dubAudio.pause();
+                }
+                this.internalMute = true;
+                this.media.volume = this.userVolume;
+                this.media.muted = this.userMuted;
+                this.internalMute = false;
+            } else {
+                if (!this.dubAudio) {
+                    const audio = new root.Audio();
+                    audio.preload = 'auto';
+                    audio.addEventListener('error', () => {
+                        const current = this.audioTracks[this.audioTrackIndex];
+                        const error = audio.error;
+                        const reason = error ? (MEDIA_ERRORS[error.code] || `error ${error.code}`) : 'failed to load';
+                        this.showError(`Cannot play audio track "${current ? current.label : ''}": ${reason}`);
+                    });
+                    this.dubAudio = audio;
+                }
+                if (this.dubAudio.getAttribute('src') !== track.src) {
+                    this.dubAudio.src = track.src;
+                }
+                this.dubAudio.volume = this.userVolume;
+                this.dubAudio.muted = this.userMuted;
+                this.dubAudio.playbackRate = this.media.playbackRate || 1;
+                this.internalMute = true;
+                this.media.muted = true;
+                this.internalMute = false;
+                this.syncDubState(this.media.paused || this.media.ended ? 'seek' : 'play');
+            }
+            this.paintAudioTrack();
+            this.paintVolume();
+            if (!(opts && opts.silent)) {
+                this.flash(`Audio: ${track.label}`);
+            }
+            this.notify('audio-track', { index: next, track });
+        }
+
+        cycleAudioTrack() {
+            if (this.audioTracks.length < 2) {
+                return;
+            }
+            this.setAudioTrack((this.audioTrackIndex + 1) % this.audioTracks.length);
+        }
+
+        syncDubState(kind) {
+            if (this.audioTrackIndex === 0 || !this.dubAudio) {
+                return;
+            }
+            const dub = this.dubAudio;
+            const t = this.media.currentTime;
+            if (kind === 'pause') {
+                dub.pause();
+                return;
+            }
+            if (kind === 'rate') {
+                dub.playbackRate = this.media.playbackRate || 1;
+                return;
+            }
+            if (kind === 'seek') {
+                if (Number.isFinite(t)) {
+                    try {
+                        dub.currentTime = t;
+                    } catch (error) {
+                        // Metadata not loaded yet; playing handler aligns once ready.
+                    }
+                }
+                return;
+            }
+            if (kind === 'play') {
+                dub.playbackRate = this.media.playbackRate || 1;
+                dub.volume = this.userVolume;
+                dub.muted = this.userMuted;
+                if (Number.isFinite(t) && Math.abs((dub.currentTime || 0) - t) > 0.08) {
+                    try {
+                        dub.currentTime = t;
+                    } catch (error) {
+                        // Wait for canplay if metadata has not arrived.
+                    }
+                }
+                if (!this.media.paused && !this.media.ended) {
+                    const p = dub.play();
+                    if (p) {
+                        p.catch((error) => {
+                            if (error.name !== 'AbortError') {
+                                this.showError(`Cannot play audio track: ${error.message}`);
+                            }
+                        });
+                    }
+                }
+            }
+        }
+
+        captionTracks() {
+            return Array.from(this.media.textTracks || []).filter((track) => track.kind === 'captions' || track.kind === 'subtitles');
         }
 
         captionTrack() {
-            return Array.from(this.media.textTracks || []).find((track) => track.kind === 'captions' || track.kind === 'subtitles') || null;
+            return this.captionTracks()[0] || null;
+        }
+
+        activeCaptionIndex() {
+            return this.captionTracks().findIndex((track) => track.mode === 'showing');
+        }
+
+        setCaptionTrack(index, opts) {
+            const tracks = this.captionTracks();
+            if (!tracks.length) {
+                return;
+            }
+            const next = index >= 0 && index < tracks.length ? index : -1;
+            tracks.forEach((track, i) => {
+                track.mode = i === next ? 'showing' : 'hidden';
+            });
+            const showing = next >= 0;
+            const activeTrack = showing ? tracks[next] : null;
+            store.set('captions', showing ? '1' : '0');
+            this.paintCaptions();
+            if (!(opts && opts.silent)) {
+                if (tracks.length === 1) {
+                    this.flash(showing ? 'Captions on' : 'Captions off');
+                } else {
+                    this.flash(showing ? `Captions: ${activeTrack.label || activeTrack.language || 'On'}` : 'Captions off');
+                }
+            }
+            this.notify('captions', { showing, index: next, track: activeTrack });
         }
 
         toggleCaptions() {
-            const track = this.captionTrack();
-            if (!track) {
+            const tracks = this.captionTracks();
+            if (!tracks.length) {
                 return;
             }
-            track.mode = track.mode === 'showing' ? 'hidden' : 'showing';
-            const showing = track.mode === 'showing';
-            store.set('captions', showing ? '1' : '0');
-            this.paintCaptions();
-            this.flash(showing ? 'Captions on' : 'Captions off');
-            this.notify('captions', { showing });
+            const current = this.activeCaptionIndex();
+            const next = current + 1 >= tracks.length ? -1 : current + 1;
+            this.setCaptionTrack(next);
         }
 
         pipSupported() {
@@ -1348,6 +1568,7 @@
                 sound: this.sound,
                 frames: this.isVideo && (this.isElement || Boolean(this.frameSaver)),
                 repeat: this.repeatSupported(),
+                audioTracks: this.sound && this.audioTracks.length > 1,
             };
         }
 
@@ -1551,6 +1772,16 @@
                 return;
             }
             const tick = () => {
+                if (this.audioTrackIndex > 0 && this.dubAudio && !this.media.paused && !this.media.seeking
+                    && this.dubAudio.readyState >= 2) {
+                    const drift = Math.abs(this.dubAudio.currentTime - this.media.currentTime);
+                    if (drift > 0.12) {
+                        this.dubAudio.currentTime = this.media.currentTime;
+                    }
+                    if (this.dubAudio.paused && !this.media.ended) {
+                        this.syncDubState('play');
+                    }
+                }
                 this.paint();
                 this.frame = this.media.paused ? 0 : requestAnimationFrame(tick);
             };
@@ -1571,6 +1802,7 @@
             this.paintPlayState();
             this.paintSpeed();
             this.paintVolume();
+            this.paintAudioTrack();
             this.paintCaptions();
             this.paintRepeat();
             this.paintItems();
@@ -1652,27 +1884,48 @@
             if (!this.sound) {
                 return;
             }
-            const media = this.media;
-            const percent = Math.round(media.volume * 100);
-            const silent = media.muted || percent === 0;
+            const percent = Math.round(this.userVolume * 100);
+            const muted = this.userMuted;
+            const silent = muted || percent === 0;
             this.volumeInput.value = String(percent);
-            this.volumeInput.style.setProperty('--mp-volume', `${media.muted ? 0 : percent}%`);
-            setText(this.volumeEl, media.muted ? 'Muted' : String(percent));
-            this.unitEl.hidden = media.muted;
+            this.volumeInput.style.setProperty('--mp-volume', `${muted ? 0 : percent}%`);
+            setText(this.volumeEl, muted ? 'Muted' : String(percent));
+            this.unitEl.hidden = muted;
             if (this.volumeIcon !== silent) {
                 this.volumeIcon = silent;
                 this.muteBtn.innerHTML = ICONS[silent ? 'muted' : 'volume'];
             }
-            setLabel(this.muteBtn, media.muted ? 'Unmute (M)' : 'Mute (M)');
-            this.muteBtn.setAttribute('aria-pressed', String(media.muted));
-            store.set('volume', String(media.volume));
+            setLabel(this.muteBtn, muted ? 'Unmute (M)' : 'Mute (M)');
+            this.muteBtn.setAttribute('aria-pressed', String(muted));
+            store.set('volume', String(this.userVolume));
+        }
+
+        paintAudioTrack() {
+            const hasAlt = this.sound && this.audioTracks.length > 1;
+            this.audioTrackBtn.hidden = !hasAlt;
+            if (hasAlt) {
+                const track = this.audioTracks[this.audioTrackIndex] || this.audioTracks[0];
+                setText(this.audioTrackBtn, `Audio: ${track.label}`);
+                this.audioTrackBtn.setAttribute('aria-pressed', String(this.audioTrackIndex > 0));
+                setLabel(this.audioTrackBtn, `Audio: ${track.label} — click or press B to switch`);
+            }
         }
 
         paintCaptions() {
-            const track = this.isVideo ? this.captionTrack() : null;
-            this.ccBtn.hidden = !track;
-            if (track) {
-                this.ccBtn.setAttribute('aria-pressed', String(track.mode === 'showing'));
+            const tracks = this.isVideo ? this.captionTracks() : [];
+            this.ccBtn.hidden = !tracks.length;
+            if (tracks.length) {
+                const activeIndex = this.activeCaptionIndex();
+                const showing = activeIndex >= 0;
+                this.ccBtn.setAttribute('aria-pressed', String(showing));
+                if (tracks.length > 1 && showing) {
+                    const short = (tracks[activeIndex].language || tracks[activeIndex].label || 'ON').toUpperCase();
+                    setText(this.ccBtn, `CC: ${short}`);
+                    setLabel(this.ccBtn, `Captions: ${tracks[activeIndex].label || short} (C)`);
+                } else {
+                    setText(this.ccBtn, 'CC');
+                    setLabel(this.ccBtn, 'Captions (C)');
+                }
             }
         }
 
@@ -1922,6 +2175,8 @@
             halfJumps: data.halfJumps !== undefined ? true : undefined,
             skips: data.skips,
             sound: data.sound === 'off' ? false : undefined,
+            audioTracks: data.audioTracks ? JSON.parse(data.audioTracks) : undefined,
+            originalAudioLabel: data.originalAudioLabel,
         };
     }
 
@@ -2040,6 +2295,7 @@
         chooseScale,
         normalizeMarkers,
         normalizeKinds,
+        normalizeAudioTracks,
         adjacentMarker,
         lastAtOrBefore,
         halfJumpTarget,

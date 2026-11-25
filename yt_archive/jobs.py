@@ -21,10 +21,17 @@ from .lyrics import place_pending_lyrics
 from .paths import (
     VIDEO_ID_RE,
     archive_needs,
+    english_ass_path,
+    english_dub_path,
+    english_mkv_path,
+    english_srt_path,
+    english_transcript_json_path,
+    english_transcript_vtt_path,
     find_video_file,
     framesheet_paths,
     is_tweet,
     load_archive_info,
+    orig_srt_path,
     parse_video_id,
     skips_default_shots,
     soundtrack_path,
@@ -243,6 +250,13 @@ class JobQueue:
                 for path in (
                     transcript_json_path(self.data_dir, video_id),
                     transcript_vtt_path(self.data_dir, video_id),
+                    english_transcript_json_path(self.data_dir, video_id),
+                    english_transcript_vtt_path(self.data_dir, video_id),
+                    english_ass_path(self.data_dir, video_id),
+                    english_srt_path(self.data_dir, video_id),
+                    orig_srt_path(self.data_dir, video_id),
+                    english_dub_path(self.data_dir, video_id),
+                    english_mkv_path(self.data_dir, video_id),
                 ):
                     if path.is_file():
                         path.unlink()
@@ -251,12 +265,16 @@ class JobQueue:
                     video_id,
                     "transcript",
                     "captions",
+                    "english_transcript",
+                    "english_captions",
+                    "english_dub",
                     "audio_stream",
                     "live_clip",
                     "duration",
                 )
                 db.delete_transcript(self.data_dir, video_id)
-                log("cleared stale transcript state for reget")
+                db.delete_english_transcript(self.data_dir, video_id)
+                log("cleared stale transcript and English artifacts for reget")
             video = find_video_file(self.data_dir, video_id)
             # A reget that already downloaded before a restart does not download again.
             did_download = video is None or (job["force_video"] and job["download"] != "done")

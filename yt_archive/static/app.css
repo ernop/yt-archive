@@ -196,6 +196,14 @@ a.qtitle:hover { text-decoration: underline; }
   font-size: .88rem; font-weight: 700; text-align: left; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; }
 .segment-text { color: var(--fg); line-height: 1.5; }
+.segment.segment-both { grid-template-columns: 5.5rem 7.5rem minmax(0, 1fr) minmax(0, 1fr); }
+.segment-orig { color: #fff; line-height: 1.5; border-left: 1px solid #333; padding-left: .75rem; }
+#english-mkv-status { margin-top: .45rem; }
+#english-mkv-status:empty { display: none; }
+#english-mkv-status.error { color: #ff8c8c; font-weight: 700; }
+dialog .dialog-estimate { color: #fff; font-size: .92rem; font-weight: 700; margin: .5rem 0 0; }
+dialog .dialog-error { color: #ff8c8c; font-size: .9rem; font-weight: 700; margin: .5rem 0 0;
+  padding: .45rem .6rem; border: 1px solid #8a3333; border-radius: 5px; background: #261212; }
 .word { border-radius: 3px; }
 .word:hover { background: #554b19; color: #fff; }
 .word.word-ov { border-bottom: 2px solid var(--ov-color, #ffd240); padding-bottom: 1px; }
@@ -289,6 +297,7 @@ dialog .primary { background: #2e7441; border-color: #4a9d61; font-weight: 700; 
   .qrow { grid-template-columns: 5.5rem minmax(0, 1fr) auto; }
   .qrow > .qdetail, .qrow > .qtime { display: none; }
   .segment { grid-template-columns: 5rem 6rem minmax(0, 1fr); gap: .5rem; }
+  .segment.segment-both { grid-template-columns: 5rem 6rem minmax(0, 1fr) minmax(0, 1fr); }
   .lanes-ruler-row, .lane-row { grid-template-columns: 5.5rem minmax(0, 1fr); }
   dialog .fields { grid-template-columns: 1fr; }
 }

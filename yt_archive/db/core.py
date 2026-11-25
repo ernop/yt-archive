@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS videos (
   has_framesheet INTEGER NOT NULL DEFAULT 0,
   has_soundtrack INTEGER NOT NULL DEFAULT 0,
   has_transcript INTEGER NOT NULL DEFAULT 0,
+  has_english INTEGER NOT NULL DEFAULT 0,
+  has_english_dub INTEGER NOT NULL DEFAULT 0,
   needs TEXT NOT NULL DEFAULT '',
   added_via TEXT NOT NULL DEFAULT ''
 );
@@ -109,6 +111,30 @@ CREATE TABLE IF NOT EXISTS transcript_segments (
 CREATE INDEX IF NOT EXISTS transcript_segments_by_video_time
   ON transcript_segments(video_id, start);
 
+CREATE TABLE IF NOT EXISTS english_transcripts (
+  video_id TEXT PRIMARY KEY,
+  engine TEXT NOT NULL DEFAULT '',
+  provider TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL DEFAULT '',
+  source_language TEXT NOT NULL DEFAULT '',
+  duration REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT '',
+  full_text TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS english_segments (
+  video_id TEXT NOT NULL,
+  segment_index INTEGER NOT NULL,
+  start REAL NOT NULL,
+  end REAL NOT NULL,
+  text TEXT NOT NULL,
+  dub_text TEXT NOT NULL DEFAULT '',
+  speaker TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY(video_id, segment_index)
+);
+CREATE INDEX IF NOT EXISTS english_segments_by_video_time
+  ON english_segments(video_id, start);
+
 CREATE TABLE IF NOT EXISTS youtube_listings (
   id TEXT PRIMARY KEY,
   url TEXT NOT NULL UNIQUE,
@@ -165,6 +191,8 @@ _MIGRATIONS = {
     "videos": (
         ("has_soundtrack", "INTEGER NOT NULL DEFAULT 0"),
         ("has_transcript", "INTEGER NOT NULL DEFAULT 0"),
+        ("has_english", "INTEGER NOT NULL DEFAULT 0"),
+        ("has_english_dub", "INTEGER NOT NULL DEFAULT 0"),
         ("needs", "TEXT NOT NULL DEFAULT ''"),
         ("added_via", "TEXT NOT NULL DEFAULT ''"),
         ("disk_bytes", "INTEGER"),

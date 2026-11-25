@@ -48,6 +48,13 @@ transcription is never automatic. See [transcription.md](transcription.md).
 `.venv/` is gitignored. A symlink at `.venv` to an already-built equivalent
 venv (torch, OpenCLIP, faster-whisper) also satisfies `./yt`.
 
+For optional English voiceover dubbing ([english.md](english.md)), install
+`kokoro-onnx` and `soundfile` into `.venv` (keeping `onnxruntime-gpu`, not CPU
+`onnxruntime`), place `kokoro-v1.0.onnx` and `voices-v1.0.bin` in
+`~/.cache/kokoro-onnx/` (or set `english.kokoro_model_dir` in gitignored
+`settings.json`), and configure the translation provider in `settings.json`
+based on `settings.example.json`.
+
 ## Media player
 
 Video pages play the video and MP3 audio in the shared media player library,
