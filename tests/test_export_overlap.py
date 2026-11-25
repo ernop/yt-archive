@@ -130,6 +130,8 @@ class ExportOverlapPageTests(unittest.TestCase):
             self.assertIn('id="toggle-annotations" aria-pressed="false" hidden', index_html)
             self.assertIn('id="ann-live" hidden', index_html)
             self.assertIn('id="ann-filter-bar" hidden', index_html)
+            self.assertIn('id="toggle-furigana" aria-pressed="true" hidden', index_html)
+            self.assertIn('id="vocab-panel" hidden', index_html)
             self.assertNotIn("data-annotations=", index_html)
             self.assertTrue(len(app_css) > 1000)
 
@@ -218,6 +220,77 @@ class ExportOverlapPageTests(unittest.TestCase):
                 text=True,
             )
             self.assertNotEqual(bad_proc.returncode, 0)
+
+            # With --study: merges furigana tokens, glosses, English, vocab, and acoustic overlaps.
+            study_src = Path(tmp) / "study.json"
+            study_src.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "language": "ja",
+                        "segments": [
+                            {
+                                "i": 0,
+                                "ja": "今日は出発しよう。",
+                                "en": "Let's head out today.",
+                                "tokens": [
+                                    {"s": 0.5, "e": 1.4, "ja": "今日", "ruby": [["今日", "きょう"]], "g": "today", "v": 0},
+                                    {"s": 1.4, "e": 1.7, "ja": "は", "ruby": "", "g": "topic", "v": 1},
+                                    {"s": 1.7, "e": 3.8, "ja": "出発しよう。", "ruby": [["出発", "しゅっぱつ"], ["しよう。", ""]], "g": "let's depart", "v": 2},
+                                ],
+                            },
+                            {
+                                "i": 1,
+                                "ja": "賛成。",
+                                "en": "Agreed.",
+                                "tokens": [
+                                    {"s": 2.4, "e": 3.5, "ja": "賛成。", "ruby": [["賛成", "さんせい"], ["。", ""]], "g": "agreed", "v": 3},
+                                ],
+                            },
+                        ],
+                        "vocab": [
+                            {"id": 0, "base": "今日", "ruby": [["今日", "きょう"]], "kana": "きょう", "romaji": "kyō", "diff": "basic", "gloss": "today", "role": "noun", "note": "", "count": 1, "times": [0.5]},
+                            {"id": 1, "base": "は", "ruby": "", "kana": "", "romaji": "wa", "diff": "basic", "gloss": "topic", "role": "particle: topic", "note": "", "count": 1, "times": [1.4]},
+                            {"id": 2, "base": "出発", "ruby": [["出発", "しゅっぱつ"]], "kana": "しゅっぱつ", "romaji": "shuppatsu", "diff": "n3", "gloss": "departure", "role": "noun", "note": "", "count": 1, "times": [1.7]},
+                            {"id": 3, "base": "賛成", "ruby": [["賛成", "さんせい"]], "kana": "さんせい", "romaji": "sansei", "diff": "n3", "gloss": "agreement", "role": "noun", "note": "", "count": 1, "times": [2.4]},
+                        ],
+                        "acoustic_overlaps": [{"start": 2.4, "end": 3.5, "speakers": ["Speaker A", "Speaker B"]}],
+                        "vocal_pulses": [{"start": 2.4, "end": 3.0, "speaker": "Speaker B"}],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            out_dir_study = Path(tmp) / "out_study"
+            proc_study = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    vid,
+                    str(out_dir_study),
+                    "--data",
+                    str(data_dir),
+                    "--study",
+                    str(study_src),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            summary_study = json.loads(proc_study.stdout)
+            self.assertEqual(summary_study["vocab"], 4)
+            study_html = (out_dir_study / "index.html").read_text(encoding="utf-8")
+            self.assertIn('id="toggle-furigana" aria-pressed="true" title=', study_html)
+            self.assertIn('id="toggle-gloss" aria-pressed="true" title=', study_html)
+            self.assertIn('id="toggle-english" aria-pressed="true" title=', study_html)
+            self.assertIn('<option value="10" selected>10s</option>', study_html)
+            study_tr = json.loads((out_dir_study / "transcript.json").read_text(encoding="utf-8"))
+            self.assertEqual(study_tr["language"], "ja")
+            self.assertEqual(len(study_tr["vocab"]), 4)
+            self.assertEqual(study_tr["segments"][0]["en"], "Let's head out today.")
+            self.assertEqual(study_tr["segments"][0]["tk"][0][4], "today")
+            self.assertEqual(len(study_tr["overlaps"]), 1)
+            self.assertEqual(len(study_tr["pulses"]), 1)
 
 
 if __name__ == "__main__":

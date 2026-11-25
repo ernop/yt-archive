@@ -123,6 +123,13 @@ button[aria-pressed="true"] { border-color: #68c77b; background: #142618; }
 input[type="search"], input[type="text"] { cursor: text; }
 input::placeholder { color: #fff; opacity: 1; }
 [hidden] { display: none !important; }
+[lang="ja"], [lang="ja"] * {
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "Yu Gothic UI", "Yu Gothic", Meiryo, "Noto Sans CJK JP", "Noto Sans JP", sans-serif;
+}
+ruby { ruby-position: over; }
+rt { font-size: .56em; font-weight: 600; color: #dbeafe; user-select: none; }
+html.no-furigana rt { display: none; }
 
 header.top {
   padding: .55rem 1rem .45rem; border-bottom: 1px solid #1d2129; background: #0a0b0e;
@@ -228,6 +235,57 @@ main.split-view { display: block; }
 .ann-live button { font-size: .76rem; padding: .12rem .4rem; margin-left: auto; }
 .lane-row { border-bottom: 1px solid #1b1f27; height: 3.05rem; }
 .lane-row:last-child { border-bottom: 0; }
+.lane-group { border-bottom: 2px solid #2b3342; }
+.lane-group:last-child { border-bottom: 0; }
+.lane-row.ja-main { height: 3.6rem; border-bottom: 1px solid #161a22; }
+html.no-furigana .lane-row.ja-main { height: 3.05rem; }
+.lane-row.lane-sub-ww { height: 2.05rem; border-bottom: 1px solid #151921; }
+.lane-row.lane-sub-en { height: 2.15rem; border-bottom: 0; }
+.lane-label.sub-lbl {
+  font-size: .74rem; font-weight: 700; color: #b9c7dc; background: #090b0f;
+  padding-left: 1.05rem; box-shadow: inset 3px 0 var(--spk-color, #fff); cursor: default;
+}
+.lane-label.sub-lbl::before { display: none; }
+.lane-block.ja-blk {
+  top: 4px; bottom: 4px; line-height: 1.25; font-size: .92rem;
+}
+.lane-block.ja-blk .lane-word {
+  top: auto; bottom: 4px; line-height: 1.25;
+}
+html.no-furigana .lane-block.ja-blk .lane-word {
+  top: 50%; bottom: auto; transform: translateY(-50%);
+}
+.lane-block.lb-ww {
+  top: 3px; bottom: 3px; border-width: 1px; border-style: solid;
+  border-color: rgba(255, 255, 255, 0.22); background: rgba(255, 255, 255, 0.05);
+  font-size: .76rem; font-weight: 600; line-height: calc(2.05rem - 8px);
+}
+.lane-block.lb-ww .lane-word { color: #dce8fb; font-weight: 600; }
+.lane-block.lb-ww .lane-word.lw-now { color: #fff; background: rgba(255, 255, 255, 0.28); }
+.lane-block.lb-en {
+  top: 3px; bottom: 3px; border-width: 1px; border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(18, 22, 30, 0.85); color: #eef3fb; font-size: .8rem; font-weight: 500;
+  line-height: calc(2.15rem - 8px); padding: 0 .45rem;
+}
+.lane-block.lb-en.now { border-color: #fff; background: var(--spk-bg-hi, rgba(124, 196, 255, 0.35)); }
+.lane-pulse {
+  position: absolute; top: 8px; bottom: 8px; min-width: 6px; border-radius: 4px;
+  border: 1px dashed var(--spk-color, #7cc4ff); background: var(--spk-bg, rgba(124, 196, 255, 0.14));
+  opacity: .72; pointer-events: auto; z-index: 2; cursor: pointer;
+}
+.lane-word.has-vocab { cursor: pointer; }
+.word-inspector {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .65rem;
+  padding: .46rem .7rem; background: #121722; border-top: 1px solid #2a3444;
+  border-left: 3px solid var(--accent); font-size: .88rem;
+}
+.wi-ja { font-size: 1.25rem; font-weight: 700; color: #fff; line-height: 1.6; }
+.wi-read { font-family: var(--mono); font-size: .82rem; color: #a9d6ff; }
+.wi-gloss { font-weight: 800; color: #fff; }
+.wi-role { font-size: .8rem; color: #cbd5e1; }
+.wi-note { font-size: .82rem; color: #fde68a; flex: 1 1 16rem; }
+.wi-btns { display: inline-flex; gap: .3rem; margin-left: auto; }
+.wi-btns button { font-size: .76rem; padding: .12rem .45rem; }
 .lane-label {
   display: flex; align-items: center; gap: .45rem; padding: 0 .6rem;
   border-right: 1px solid #222730; font-size: .88rem; font-weight: 800;
@@ -347,6 +405,60 @@ main.split-view { display: block; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .segment-text { line-height: 1.46; }
+.segment-ja { font-size: 1.02rem; line-height: 2.05; }
+html.no-furigana .segment-ja { line-height: 1.5; }
+.segment-ww {
+  margin-top: .16rem; font-size: .78rem; line-height: 1.45; color: #bcd0ea;
+  display: flex; flex-wrap: wrap; gap: .15rem .45rem;
+}
+.segment-ww .ww-pair { white-space: nowrap; cursor: pointer; }
+.segment-ww .ww-pair:hover { color: #fff; text-decoration: underline; }
+.segment-ww .ww-ja { color: #90b4e8; margin-right: .15rem; }
+.segment-en { margin-top: .2rem; font-size: .88rem; line-height: 1.42; color: #e2e8f0; }
+
+.vocab-panel {
+  margin-top: .7rem; padding: .6rem .75rem; border: 1px solid var(--border);
+  border-radius: 7px; background: var(--panel);
+}
+.vocab-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .38rem .5rem; }
+.vocab-bar h2 { margin: 0; font-size: .95rem; }
+.vocab-count { font: 700 .8rem/1.3 var(--mono); color: #9ec5fe; margin-right: .25rem; }
+.vocab-bar select, .vocab-bar input, .vocab-bar button { font-size: .82rem; padding: .2rem .46rem; }
+.vocab-bar input[type="search"] { flex: 1 1 11rem; min-width: 8rem; }
+.vocab-list { margin-top: .5rem; display: grid; gap: .32rem; max-height: 30rem; overflow-y: auto; }
+.vocab-row {
+  display: grid; grid-template-columns: minmax(9rem, 13rem) 4.6rem minmax(0, 1fr) auto auto;
+  gap: .45rem .65rem; align-items: baseline; padding: .38rem .55rem;
+  border: 1px solid #222730; border-radius: 5px; background: #10131a; font-size: .86rem;
+}
+.vocab-row.is-known { opacity: .55; }
+.v-word { display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .4rem; }
+.v-ja { font-size: 1.12rem; font-weight: 700; color: #fff; line-height: 1.7; }
+html.no-furigana .v-ja { line-height: 1.35; }
+.v-read { font-family: var(--mono); font-size: .76rem; color: #9ec5fe; }
+.v-diff {
+  display: inline-block; text-align: center; padding: .04rem .34rem; border-radius: 4px;
+  font: 800 .72rem/1.3 var(--mono); text-transform: uppercase; border: 1px solid #475569;
+  color: #fff; background: #181e29; white-space: nowrap;
+}
+.vd-mtg { border-color: #ffd240; color: #ffd240; background: #241c06; }
+.vd-slang { border-color: #ff85a2; color: #ff85a2; background: #261018; }
+.vd-n1 { border-color: #d2a8ff; color: #d2a8ff; background: #1e132b; }
+.vd-n2 { border-color: #7cc4ff; color: #7cc4ff; background: #102033; }
+.vd-n3 { border-color: #7ee787; color: #7ee787; background: #102414; }
+.vd-basic { border-color: #64748b; color: #cbd5e1; background: #141820; }
+.v-meaning { line-height: 1.42; }
+.v-gloss { font-weight: 700; color: #fff; }
+.v-role { font-size: .78rem; color: #b6c4d8; margin-left: .35rem; }
+.v-note { display: block; margin-top: .12rem; font-size: .8rem; color: #fde68a; }
+.v-times { display: flex; flex-wrap: wrap; gap: .22rem; justify-content: flex-end; max-width: 14rem; }
+.v-time {
+  font: 700 .76rem/1.25 var(--mono); padding: .08rem .34rem; border-radius: 4px;
+  color: #7cc4ff; border: 1px solid #2b384d; background: #0c111a;
+}
+.v-time:hover { background: #182336; border-color: #7cc4ff; }
+.v-known { font-size: .76rem; padding: .1rem .4rem; white-space: nowrap; }
+.v-known[aria-pressed="true"] { border-color: #68c77b; background: #142618; color: #7ee787; }
 .word { border-radius: 3px; }
 .word:hover { background: #554b19; }
 .word.word-ov { border-bottom: 2px solid var(--ov-color, var(--gold)); padding-bottom: 1px; }
@@ -424,6 +536,7 @@ main.split-view { display: block; }
   }
   main.split-view > .transcript .caption-box { flex: 1 1 0; max-height: none; min-height: 0; }
   main.split-view > .viz-stage,
+  main.split-view > .vocab-panel,
   main.split-view > .notes-panel { grid-column: 1 / -1; margin-top: 0; }
 }
 @media (max-width: 760px) {
@@ -431,6 +544,8 @@ main.split-view { display: block; }
   .ov-ruler-row, .ov-row { grid-template-columns: 5.2rem minmax(0, 1fr); }
   .segment { grid-template-columns: 4.2rem 5.5rem minmax(0, 1fr); gap: .38rem; }
   .note-row { grid-template-columns: 4rem 6rem minmax(0, 1fr) auto; }
+  .vocab-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .v-times { grid-column: 1 / -1; justify-content: flex-start; max-width: none; }
 }
 """
 
@@ -474,6 +589,44 @@ APP_JS = r"""(() => {
   let showAnnotations = false;
   let splitView = localStorage.getItem('ovpub.split') !== 'false';
   let autoScroll = localStorage.getItem('ovpub.autoScroll') !== 'false';
+
+  let hasStudy = false;
+  let showFurigana = localStorage.getItem('ovpub.furigana') !== 'false';
+  let showGloss = localStorage.getItem('ovpub.gloss') !== 'false';
+  let showEnglish = localStorage.getItem('ovpub.english') !== 'false';
+  let vocabById = new Map();
+  let knownVocab = new Set();
+  let vocabDiff = localStorage.getItem('ovpub.vocabDiff') || 'n3+';
+  let vocabSort = 'first';
+  let hideKnown = localStorage.getItem('ovpub.hideKnown') !== 'false';
+  let inspectedVocabId = null;
+
+  const DIFF_LABELS = {
+    mtg: 'MTG', slang: 'Slang', n1: 'N1', n2: 'N2', n3: 'N3', basic: 'Basic',
+  };
+  const DIFF_ORDER = {mtg: 5, slang: 4, n1: 3, n2: 2, n3: 1, basic: 0};
+
+  function rubyHtml(ruby, fallback) {
+    if (!ruby || !Array.isArray(ruby) || !ruby.length) return html(fallback || '');
+    return ruby.map(pair => {
+      const t = pair[0] || '';
+      const r = pair[1] || '';
+      if (!r) return html(t);
+      return '<ruby>' + html(t) + '<rp>(</rp><rt>' + html(r) + '</rt><rp>)</rp></ruby>';
+    }).join('');
+  }
+  function loadKnownVocab() {
+    try {
+      const arr = JSON.parse(localStorage.getItem('ovpub.knownVocab') || '[]');
+      knownVocab = new Set(Array.isArray(arr) ? arr.map(String) : []);
+    } catch { knownVocab = new Set(); }
+  }
+  function saveKnownVocab() {
+    localStorage.setItem('ovpub.knownVocab', JSON.stringify([...knownVocab]));
+  }
+  function vocabKey(v) {
+    return (v.base || '') + '|' + (v.kana || '');
+  }
 
   const DEFAULT_CATEGORIES = [
     {id: 'overlap', label: 'Cooperative overlap', color: '#ffd240'},
@@ -684,22 +837,66 @@ APP_JS = r"""(() => {
 
   function expandCompact(raw) {
     const spks = raw.speakers || [];
-    const segments = (raw.segments || []).map(s => ({
-      index: s.i,
-      start: Number(s.s),
-      end: Number(s.e),
-      speaker: spks[s.k] || '',
-      text: s.t || '',
-      words: (s.w || []).map(w => ({start: Number(w[0]), end: Number(w[1]), word: String(w[2])})),
+    const segments = (raw.segments || []).map(s => {
+      const tokens = Array.isArray(s.tk)
+        ? s.tk.map(tk => ({
+            start: Number(tk[0]),
+            end: Number(tk[1]),
+            word: String(tk[2] || ''),
+            ruby: tk[3] || '',
+            gloss: String(tk[4] || ''),
+            vid: tk[5] == null ? -1 : Number(tk[5]),
+          }))
+        : [];
+      const words = tokens.length
+        ? tokens
+        : (s.w || []).map(w => ({start: Number(w[0]), end: Number(w[1]), word: String(w[2]), ruby: '', gloss: '', vid: -1}));
+      return {
+        index: s.i,
+        start: Number(s.s),
+        end: Number(s.e),
+        speaker: spks[s.k] || '',
+        text: s.t || '',
+        en: String(s.en || ''),
+        words,
+        tokens,
+      };
+    });
+    const vocab = (raw.vocab || []).map(v => ({
+      id: Number(v.id),
+      base: String(v.b || v.base || ''),
+      ruby: v.rb || v.ruby || '',
+      kana: String(v.k || v.kana || ''),
+      romaji: String(v.rm || v.romaji || ''),
+      diff: String(v.d || v.diff || 'basic'),
+      gloss: String(v.g || v.gloss || ''),
+      role: String(v.rl || v.role || ''),
+      note: String(v.n || v.note || ''),
+      count: Number(v.c || v.count || 0),
+      times: Array.isArray(v.t || v.times) ? (v.t || v.times).map(Number) : [],
+    }));
+    const acousticOverlaps = (raw.overlaps || []).map(ov => ({
+      start: Number(ov[0]),
+      end: Number(ov[1]),
+      speakers: (ov[2] || []).map(k => spks[k] || '').filter(Boolean),
+    }));
+    const pulses = (raw.pulses || []).map(p => ({
+      start: Number(p[0]),
+      end: Number(p[1]),
+      speaker: spks[p[2]] || '',
     }));
     return {
       video_id: raw.video_id,
+      language: String(raw.language || ''),
       title: raw.title,
       channel: raw.channel,
       upload_date: raw.upload_date,
       duration: Number(raw.duration) || 0,
       chapters: raw.chapters || [],
       segments,
+      vocab,
+      acousticOverlaps,
+      pulses,
     };
   }
 
@@ -769,6 +966,13 @@ APP_JS = r"""(() => {
       }
       active.push(seg);
     }
+    for (const ov of (data.acousticOverlaps || [])) {
+      rawOverlaps.push({
+        start: ov.start, end: ov.end,
+        speakers: ov.speakers.length ? ov.speakers : ['Unassigned'],
+        indices: [],
+      });
+    }
     rawOverlaps.sort((a, b) => a.start - b.start || a.end - b.end);
     const overlapSpans = [];
     for (const ov of rawOverlaps) {
@@ -785,23 +989,46 @@ APP_JS = r"""(() => {
       }
     }
     const bySpeaker = new Map();
-    for (const s of speakers) bySpeaker.set(s, []);
+    const pulsesBySpeaker = new Map();
+    for (const s of speakers) { bySpeaker.set(s, []); pulsesBySpeaker.set(s, []); }
     for (const seg of sorted) {
       if (seg.speaker && bySpeaker.has(seg.speaker)) bySpeaker.get(seg.speaker).push(seg);
     }
+    for (const p of (data.pulses || [])) {
+      if (p.speaker && pulsesBySpeaker.has(p.speaker)) pulsesBySpeaker.get(p.speaker).push(p);
+    }
+    // Tag segments that intersect an acoustic overlap span so transcript filter='overlaps' finds them too.
+    if ((data.acousticOverlaps || []).length) {
+      for (const seg of sorted) {
+        const info = infoByIndex.get(seg.index);
+        for (const ov of overlapSpans) {
+          if (ov.end <= seg.start) continue;
+          if (ov.start >= seg.end) break;
+          if (ov.speakers.has(seg.speaker)) {
+            info.hasAcousticOv = true;
+            for (const otherSpk of ov.speakers) {
+              if (otherSpk !== seg.speaker) {
+                info.acousticBands = info.acousticBands || [];
+                info.acousticBands.push({start: Math.max(seg.start, ov.start), end: Math.min(seg.end, ov.end), speaker: otherSpk});
+              }
+            }
+          }
+        }
+      }
+    }
     return {
       duration: Math.max(1, maxEnd),
-      speakers, speakerCounts, colorOf, byIndex, infoByIndex, overlapSpans, sorted, bySpeaker,
+      speakers, speakerCounts, colorOf, byIndex, infoByIndex, overlapSpans, sorted, bySpeaker, pulsesBySpeaker,
     };
   }
 
-  function getLaneMeasurer(isOverlay) {
+  function getLaneMeasurer(isOverlay, scaleOverride) {
     if (!laneMeasureCtx) {
       laneMeasureCtx = document.createElement('canvas').getContext('2d');
     }
     const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 15;
     const family = getComputedStyle(document.body).fontFamily || 'sans-serif';
-    const scale = isOverlay ? 0.84 : 0.9;
+    const scale = scaleOverride || (isOverlay ? 0.84 : 0.9);
     const font = '600 ' + (scale * rootPx).toFixed(2) + 'px ' + family;
     if (laneMeasureCtx && font !== laneMeasureFont) {
       laneMeasureCtx.font = font;
@@ -817,12 +1044,15 @@ APP_JS = r"""(() => {
       for (const w of rawWords) {
         const txt = String(w.word || '').trim();
         if (!txt) continue;
-        if (tokens.length && /^[,.;:!?)]/.test(txt)) {
+        if (!hasStudy && tokens.length && /^[,.;:!?)]/.test(txt)) {
           const prev = tokens[tokens.length - 1];
           prev.word += txt;
           if (w.end > prev.end) prev.end = w.end;
         } else {
-          tokens.push({word: txt, start: w.start, end: Math.max(w.start, w.end)});
+          tokens.push({
+            word: txt, start: w.start, end: Math.max(w.start, w.end),
+            ruby: w.ruby || '', gloss: w.gloss || '', vid: w.vid == null ? -1 : w.vid,
+          });
         }
       }
     } else {
@@ -834,7 +1064,7 @@ APP_JS = r"""(() => {
         const wt = p.length + 1;
         const ws = seg.start + (acc / totalWt) * dur;
         acc += wt;
-        tokens.push({word: p, start: ws, end: seg.start + (acc / totalWt) * dur});
+        tokens.push({word: p, start: ws, end: seg.start + (acc / totalWt) * dur, ruby: '', gloss: '', vid: -1});
       }
     }
     const visible = tokens.filter(t => t.end > s0 + 0.005 && t.start < s1 - 0.005);
@@ -873,6 +1103,17 @@ APP_JS = r"""(() => {
     return xs;
   }
 
+  function wordOverlapColor(tok, info) {
+    if (!info) return '';
+    for (const p of (info.partners || [])) {
+      if (tok.start < p.ovEnd && tok.end > p.ovStart) return model.colorOf(p.other.speaker).fg;
+    }
+    for (const ab of (info.acousticBands || [])) {
+      if (tok.start < ab.end && tok.end > ab.start) return model.colorOf(ab.speaker).fg;
+    }
+    return '';
+  }
+
   function buildLaneBlockContent(seg, s0, s1, blockPx, info, ctx) {
     const pad = 6;
     const innerPx = blockPx - pad * 2;
@@ -880,11 +1121,17 @@ APP_JS = r"""(() => {
     const tokens = laneTokensForSpan(seg, s0, s1);
     if (!tokens.length) return {cls: '', inner: ''};
 
-    const spacePx = Math.max(4, Math.ceil(ctx.measureText(' ').width));
-    const widths = tokens.map(t => Math.ceil(ctx.measureText(t.word).width));
+    const spacePx = hasStudy ? 3 : Math.max(4, Math.ceil(ctx.measureText(' ').width));
+    const widths = tokens.map(t => {
+      const baseW = Math.ceil(ctx.measureText(t.word).width);
+      if (hasStudy && showFurigana && Array.isArray(t.ruby)) {
+        const reading = t.ruby.map(p => p[1] || p[0] || '').join('');
+        return Math.max(baseW, Math.ceil(ctx.measureText(reading).width * 0.58));
+      }
+      return baseW;
+    });
     const totalPx = widths.reduce((a, b) => a + b, 0) + Math.max(0, tokens.length - 1) * spacePx;
     const sDur = Math.max(0.001, s1 - s0);
-    const partners = info ? info.partners : [];
 
     let xs;
     let clipped = false;
@@ -907,20 +1154,80 @@ APP_JS = r"""(() => {
     for (let i = 0; i < tokens.length; i++) {
       if (clipped && xs[i] >= innerPx) break;
       const tok = tokens[i];
-      let ovColor = '';
-      for (const p of partners) {
-        if (tok.start < p.ovEnd && tok.end > p.ovStart) {
-          ovColor = model.colorOf(p.other.speaker).fg;
-          break;
-        }
-      }
+      const ovColor = wordOverlapColor(tok, info);
       const leftPct = ((pad + xs[i]) / blockPx) * 100;
+      const vAttr = tok.vid >= 0 ? ' data-v="' + tok.vid + '"' : '';
+      const tipAttr = tok.gloss ? ' title="' + html(tok.word + ' — ' + tok.gloss) + '"' : '';
+      const innerTxt = hasStudy && tok.ruby ? rubyHtml(tok.ruby, tok.word) : html(tok.word);
       spans.push(
-        '<span class="lane-word' + (ovColor ? ' lw-ov' : '') + '"'
-        + ' data-t="' + tok.start + '" data-e="' + tok.end + '"'
+        '<span class="lane-word' + (ovColor ? ' lw-ov' : '') + (tok.vid >= 0 ? ' has-vocab' : '') + '"'
+        + ' data-t="' + tok.start + '" data-e="' + tok.end + '"' + vAttr + tipAttr
         + ' style="left:' + leftPct.toFixed(3) + '%'
         + (ovColor ? ';--ov-color:' + ovColor : '') + '">'
-        + html(tok.word) + '</span>'
+        + innerTxt + '</span>'
+      );
+    }
+    return {
+      cls: ' has-words' + (clipped ? ' is-clipped' : ''),
+      inner: '<div class="lane-words"' + (hasStudy ? ' lang="ja"' : '') + '>' + spans.join('') + '</div>',
+    };
+  }
+
+  function buildGlossBlockContent(seg, s0, s1, blockPx, ctx) {
+    const pad = 6;
+    const innerPx = blockPx - pad * 2;
+    const allTokens = laneTokensForSpan(seg, s0, s1).filter(t => t.gloss);
+    if (!allTokens.length) return {cls: '', inner: ''};
+    if (!ctx || innerPx < 28) {
+      return {cls: '', inner: html(allTokens.map(t => t.gloss).join(' · '))};
+    }
+    const spacePx = 7;
+    const measureList = list => {
+      const ws = list.map(t => Math.ceil(ctx.measureText(t.gloss).width));
+      return {ws, total: ws.reduce((a, b) => a + b, 0) + Math.max(0, list.length - 1) * spacePx};
+    };
+    let tokens = allTokens;
+    let m = measureList(tokens);
+    // When zoomed out, drop grammatical particle labels first so content meanings stay aligned and readable.
+    if (m.total > innerPx) {
+      const contentOnly = tokens.filter(t => {
+        const v = t.vid >= 0 ? vocabById.get(t.vid) : null;
+        return !v || !v.role.toLowerCase().startsWith('particle');
+      });
+      if (contentOnly.length) {
+        tokens = contentOnly;
+        m = measureList(tokens);
+      }
+    }
+    const sDur = Math.max(0.001, s1 - s0);
+    let xs;
+    let clipped = false;
+    if (m.total <= innerPx) {
+      const ideals = tokens.map((t, i) => {
+        const raw = ((t.start - s0) / sDur) * innerPx;
+        return Math.max(0, Math.min(innerPx - m.ws[i], raw));
+      });
+      xs = solveTimedWordPositions(ideals, m.ws, spacePx, innerPx, m.total);
+    } else {
+      clipped = true;
+      xs = [];
+      let cur = 0;
+      for (let i = 0; i < tokens.length; i++) {
+        xs.push(cur);
+        cur += m.ws[i] + spacePx;
+      }
+    }
+    const spans = [];
+    for (let i = 0; i < tokens.length; i++) {
+      if (clipped && xs[i] >= innerPx) break;
+      const tok = tokens[i];
+      const leftPct = ((pad + xs[i]) / blockPx) * 100;
+      const vAttr = tok.vid >= 0 ? ' data-v="' + tok.vid + '"' : '';
+      spans.push(
+        '<span class="lane-word' + (tok.vid >= 0 ? ' has-vocab' : '') + '"'
+        + ' data-t="' + tok.start + '" data-e="' + tok.end + '"' + vAttr
+        + ' style="left:' + leftPct.toFixed(3) + '%" title="' + html(tok.word + ' = ' + tok.gloss) + '">'
+        + html(tok.gloss) + '</span>'
       );
     }
     return {
@@ -938,7 +1245,8 @@ APP_JS = r"""(() => {
     const trackPx = ruler.getBoundingClientRect().width || 0;
     const winEnd = winStart + winDur;
     const measurer = trackPx > 0 ? getLaneMeasurer(isOverlay) : null;
-    const step = winDur <= 10 ? 2 : winDur <= 20 ? 4 : winDur <= 30 ? 5 : 10;
+    const glossMeasurer = hasStudy && trackPx > 0 ? getLaneMeasurer(isOverlay, 0.76) : null;
+    const step = winDur <= 8 ? 1 : winDur <= 12 ? 2 : winDur <= 20 ? 4 : winDur <= 30 ? 5 : 10;
     const firstTick = Math.ceil(winStart / step) * step;
     const ticks = [];
     const gridlines = [];
@@ -994,10 +1302,13 @@ APP_JS = r"""(() => {
     const rowCls = isOverlay ? 'ov-row' : 'lane-row';
     const lblCls = isOverlay ? 'ov-label' : 'lane-label';
     const trkCls = isOverlay ? 'ov-track' : 'lane-track';
+    const multiStream = hasStudy && !isOverlay;
     body.innerHTML = model.speakers.map(spk => {
       const c = model.colorOf(spk);
       const segs = model.bySpeaker.get(spk) || [];
       const blocks = [];
+      const wwBlocks = [];
+      const enBlocks = [];
       for (const seg of segs) {
         if (seg.end <= winStart) continue;
         if (seg.start >= winEnd) break;
@@ -1007,25 +1318,77 @@ APP_JS = r"""(() => {
         const width = Math.max(0.4, ((s1 - s0) / winDur) * 100);
         const blockPx = trackPx > 0 ? (trackPx * width) / 100 : 0;
         const info = model.infoByIndex.get(seg.index);
-        const hasOv = Boolean(info && info.partners.length);
-        const title = spk + ' (' + clockPrecise(seg.start) + '–' + clockPrecise(seg.end) + '): ' + seg.text;
+        const hasOv = Boolean(info && (info.partners.length || info.hasAcousticOv));
+        const title = spk + ' (' + clockPrecise(seg.start) + '–' + clockPrecise(seg.end) + '): '
+          + seg.text + (seg.en ? ' — ' + seg.en : '');
         const content = buildLaneBlockContent(seg, s0, s1, blockPx, info, measurer);
+        const posStyle = 'left:' + left.toFixed(3) + '%;width:' + width.toFixed(3) + '%;'
+          + '--spk-color:' + c.fg + ';--spk-bg:' + c.bg + ';--spk-bg-hi:' + c.bgHi;
         blocks.push(
-          '<div class="lane-block' + (hasOv ? ' has-ov' : '') + content.cls + '"'
-          + ' data-index="' + seg.index + '"'
-          + ' style="left:' + left.toFixed(3) + '%;width:' + width.toFixed(3) + '%;'
-          + '--spk-color:' + c.fg + ';--spk-bg:' + c.bg + ';--spk-bg-hi:' + c.bgHi + '"'
+          '<div class="lane-block' + (multiStream ? ' ja-blk' : '') + (hasOv ? ' has-ov' : '') + content.cls + '"'
+          + ' data-index="' + seg.index + '" style="' + posStyle + '"'
           + ' title="' + html(title) + '">' + content.inner + '</div>'
         );
+        if (multiStream && showGloss) {
+          const gc = buildGlossBlockContent(seg, s0, s1, blockPx, glossMeasurer);
+          if (gc.inner) {
+            wwBlocks.push(
+              '<div class="lane-block lb-ww' + gc.cls + '" data-index="' + seg.index + '"'
+              + ' style="' + posStyle + '" title="' + html(title) + '">' + gc.inner + '</div>'
+            );
+          }
+        }
+        if (multiStream && showEnglish && seg.en) {
+          enBlocks.push(
+            '<div class="lane-block lb-en" data-index="' + seg.index + '"'
+            + ' style="' + posStyle + '" title="' + html(spk + ': ' + seg.en) + '">'
+            + html(seg.en) + '</div>'
+          );
+        }
       }
+      const pulses = (model.pulsesBySpeaker?.get(spk) || []).filter(p => p.end > winStart && p.start < winEnd).map(p => {
+        const p0 = Math.max(p.start, winStart);
+        const p1 = Math.min(p.end, winEnd);
+        const left = ((p0 - winStart) / winDur) * 100;
+        const width = Math.max(0.4, ((p1 - p0) / winDur) * 100);
+        const dur = (p.end - p.start).toFixed(1);
+        return '<div class="lane-pulse" data-t="' + p.start + '" style="left:' + left.toFixed(3)
+          + '%;width:' + width.toFixed(3) + '%;--spk-color:' + c.fg + ';--spk-bg:' + c.bg + '"'
+          + ' title="' + html(spk + ' vocal overlap / backchannel (' + dur + 's)') + '"></div>';
+      }).join('');
       const isFiltered = !isOverlay && filter === 'spk:' + spk;
-      return '<div class="' + rowCls + '">'
+      const mainRow = '<div class="' + rowCls + (multiStream ? ' ja-main' : '') + '">'
         + '<div class="' + lblCls + (isFiltered ? ' filtered' : '') + '"'
         + ' data-speaker="' + html(spk) + '" style="--spk-color:' + c.fg + '">' + html(spk) + '</div>'
-        + '<div class="' + trkCls + '">' + gridHtml + bands + blocks.join('')
+        + '<div class="' + trkCls + '">' + gridHtml + bands + pulses + blocks.join('')
         + '<div class="lane-playhead"></div></div></div>';
+      if (!multiStream) return mainRow;
+      let extra = '';
+      if (showGloss) {
+        extra += '<div class="lane-row lane-sub-ww">'
+          + '<div class="lane-label sub-lbl" style="--spk-color:' + c.fg + '">↳ meaning</div>'
+          + '<div class="lane-track">' + gridHtml + bands + wwBlocks.join('')
+          + '<div class="lane-playhead"></div></div></div>';
+      }
+      if (showEnglish) {
+        extra += '<div class="lane-row lane-sub-en">'
+          + '<div class="lane-label sub-lbl" style="--spk-color:' + c.fg + '">↳ English</div>'
+          + '<div class="lane-track">' + gridHtml + bands + enBlocks.join('')
+          + '<div class="lane-playhead"></div></div></div>';
+      }
+      return '<div class="lane-group">' + mainRow + extra + '</div>';
     }).join('');
     return trackPx;
+  }
+
+  function indexLaneBlocks(container) {
+    const map = new Map();
+    container.querySelectorAll('.lane-block').forEach(el => {
+      const idx = Number(el.dataset.index);
+      if (!map.has(idx)) map.set(idx, []);
+      map.get(idx).push(el);
+    });
+    return map;
   }
 
   function renderLanesWindow(force) {
@@ -1044,8 +1407,7 @@ APP_JS = r"""(() => {
     renderedWinDur = winDur;
     lastLaneTrackPx = renderTimelineInto(ruler, body, winStart, winDur, false);
     playheadEls = [...document.querySelectorAll('#lanes-stage .lane-playhead')];
-    blockElsByIndex = new Map();
-    body.querySelectorAll('.lane-block').forEach(el => blockElsByIndex.set(Number(el.dataset.index), el));
+    blockElsByIndex = indexLaneBlocks(body);
     updatePlayheadOn(playheadEls, blockElsByIndex, currentTime(), lanesWinStart, lanesWindow);
   }
 
@@ -1056,18 +1418,20 @@ APP_JS = r"""(() => {
       el.style.display = visible ? '' : 'none';
       if (visible) el.style.left = pct.toFixed(3) + '%';
     }
-    for (const [idx, blk] of blkMap.entries()) {
+    for (const [idx, blks] of blkMap.entries()) {
       const seg = model.byIndex.get(idx);
       const isNow = Boolean(seg && time >= seg.start && time < seg.end);
-      blk.classList.toggle('now', isNow);
-      if (isNow) {
-        blk.querySelectorAll('.lane-word').forEach(w => {
-          const ws = Number(w.dataset.t);
-          const we = Number(w.dataset.e);
-          w.classList.toggle('lw-now', time >= ws && time <= Math.max(we, ws + 0.08));
-        });
-      } else {
-        blk.querySelectorAll('.lane-word.lw-now').forEach(w => w.classList.remove('lw-now'));
+      for (const blk of blks) {
+        blk.classList.toggle('now', isNow);
+        if (isNow) {
+          blk.querySelectorAll('.lane-word').forEach(w => {
+            const ws = Number(w.dataset.t);
+            const we = Number(w.dataset.e);
+            w.classList.toggle('lw-now', time >= ws && time <= Math.max(we, ws + 0.08));
+          });
+        } else {
+          blk.querySelectorAll('.lane-word.lw-now').forEach(w => w.classList.remove('lw-now'));
+        }
       }
     }
   }
@@ -1165,8 +1529,7 @@ APP_JS = r"""(() => {
       ovRenderedStart = ovWinStart;
       ovRenderedTrackPx = renderTimelineInto(ruler, body, ovWinStart, winDur, true);
       ovPlayheadEls = [...ovEl.querySelectorAll('.lane-playhead')];
-      ovBlockElsByIndex = new Map();
-      body.querySelectorAll('.lane-block').forEach(el => ovBlockElsByIndex.set(Number(el.dataset.index), el));
+      ovBlockElsByIndex = indexLaneBlocks(body);
     }
     updatePlayheadOn(ovPlayheadEls, ovBlockElsByIndex, time, ovWinStart, winDur);
   }
@@ -1222,22 +1585,33 @@ APP_JS = r"""(() => {
     box.innerHTML = doc.segments.map(seg => {
       const info = model.infoByIndex.get(seg.index);
       const partners = info ? info.partners : [];
+      const hasOv = partners.length > 0 || Boolean(info && info.hasAcousticOv);
       let passF = true;
-      if (filter === 'overlaps') passF = partners.length > 0;
+      if (filter === 'overlaps') passF = hasOv;
       else if (filter.startsWith('spk:')) passF = seg.speaker === filter.slice(4);
-      const passQ = !query || seg.text.toLowerCase().includes(query) || seg.speaker.toLowerCase().includes(query);
+      const passQ = !query
+        || seg.text.toLowerCase().includes(query)
+        || seg.speaker.toLowerCase().includes(query)
+        || (seg.en && seg.en.toLowerCase().includes(query))
+        || (hasStudy && seg.tokens.some(tk => {
+          const v = tk.vid >= 0 ? vocabById.get(tk.vid) : null;
+          return tk.gloss.toLowerCase().includes(query)
+            || (v && (v.kana.includes(query) || v.romaji.toLowerCase().includes(query)));
+        }));
       const vis = passF && passQ;
       const color = model.colorOf(seg.speaker);
       const partnerIds = partners.length ? [...new Set(partners.map(p => p.other.index))].join(',') : '';
       let body = '';
       if (seg.words.length) {
         body = seg.words.map((w, wi) => {
-          const gap = wi && !/^[,.;:!?)]/.test(w.word) ? ' ' : '';
-          let ovP = null;
-          for (const p of partners) { if (w.start < p.ovEnd && w.end > p.ovStart) { ovP = p; break; } }
-          let span = '<span class="word' + (ovP ? ' word-ov' : '') + '" data-t="' + w.start + '" data-e="' + w.end + '"';
-          if (ovP) span += ' style="--ov-color:' + model.colorOf(ovP.other.speaker).fg + '"';
-          span += '>' + html(w.word) + '</span>';
+          const gap = !hasStudy && wi && !/^[,.;:!?)]/.test(w.word) ? ' ' : '';
+          const ovColor = wordOverlapColor(w, info);
+          const vAttr = w.vid >= 0 ? ' data-v="' + w.vid + '"' : '';
+          const tipAttr = w.gloss ? ' title="' + html(w.word + ' — ' + w.gloss) + '"' : '';
+          let span = '<span class="word' + (ovColor ? ' word-ov' : '') + (w.vid >= 0 ? ' has-vocab' : '') + '"'
+            + ' data-t="' + w.start + '" data-e="' + w.end + '"' + vAttr + tipAttr;
+          if (ovColor) span += ' style="--ov-color:' + ovColor + '"';
+          span += '>' + (hasStudy && w.ruby ? rubyHtml(w.ruby, w.word) : html(w.word)) + '</span>';
           const chips = info && info.chipsByWord.get(wi);
           if (chips) span += chips.map(chipHtml).join('');
           return gap + span;
@@ -1245,14 +1619,26 @@ APP_JS = r"""(() => {
       } else {
         body = html(seg.text);
       }
-      const ovMark = partners.length ? '<span class="ov-mark">∥</span>' : '';
+      let extraHtml = '';
+      if (hasStudy && showGloss && seg.tokens.length) {
+        const pairs = seg.tokens.filter(tk => tk.gloss).map(tk =>
+          '<span class="ww-pair" data-t="' + tk.start + '"' + (tk.vid >= 0 ? ' data-v="' + tk.vid + '"' : '') + '>'
+          + '<span class="ww-ja" lang="ja">' + html(tk.word) + '</span>' + html(tk.gloss) + '</span>'
+        ).join('');
+        if (pairs) extraHtml += '<div class="segment-ww">' + pairs + '</div>';
+      }
+      if (hasStudy && showEnglish && seg.en) {
+        extraHtml += '<div class="segment-en">' + html(seg.en) + '</div>';
+      }
+      const ovMark = hasOv ? '<span class="ov-mark">∥</span>' : '';
       return '<div class="segment' + (query && vis ? ' match' : '') + (info && info.overlapsPrev ? ' ov-child' : '') + '"'
         + (vis ? '' : ' hidden') + ' style="--spk-color:' + color.fg + '"'
         + ' data-index="' + seg.index + '" data-start="' + seg.start + '" data-end="' + seg.end + '"'
         + (partnerIds ? ' data-partners="' + partnerIds + '"' : '') + '>'
         + '<span class="segment-time">' + clock(seg.start) + ovMark + '</span>'
         + '<span class="segment-speaker">' + html(seg.speaker || 'Unassigned') + '</span>'
-        + '<div class="segment-text">' + body + '</div></div>';
+        + '<div class="segment-text"><div' + (hasStudy ? ' class="segment-ja" lang="ja"' : '') + '>' + body + '</div>'
+        + extraHtml + '</div></div>';
     }).join('');
     rowByIndex = new Map();
     box.querySelectorAll('.segment').forEach(r => rowByIndex.set(Number(r.dataset.index), r));
@@ -1367,7 +1753,10 @@ APP_JS = r"""(() => {
     hoveredKey = key;
     hoveredIndices = key ? new Set(indices) : null;
     for (const [idx, row] of rowByIndex.entries()) row.classList.toggle('ov-linked', Boolean(hoveredIndices && hoveredIndices.has(idx)));
-    for (const [idx, blk] of blockElsByIndex.entries()) blk.classList.toggle('ov-linked', Boolean(hoveredIndices && hoveredIndices.has(idx)));
+    for (const [idx, blks] of blockElsByIndex.entries()) {
+      const linked = Boolean(hoveredIndices && hoveredIndices.has(idx));
+      for (const blk of blks) blk.classList.toggle('ov-linked', linked);
+    }
     const status = document.getElementById('lanes-status');
     if (status && showBadges && hoveredIndices && hoveredIndices.size) {
       const segs = [...hoveredIndices].map(i => model.byIndex.get(i)).filter(Boolean).sort((a, b) => a.start - b.start);
@@ -1684,10 +2073,133 @@ APP_JS = r"""(() => {
     }
   }
 
+  function applyFuriganaState() {
+    document.documentElement.classList.toggle('no-furigana', !showFurigana);
+    const btn = document.getElementById('toggle-furigana');
+    if (btn) btn.setAttribute('aria-pressed', String(showFurigana));
+    if (model) {
+      renderLanesWindow(true);
+      if (showOverlay) updateOverlayTimeline(currentTime(), true);
+    }
+  }
+  function applyStudyLayersState() {
+    const gBtn = document.getElementById('toggle-gloss');
+    const eBtn = document.getElementById('toggle-english');
+    if (gBtn) gBtn.setAttribute('aria-pressed', String(showGloss));
+    if (eBtn) eBtn.setAttribute('aria-pressed', String(showEnglish));
+    if (model) {
+      paintTranscript();
+      renderLanesWindow(true);
+      if (showOverlay) updateOverlayTimeline(currentTime(), true);
+    }
+  }
+  function showWordInspector(vid) {
+    const el = document.getElementById('word-inspector');
+    if (!el) return;
+    if (vid == null || vid < 0 || !vocabById.has(vid)) {
+      inspectedVocabId = null;
+      el.hidden = true;
+      el.innerHTML = '';
+      return;
+    }
+    const v = vocabById.get(vid);
+    inspectedVocabId = vid;
+    const isKnown = knownVocab.has(vocabKey(v));
+    const reading = [v.kana && v.kana !== v.base ? v.kana : '', v.romaji].filter(Boolean).join(' · ');
+    const diffLbl = DIFF_LABELS[v.diff] || v.diff;
+    el.hidden = false;
+    el.innerHTML =
+      '<span class="wi-ja" lang="ja">' + (v.ruby ? rubyHtml(v.ruby, v.base) : html(v.base)) + '</span>'
+      + (reading ? '<span class="wi-read">' + html(reading) + '</span>' : '')
+      + '<span class="v-diff vd-' + html(v.diff) + '">' + html(diffLbl) + '</span>'
+      + '<span class="wi-gloss">' + html(v.gloss) + '</span>'
+      + (v.role ? '<span class="wi-role">(' + html(v.role) + ')</span>' : '')
+      + (v.note ? '<span class="wi-note">' + html(v.note) + '</span>' : '')
+      + '<span class="wi-btns">'
+      + '<button type="button" class="wi-known" data-vid="' + v.id + '" aria-pressed="' + String(isKnown) + '">'
+      + (isKnown ? 'Known ✓' : 'Mark known') + '</button>'
+      + '<button type="button" class="wi-close" title="Close">×</button>'
+      + '</span>';
+  }
+  function vocabMatchesDiff(diff, filter) {
+    if (filter === 'all') return true;
+    if (filter === 'mtg') return diff === 'mtg';
+    if (filter === 'slang') return diff === 'slang';
+    if (filter === 'n1+') return diff === 'n1' || diff === 'slang' || diff === 'mtg';
+    if (filter === 'n2+') return diff === 'n2' || diff === 'n1' || diff === 'slang' || diff === 'mtg';
+    return diff !== 'basic'; // n3+ default
+  }
+  function paintVocab() {
+    const panel = document.getElementById('vocab-panel');
+    if (!panel || !doc || !doc.vocab || !doc.vocab.length) return;
+    panel.hidden = false;
+    const q = (document.getElementById('vocab-search')?.value || '').trim().toLowerCase();
+    const listEl = document.getElementById('vocab-list');
+    const countEl = document.getElementById('vocab-count');
+    const hideBtn = document.getElementById('vocab-hide-known');
+    const resetBtn = document.getElementById('vocab-reset-known');
+
+    let knownInDoc = 0;
+    for (const v of doc.vocab) if (knownVocab.has(vocabKey(v))) knownInDoc += 1;
+    if (hideBtn) {
+      hideBtn.setAttribute('aria-pressed', String(hideKnown));
+      hideBtn.textContent = knownInDoc ? 'Hide known (' + knownInDoc + ')' : 'Hide known';
+    }
+    if (resetBtn) resetBtn.hidden = knownInDoc === 0;
+
+    let items = doc.vocab.filter(v => {
+      if (!v.base || !v.gloss) return false;
+      if (!vocabMatchesDiff(v.diff, vocabDiff)) return false;
+      if (hideKnown && knownVocab.has(vocabKey(v))) return false;
+      if (q) {
+        const hay = (v.base + ' ' + v.kana + ' ' + v.romaji + ' ' + v.gloss + ' ' + v.note).toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    if (vocabSort === 'freq') {
+      items.sort((a, b) => (b.count - a.count) || (a.id - b.id));
+    } else if (vocabSort === 'hard') {
+      items.sort((a, b) => ((DIFF_ORDER[b.diff] || 0) - (DIFF_ORDER[a.diff] || 0)) || (b.count - a.count));
+    } else {
+      items.sort((a, b) => ((a.times[0] || 0) - (b.times[0] || 0)) || (a.id - b.id));
+    }
+    if (countEl) countEl.textContent = items.length + ' / ' + doc.vocab.length;
+    if (!items.length) {
+      listEl.innerHTML = '<div style="padding:.4rem;font-size:.86rem">No vocabulary items match this filter.</div>';
+      return;
+    }
+    listEl.innerHTML = items.map(v => {
+      const isKnown = knownVocab.has(vocabKey(v));
+      const reading = [v.kana && v.kana !== v.base ? v.kana : '', v.romaji].filter(Boolean).join(' · ');
+      const diffLbl = DIFF_LABELS[v.diff] || v.diff;
+      const jumps = v.times.slice(0, 5).map(t =>
+        '<button type="button" class="v-time" data-t="' + t + '" title="Jump to ' + clock(t) + '">' + clock(t) + '</button>'
+      ).join('') + (v.times.length > 5 ? '<span class="v-read">+' + (v.times.length - 5) + '</span>' : '');
+      return '<div class="vocab-row' + (isKnown ? ' is-known' : '') + '" data-vid="' + v.id + '">'
+        + '<div class="v-word"><span class="v-ja" lang="ja">'
+        + (v.ruby ? rubyHtml(v.ruby, v.base) : html(v.base)) + '</span>'
+        + (reading ? '<span class="v-read">' + html(reading) + '</span>' : '')
+        + '</div>'
+        + '<span class="v-diff vd-' + html(v.diff) + '">' + html(diffLbl) + '</span>'
+        + '<div class="v-meaning"><span class="v-gloss">' + html(v.gloss) + '</span>'
+        + (v.role ? '<span class="v-role">' + html(v.role) + '</span>' : '')
+        + (v.note ? '<span class="v-note">' + html(v.note) + '</span>' : '')
+        + '</div>'
+        + '<div class="v-times">' + jumps + '</div>'
+        + '<button type="button" class="v-known" data-vid="' + v.id + '" aria-pressed="' + String(isKnown)
+        + '" title="Mark word as already known">' + (isKnown ? 'Known ✓' : 'Know ✓') + '</button>'
+        + '</div>';
+    }).join('');
+  }
+
   async function init() {
     const res = await fetch('transcript.json');
     if (!res.ok) throw new Error('Could not load transcript.json');
     doc = expandCompact(await res.json());
+    hasStudy = Boolean(doc.language === 'ja' || (doc.vocab && doc.vocab.length) || doc.segments.some(s => s.en || s.tokens.length));
+    vocabById = new Map((doc.vocab || []).map(v => [v.id, v]));
+    loadKnownVocab();
     model = buildOverlapModel(doc);
 
     const annUrl = document.querySelector('main')?.dataset.annotations || '';
@@ -1738,9 +2250,24 @@ APP_JS = r"""(() => {
       + model.speakers.map(s => '<option value="spk:' + html(s) + '">' + html(s) + ' (' + model.speakerCounts.get(s) + ')</option>').join('');
 
     const winSel = document.getElementById('lanes-window');
-    if (![...winSel.options].some(o => Number(o.value) === lanesWindow)) lanesWindow = 20;
+    if (hasStudy && !localStorage.getItem('ovpub.window')) lanesWindow = 10;
+    if (![...winSel.options].some(o => Number(o.value) === lanesWindow)) lanesWindow = hasStudy ? 10 : 20;
     winSel.value = String(lanesWindow);
     document.getElementById('toggle-autoscroll').setAttribute('aria-pressed', String(autoScroll));
+
+    if (hasStudy) {
+      for (const id of ['toggle-furigana', 'toggle-gloss', 'toggle-english']) {
+        const b = document.getElementById(id);
+        if (b) b.hidden = false;
+      }
+      const vDiffSel = document.getElementById('vocab-diff');
+      if (vDiffSel) vDiffSel.value = vocabDiff;
+      applyFuriganaState();
+      const gBtn = document.getElementById('toggle-gloss');
+      const eBtn = document.getElementById('toggle-english');
+      if (gBtn) gBtn.setAttribute('aria-pressed', String(showGloss));
+      if (eBtn) eBtn.setAttribute('aria-pressed', String(showEnglish));
+    }
 
     loadAnnState();
     showAnnotations = seedAnnotations.length > 0
@@ -1753,6 +2280,7 @@ APP_JS = r"""(() => {
     applyBadgesState();
     applyAnnotationsState();
     applySplitLayout();
+    if (hasStudy) paintVocab();
 
     const ovEl = document.getElementById('ov-overlay');
     if (ovEl) {
@@ -1786,6 +2314,30 @@ APP_JS = r"""(() => {
     };
     document.getElementById('prev-overlap').onclick = () => jumpOverlap(-1);
     document.getElementById('next-overlap').onclick = () => jumpOverlap(1);
+    const furiBtn = document.getElementById('toggle-furigana');
+    if (furiBtn) {
+      furiBtn.onclick = () => {
+        showFurigana = !showFurigana;
+        localStorage.setItem('ovpub.furigana', String(showFurigana));
+        applyFuriganaState();
+      };
+    }
+    const glossBtn = document.getElementById('toggle-gloss');
+    if (glossBtn) {
+      glossBtn.onclick = () => {
+        showGloss = !showGloss;
+        localStorage.setItem('ovpub.gloss', String(showGloss));
+        applyStudyLayersState();
+      };
+    }
+    const engBtn = document.getElementById('toggle-english');
+    if (engBtn) {
+      engBtn.onclick = () => {
+        showEnglish = !showEnglish;
+        localStorage.setItem('ovpub.english', String(showEnglish));
+        applyStudyLayersState();
+      };
+    }
     document.getElementById('toggle-overlay').onclick = () => {
       showOverlay = !showOverlay;
       localStorage.setItem('ovpub.overlay', String(showOverlay));
@@ -1828,6 +2380,74 @@ APP_JS = r"""(() => {
       btn.textContent = 'Copied ' + clock(t);
       setTimeout(() => { btn.textContent = 'Copy link @ time'; }, 1400);
     };
+
+    const wiEl = document.getElementById('word-inspector');
+    if (wiEl) {
+      wiEl.addEventListener('click', ev => {
+        if (ev.target.closest('.wi-close')) { showWordInspector(null); return; }
+        const kb = ev.target.closest('.wi-known');
+        if (kb) {
+          const v = vocabById.get(Number(kb.dataset.vid));
+          if (v) {
+            const k = vocabKey(v);
+            if (knownVocab.has(k)) knownVocab.delete(k); else knownVocab.add(k);
+            saveKnownVocab();
+            showWordInspector(v.id);
+            paintVocab();
+          }
+        }
+      });
+    }
+    const vDiffEl = document.getElementById('vocab-diff');
+    if (vDiffEl) {
+      vDiffEl.addEventListener('change', () => {
+        vocabDiff = vDiffEl.value || 'n3+';
+        localStorage.setItem('ovpub.vocabDiff', vocabDiff);
+        paintVocab();
+      });
+    }
+    const vSearchEl = document.getElementById('vocab-search');
+    if (vSearchEl) vSearchEl.addEventListener('input', paintVocab);
+    const vSortEl = document.getElementById('vocab-sort');
+    if (vSortEl) vSortEl.addEventListener('change', () => { vocabSort = vSortEl.value || 'first'; paintVocab(); });
+    const vHideBtn = document.getElementById('vocab-hide-known');
+    if (vHideBtn) {
+      vHideBtn.onclick = () => {
+        hideKnown = !hideKnown;
+        localStorage.setItem('ovpub.hideKnown', String(hideKnown));
+        paintVocab();
+      };
+    }
+    const vResetBtn = document.getElementById('vocab-reset-known');
+    if (vResetBtn) {
+      vResetBtn.onclick = () => {
+        knownVocab.clear();
+        saveKnownVocab();
+        if (inspectedVocabId != null) showWordInspector(inspectedVocabId);
+        paintVocab();
+      };
+    }
+    const vListEl = document.getElementById('vocab-list');
+    if (vListEl) {
+      vListEl.addEventListener('click', ev => {
+        const tm = ev.target.closest('.v-time');
+        if (tm) { seekAndPlay(Number(tm.dataset.t)); return; }
+        const kb = ev.target.closest('.v-known');
+        if (kb) {
+          const v = vocabById.get(Number(kb.dataset.vid));
+          if (v) {
+            const k = vocabKey(v);
+            if (knownVocab.has(k)) knownVocab.delete(k); else knownVocab.add(k);
+            saveKnownVocab();
+            if (inspectedVocabId === v.id) showWordInspector(v.id);
+            paintVocab();
+          }
+          return;
+        }
+        const row = ev.target.closest('.vocab-row');
+        if (row) showWordInspector(Number(row.dataset.vid));
+      });
+    }
 
     document.getElementById('add-note-btn').onclick = addMomentNote;
     document.getElementById('note-text').addEventListener('keydown', ev => {
@@ -1909,8 +2529,9 @@ APP_JS = r"""(() => {
       }
       const row = ev.target.closest('.segment');
       if (!row) return;
-      const w = ev.target.closest('.word');
-      seekAndPlay(w ? Number(w.dataset.t) : Number(row.dataset.start));
+      const tokEl = ev.target.closest('.word, .ww-pair');
+      if (tokEl && tokEl.dataset.v != null) showWordInspector(Number(tokEl.dataset.v));
+      seekAndPlay(tokEl ? Number(tokEl.dataset.t) : Number(row.dataset.start));
     });
 
     const lanesStage = document.getElementById('lanes-stage');
@@ -1933,6 +2554,7 @@ APP_JS = r"""(() => {
       }
       const lbl = ev.target.closest('.lane-label');
       if (lbl) {
+        if (!lbl.dataset.speaker) return;
         const val = 'spk:' + lbl.dataset.speaker;
         filterSel.value = filterSel.value === val ? 'all' : val;
         paintTranscript();
@@ -1940,7 +2562,9 @@ APP_JS = r"""(() => {
       }
       const trk = ev.target.closest('.lane-track, .lanes-ruler');
       if (!trk) return;
-      drag = {startX: ev.clientX, startWin: lanesWinStart, rect: trk.getBoundingClientRect(), moved: false};
+      const lw = ev.target.closest('.lane-word[data-v]');
+      const vid = lw ? Number(lw.dataset.v) : null;
+      drag = {startX: ev.clientX, startWin: lanesWinStart, rect: trk.getBoundingClientRect(), moved: false, vid};
       lanesStage.setPointerCapture(ev.pointerId);
     });
     lanesStage.addEventListener('pointermove', ev => {
@@ -1958,9 +2582,10 @@ APP_JS = r"""(() => {
     });
     lanesStage.addEventListener('pointerup', ev => {
       if (!drag) return;
-      const wasDrag = drag.moved, rect = drag.rect;
+      const wasDrag = drag.moved, rect = drag.rect, vid = drag.vid;
       drag = null;
       if (!wasDrag && rect.width > 0) {
+        if (vid != null && vid >= 0) showWordInspector(vid);
         const frac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
         seekAndPlay(lanesWinStart + frac * lanesWindow);
       }
@@ -2023,6 +2648,7 @@ def _index_html(
     css_hash: str,
     js_hash: str,
     ann_url: str = "",
+    has_study: bool = False,
 ) -> str:
     back = (
         f'<a href="{html.escape(back_url, quote=True)}">← {html.escape(back_label)}</a>'
@@ -2032,6 +2658,9 @@ def _index_html(
     )
     ann_attr = f' data-annotations="{html.escape(ann_url, quote=True)}"' if ann_url else ""
     ann_btn_hidden = "" if ann_url else " hidden"
+    study_hidden = "" if has_study else " hidden"
+    sel10 = " selected" if has_study else ""
+    sel20 = "" if has_study else " selected"
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -2091,6 +2720,7 @@ def _index_html(
         <div class="minimap-viewport" id="minimap-viewport"></div>
         <div class="minimap-playhead" id="minimap-playhead"></div>
       </div>
+      <div class="word-inspector" id="word-inspector" hidden></div>
       <div class="ann-live" id="ann-live" hidden></div>
       <div class="lanes-bar">
         <span class="lanes-status" id="lanes-status"></span>
@@ -2099,13 +2729,17 @@ def _index_html(
           <button type="button" id="next-overlap" title="Jump to next overlap">Next ▶</button>
           <label>Window
             <select id="lanes-window">
-              <option value="10">10s</option>
-              <option value="20" selected>20s</option>
+              <option value="6">6s</option>
+              <option value="10"{sel10}>10s</option>
+              <option value="20"{sel20}>20s</option>
               <option value="30">30s</option>
               <option value="60">60s</option>
             </select>
           </label>
           <button type="button" id="lanes-follow" aria-pressed="true" title="Keep timeline synced to playback">Follow</button>
+          <button type="button" id="toggle-furigana" aria-pressed="true"{study_hidden} title="Show or hide furigana readings over kanji">Furigana</button>
+          <button type="button" id="toggle-gloss" aria-pressed="true"{study_hidden} title="Show or hide word-by-word meaning stream">Word-by-word</button>
+          <button type="button" id="toggle-english" aria-pressed="true"{study_hidden} title="Show or hide per-speaker English stream">English</button>
           <button type="button" id="toggle-overlay" aria-pressed="false" title="Show compact red-playhead swimlane over the video">Overlay</button>
           <button type="button" id="toggle-minimap" aria-pressed="false" title="Show or hide full-video overview bar">Minimap</button>
           <button type="button" id="toggle-badges" aria-pressed="false" title="Show or hide overlap duration badges and counters">Badges</button>
@@ -2114,6 +2748,34 @@ def _index_html(
         </div>
       </div>
     </div>
+  </section>
+
+  <section class="vocab-panel" id="vocab-panel" hidden>
+    <div class="vocab-bar">
+      <h2>Vocabulary</h2>
+      <span class="vocab-count" id="vocab-count"></span>
+      <label>Difficulty
+        <select id="vocab-diff">
+          <option value="n3+" selected>N3+ · Slang · MTG (hide basic)</option>
+          <option value="n2+">N2+ · Slang · MTG</option>
+          <option value="n1+">N1 · Slang · MTG only</option>
+          <option value="mtg">MTG / domain jargon only</option>
+          <option value="slang">Slang &amp; spoken only</option>
+          <option value="all">All words (incl. N5–N4 basic)</option>
+        </select>
+      </label>
+      <input type="search" id="vocab-search" placeholder="search word, kana, meaning…" autocomplete="off">
+      <label>Sort
+        <select id="vocab-sort">
+          <option value="first" selected>First appearance</option>
+          <option value="freq">Most frequent</option>
+          <option value="hard">Hardest first</option>
+        </select>
+      </label>
+      <button type="button" id="vocab-hide-known" aria-pressed="true" title="Hide words you marked as known">Hide known</button>
+      <button type="button" id="vocab-reset-known" hidden title="Clear your known-words list">Reset known</button>
+    </div>
+    <div class="vocab-list" id="vocab-list"></div>
   </section>
 
   <section class="notes-panel" id="notes-panel">
@@ -2155,6 +2817,76 @@ def _load_annotations(path: Path) -> dict:
     return raw
 
 
+def _load_study(path: Path) -> dict:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict) or not isinstance(raw.get("segments"), list):
+        raise ValueError(f"Study file must be a JSON object with a 'segments' list: {path}")
+    if "vocab" in raw and not isinstance(raw["vocab"], list):
+        raise ValueError(f"Study file 'vocab' must be a list: {path}")
+    return raw
+
+
+def _merge_study_into_compact(compact: dict, study: dict) -> None:
+    """Attach language-study streams (furigana tokens, word glosses, English, vocab, overlaps) to compact payload."""
+    compact["language"] = str(study.get("language") or "ja")
+    spk_idx = {s: i for i, s in enumerate(compact["speakers"])}
+    by_i = {int(s["i"]): s for s in study["segments"]}
+    for seg in compact["segments"]:
+        st = by_i.get(int(seg["i"]))
+        if not st:
+            continue
+        if st.get("ja"):
+            seg["t"] = str(st["ja"]).strip()
+        if st.get("en"):
+            seg["en"] = str(st["en"]).strip()
+        toks = st.get("tokens") or []
+        if toks:
+            seg["tk"] = [
+                [
+                    round(float(tk["s"]), 2),
+                    round(float(tk["e"]), 2),
+                    str(tk["ja"]),
+                    tk.get("ruby") or "",
+                    str(tk.get("g") or ""),
+                    int(tk["v"]) if tk.get("v") is not None else -1,
+                ]
+                for tk in toks
+            ]
+            # Drop redundant w array when tk already carries exact timed tokens.
+            seg["w"] = []
+    compact["vocab"] = [
+        {
+            "id": int(v["id"]),
+            "b": str(v.get("base") or ""),
+            "rb": v.get("ruby") or "",
+            "k": str(v.get("kana") or ""),
+            "rm": str(v.get("romaji") or ""),
+            "d": str(v.get("diff") or "basic"),
+            "g": str(v.get("gloss") or ""),
+            "rl": str(v.get("role") or ""),
+            "n": str(v.get("note") or ""),
+            "c": int(v.get("count") or 0),
+            "t": [round(float(x), 1) for x in (v.get("times") or [])],
+        }
+        for v in (study.get("vocab") or [])
+    ]
+    if study.get("acoustic_overlaps"):
+        compact["overlaps"] = [
+            [
+                round(float(ov["start"]), 2),
+                round(float(ov["end"]), 2),
+                [spk_idx[s] for s in (ov.get("speakers") or []) if s in spk_idx],
+            ]
+            for ov in study["acoustic_overlaps"]
+        ]
+    if study.get("vocal_pulses"):
+        compact["pulses"] = [
+            [round(float(p["start"]), 2), round(float(p["end"]), 2), spk_idx[p["speaker"]]]
+            for p in study["vocal_pulses"]
+            if p.get("speaker") in spk_idx
+        ]
+
+
 def export_page(
     data_dir: Path,
     video_id: str,
@@ -2162,6 +2894,7 @@ def export_page(
     *,
     title: str = "",
     annotations: Path | None = None,
+    study: Path | None = None,
     back_url: str = "",
     back_label: str = "home",
 ) -> dict:
@@ -2170,6 +2903,11 @@ def export_page(
     if title.strip():
         compact["video_title"] = compact["title"]
         compact["title"] = title.strip()
+    vocab_count = 0
+    if study is not None:
+        study_doc = _load_study(study)
+        _merge_study_into_compact(compact, study_doc)
+        vocab_count = len(compact.get("vocab") or [])
     out_dir.mkdir(parents=True, exist_ok=True)
 
     css_bytes = APP_CSS.encode("utf-8")
@@ -2194,7 +2932,15 @@ def export_page(
         encoding="utf-8",
     )
     (out_dir / "index.html").write_text(
-        _index_html(compact["title"], back_url, back_label, css_hash, js_hash, ann_url),
+        _index_html(
+            compact["title"],
+            back_url,
+            back_label,
+            css_hash,
+            js_hash,
+            ann_url,
+            has_study=study is not None,
+        ),
         encoding="utf-8",
     )
     return {
@@ -2202,6 +2948,7 @@ def export_page(
         "segments": len(compact["segments"]),
         "speakers": compact["speakers"],
         "annotations": ann_count,
+        "vocab": vocab_count,
         "out_dir": str(out_dir),
     }
 
@@ -2213,6 +2960,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--data", type=Path, default=default_data_dir())
     ap.add_argument("--title", default="", help="Optional custom page title overriding video title")
     ap.add_argument("--annotations", type=Path, default=None, help="Optional JSON file of seed annotations")
+    ap.add_argument("--study", type=Path, default=None, help="Optional language-study JSON (furigana, glosses, English, vocab)")
     ap.add_argument("--back-url", default="")
     ap.add_argument("--back-label", default="home")
     args = ap.parse_args(argv)
@@ -2222,6 +2970,7 @@ def main(argv: list[str] | None = None) -> int:
         args.out_dir.expanduser().resolve(),
         title=args.title,
         annotations=args.annotations.expanduser().resolve() if args.annotations else None,
+        study=args.study.expanduser().resolve() if args.study else None,
         back_url=args.back_url,
         back_label=args.back_label,
     )
