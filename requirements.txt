@@ -1,0 +1,22 @@
+# yt-archive Python dependencies (PyPI packages; installed via scripts/setup-venv.sh).
+#
+# CPU-only PyTorch (torch==2.13.0+cpu, torchvision==0.28.0+cpu) is installed first
+# from https://download.pytorch.org/whl/cpu by scripts/setup-venv.sh.
+#
+# onnxruntime-gpu is pinned to 1.24.4 because it targets CUDA 12 (matching the
+# CUDA 12 NVIDIA wheels shared with faster-whisper; newer releases expect CUDA 13).
+# faster-whisper and kokoro-onnx pull CPU `onnxruntime` transitively, so
+# scripts/setup-venv.sh removes CPU `onnxruntime` and reinstalls onnxruntime-gpu.
+
+open-clip-torch==3.3.0
+faster-whisper==1.2.1
+kokoro-onnx==0.6.1
+soundfile==0.14.0
+onnxruntime-gpu==1.24.4
+nvidia-cublas-cu12==12.9.2.10
+nvidia-cuda-nvrtc-cu12==12.9.86
+nvidia-cuda-runtime-cu12==12.9.79
+nvidia-cudnn-cu12==9.25.1.1
+nvidia-cufft-cu12==11.4.1.4
+nvidia-curand-cu12==10.3.10.19
+nvidia-nvjitlink-cu12==12.9.86

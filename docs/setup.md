@@ -20,14 +20,20 @@ Parent: [AGENTS.md](../AGENTS.md).
 `./yt` runs `.venv/bin/python` in this directory and nothing else. If that
 file is missing, it exits and names this page.
 
+Build or repair this repo's standalone `.venv` from the pinned manifest
+(`requirements.txt`, requires `uv` on `PATH`):
+
 ```sh
 cd <this-repo>
-python3 -m venv .venv
-.venv/bin/pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
-.venv/bin/pip install open_clip_torch faster-whisper nvidia-cublas-cu12 nvidia-cudnn-cu12
-.venv/bin/pip install onnxruntime-gpu==1.24.4 \
-  nvidia-cuda-runtime-cu12 nvidia-cufft-cu12 nvidia-curand-cu12 nvidia-nvjitlink-cu12
+scripts/setup-venv.sh          # GPU machine (CUDA 12 wheels + onnxruntime-gpu==1.24.4)
+scripts/setup-venv.sh --cpu-only
 ```
+
+`scripts/setup-venv.sh` installs CPU-only PyTorch first (`torch==2.13.0+cpu`,
+`torchvision==0.28.0+cpu`), then `requirements.txt`, then removes the CPU
+`onnxruntime` package that `faster-whisper` and `kokoro-onnx` pull transitively
+so `onnxruntime-gpu==1.24.4` stays active, and verifies imports and
+`CUDAExecutionProvider` at the end.
 
 CPU torch is the intended install: 2 fps CLIP sampling is the slow step
 and is already fast enough for typical clips (a 5–6 min video is a few
@@ -35,25 +41,24 @@ hundred samples). CUDA torch is the upgrade if hour-long videos become
 routine.
 
 `faster-whisper` uses CTranslate2 independently of the CPU-only PyTorch used
-by framesheets, and multi-speaker transcription runs through ONNX Runtime
-(`onnxruntime-gpu==1.24.4`, pinned to match the CUDA 12 NVIDIA wheels shared
-with `faster-whisper`; newer `onnxruntime-gpu` builds expect CUDA 13). The
-NVIDIA wheels make CUDA 12 math libraries available without a machine-wide
-toolkit install. Whisper selects CUDA float16 when the local GPU is available
-and falls back to CPU int8; multi-speaker mode runs Nemotron-3-Diarization and
-Multitalker Parakeet Ultra on CUDA (or CPU on machines without a GPU). Models
-download to the Hugging Face cache on the first explicit transcription;
-transcription is never automatic. See [transcription.md](transcription.md).
+by framesheets, and multi-speaker transcription and Kokoro v1.0 voiceover
+dubbing share ONNX Runtime (`onnxruntime-gpu==1.24.4`, pinned to match the
+CUDA 12 NVIDIA wheels shared with `faster-whisper`; newer `onnxruntime-gpu`
+builds expect CUDA 13). The NVIDIA wheels make CUDA 12 math libraries
+available without a machine-wide toolkit install. Whisper selects CUDA float16
+when the local GPU is available and falls back to CPU int8; multi-speaker mode
+runs Nemotron-3-Diarization and Multitalker Parakeet Ultra on CUDA (or CPU on
+machines without a GPU). Models download to the Hugging Face cache on the
+first explicit transcription; transcription is never automatic. See
+[transcription.md](transcription.md).
 
-`.venv/` is gitignored. A symlink at `.venv` to an already-built equivalent
-venv (torch, OpenCLIP, faster-whisper) also satisfies `./yt`.
+`.venv/` is gitignored and owned by this repo (do not symlink it into another
+project's venv, or package pins such as `onnxruntime-gpu==1.24.4` will collide).
 
-For optional English voiceover dubbing ([english.md](english.md)), install
-`kokoro-onnx` and `soundfile` into `.venv` (keeping `onnxruntime-gpu`, not CPU
-`onnxruntime`), place `kokoro-v1.0.onnx` and `voices-v1.0.bin` in
-`~/.cache/kokoro-onnx/` (or set `english.kokoro_model_dir` in gitignored
-`settings.json`), and configure the translation provider in `settings.json`
-based on `settings.example.json`.
+For optional English voiceover dubbing ([english.md](english.md)), place
+`kokoro-v1.0.onnx` and `voices-v1.0.bin` in `~/.cache/kokoro-onnx/` (or set
+`english.kokoro_model_dir` in gitignored `settings.json`), and configure the
+translation provider in `settings.json` based on `settings.example.json`.
 
 ## Media player
 
