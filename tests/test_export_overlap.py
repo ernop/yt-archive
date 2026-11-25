@@ -88,6 +88,8 @@ class ExportOverlapPageTests(unittest.TestCase):
                     str(out_dir),
                     "--data",
                     str(data_dir),
+                    "--title",
+                    "Custom Overlap Study Title",
                     "--back-url",
                     "https://example.test/",
                     "--back-label",
@@ -113,6 +115,9 @@ class ExportOverlapPageTests(unittest.TestCase):
             self.assertIn('src="app.js?v=', scripts[0])
             self.assertNotIn("onclick=", index_html.lower())
             self.assertIn("https://example.test/", index_html)
+            self.assertIn("Custom Overlap Study Title", index_html)
+            self.assertEqual(tr["title"], "Custom Overlap Study Title")
+            self.assertEqual(tr["video_title"], "Two Speakers Testing Overlap")
             self.assertIn("youtube-nocookie.com", app_js)
             self.assertNotIn("youtube.com/iframe_api", app_js)
             self.assertNotIn("Live dual-speaker captions", index_html + app_js)

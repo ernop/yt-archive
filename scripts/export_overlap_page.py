@@ -1651,11 +1651,15 @@ def export_page(
     video_id: str,
     out_dir: Path,
     *,
+    title: str = "",
     back_url: str = "",
     back_label: str = "home",
 ) -> dict:
     video_id = parse_video_id(video_id)
     compact = _compact_transcript(data_dir, video_id)
+    if title.strip():
+        compact["video_title"] = compact["title"]
+        compact["title"] = title.strip()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     css_bytes = APP_CSS.encode("utf-8")
@@ -1686,6 +1690,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("target", help="YouTube URL or archived video id")
     ap.add_argument("out_dir", type=Path, help="Output directory for static bundle")
     ap.add_argument("--data", type=Path, default=default_data_dir())
+    ap.add_argument("--title", default="", help="Optional custom page title overriding video title")
     ap.add_argument("--back-url", default="")
     ap.add_argument("--back-label", default="home")
     args = ap.parse_args(argv)
@@ -1693,6 +1698,7 @@ def main(argv: list[str] | None = None) -> int:
         args.data.expanduser().resolve(),
         args.target,
         args.out_dir.expanduser().resolve(),
+        title=args.title,
         back_url=args.back_url,
         back_label=args.back_label,
     )
