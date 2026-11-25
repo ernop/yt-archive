@@ -349,6 +349,7 @@ class EnglishStorageAndWebTests(unittest.TestCase):
         restored = db.get_english_transcript(self.data, VIDEO)
         self.assertEqual(len(restored["segments"]), 2)
         self.assertEqual(restored["segments"][1]["text"], "Unique telescope phrase")
+        self.assertEqual(restored["segments"][1]["text_orig"], "phrase unique")
 
         # Speaker edits update JSON, VTT, ASS, and DB
         english.update_english_segment_speaker(self.data, VIDEO, 0, "Alice")

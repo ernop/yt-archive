@@ -129,6 +129,7 @@ CREATE TABLE IF NOT EXISTS english_segments (
   end REAL NOT NULL,
   text TEXT NOT NULL,
   dub_text TEXT NOT NULL DEFAULT '',
+  text_orig TEXT NOT NULL DEFAULT '',
   speaker TEXT NOT NULL DEFAULT '',
   PRIMARY KEY(video_id, segment_index)
 );
@@ -207,6 +208,9 @@ _MIGRATIONS = {
     ),
     "youtube_listings": (
         ("account", "INTEGER NOT NULL DEFAULT 0"),
+    ),
+    "english_segments": (
+        ("text_orig", "TEXT NOT NULL DEFAULT ''"),
     ),
 }
 

@@ -188,8 +188,8 @@ def _replace_english_conn(conn: sqlite3.Connection, artifact: dict) -> None:
         conn.execute(
             """
             INSERT INTO english_segments (
-              video_id, segment_index, start, end, text, dub_text, speaker
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+              video_id, segment_index, start, end, text, dub_text, text_orig, speaker
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 video_id,
@@ -198,6 +198,7 @@ def _replace_english_conn(conn: sqlite3.Connection, artifact: dict) -> None:
                 float(segment.get("end") or 0),
                 segment.get("text") or "",
                 segment.get("dub_text") or "",
+                segment.get("text_orig") or "",
                 segment.get("speaker") or "",
             ),
         )
@@ -235,6 +236,7 @@ def get_english_transcript(data_dir: Path, video_id: str) -> dict | None:
                     "end": segment["end"],
                     "text": segment["text"],
                     "dub_text": segment["dub_text"],
+                    "text_orig": segment["text_orig"],
                     "speaker": segment["speaker"],
                     "words": [],
                 }
