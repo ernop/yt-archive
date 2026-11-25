@@ -161,6 +161,8 @@ dialog button, dialog select, dialog input {
   background: #111; border: 1px solid #444; color: var(--fg); padding: .45rem .65rem;
   border-radius: 5px; font: inherit; }
 .transcript button, .dual-stage button, dialog button { cursor: pointer; }
+.transcript button[aria-pressed="true"], .dual-stage button[aria-pressed="true"] {
+  border-color: #68c77b; background: #162819; }
 .transcript button:hover, .dual-stage button:hover, dialog button:hover { border-color: #888; }
 .transcript button:disabled, .dual-stage button:disabled, dialog button:disabled { opacity: 1; cursor: wait; }
 .transcript-search { flex: 1 1 18rem; min-width: 12rem; }
@@ -224,6 +226,7 @@ dialog .dialog-error { color: #ff8c8c; font-size: .9rem; font-weight: 700; margi
 .ytp { position: relative; }
 .dual-stage { margin: -.6rem 0 1rem; display: grid; gap: .55rem; }
 .dual-stage[hidden] { display: none; }
+.dual-subs[hidden] { display: none; }
 .dual-subs { display: grid; gap: .35rem; padding: .5rem .65rem; border: 1px solid #383838;
   border-radius: 6px; background: #050505; }
 .dual-subs.is-overlay { position: absolute; left: 1rem; right: 1rem; bottom: 4.5rem; z-index: 20;
@@ -255,6 +258,43 @@ dialog .dialog-error { color: #ff8c8c; font-size: .9rem; font-weight: 700; margi
   white-space: nowrap; }
 .dual-sub-prog { position: absolute; left: 0; bottom: 0; height: 3px; width: 0;
   background: var(--spk-color, #7cc4ff); pointer-events: none; }
+
+@media (min-width: 1000px) {
+  main.split-view { display: grid; grid-template-columns: minmax(0, 3fr) minmax(22rem, 2fr);
+    column-gap: 1rem; row-gap: .65rem; align-items: start; padding-top: .5rem; }
+  main.split-view > :not(.ytp):not(#transcript-panel):not(#dual-stage):not(dialog) {
+    grid-column: 1 / -1; }
+  main.split-view > .ytp { grid-column: 1; grid-row: 1; margin: 0; }
+  main.split-view > .ytp .mp { --mp-video-max-height: 56vh; }
+  html.mp-wide main.split-view > .ytp .mp { --mp-video-max-height: 66vh; }
+  main.split-view > #transcript-panel { grid-column: 2; grid-row: 1; margin: 0;
+    padding: .65rem .75rem; display: flex; flex-direction: column; overflow: hidden; }
+  main.split-view > #transcript-panel h2 { font-size: 1.05rem; margin: 0 0 .35rem; }
+  main.split-view > #transcript-panel > .meta { display: none; }
+  main.split-view > #transcript-panel .actions { gap: .4rem; }
+  main.split-view > #transcript-panel .transcript-meta { margin: .35rem 0; font-size: .82rem; }
+  main.split-view > #transcript-panel .transcript-controls { gap: .35rem; }
+  main.split-view > #transcript-panel .transcript-controls button,
+  main.split-view > #transcript-panel .transcript-controls select,
+  main.split-view > #transcript-panel .transcript-controls input {
+    padding: .25rem .45rem; font-size: .82rem; }
+  main.split-view > #transcript-panel .transcript-search { flex: 1 1 9rem; min-width: 7rem; }
+  main.split-view > #transcript-panel .caption-box { flex: 1 1 0; max-height: none; min-height: 0;
+    margin-top: .45rem; }
+  main.split-view > #transcript-panel .segment {
+    grid-template-columns: 4.7rem 6.8rem minmax(0, 1fr); gap: .45rem; padding: .4rem .5rem; }
+  main.split-view > #transcript-panel .segment.ov-child { padding-left: .65rem; }
+  main.split-view > #transcript-panel .segment-time { font-size: .82rem; }
+  main.split-view > #transcript-panel .segment-speaker { font-size: .82rem; }
+  main.split-view > #transcript-panel .speaker-tools { margin-top: .45rem; padding-top: .45rem;
+    gap: .35rem; font-size: .82rem; }
+  main.split-view > #transcript-panel .speaker-tools input,
+  main.split-view > #transcript-panel .speaker-tools select,
+  main.split-view > #transcript-panel .speaker-tools button {
+    padding: .22rem .42rem; font-size: .8rem; }
+  main.split-view > #transcript-panel .speaker-tools .meta { display: none; }
+  main.split-view > #dual-stage { grid-column: 1 / -1; grid-row: 2; margin: 0; }
+}
 
 .speaker-lanes { border: 1px solid #383838; border-radius: 6px;
   background: #080808; overflow: hidden; }
@@ -288,8 +328,10 @@ dialog .dialog-error { color: #ff8c8c; font-size: .9rem; font-weight: 700; margi
 .lane-track { position: relative; overflow: hidden; cursor: pointer; background: #070707; }
 .lane-ov-band { position: absolute; top: 0; bottom: 0; background: rgba(255, 210, 64, 0.16);
   border-top: 2px solid #ffd240; border-bottom: 2px solid #ffd240; pointer-events: none; z-index: 1; }
-.lane-ov-dur { position: absolute; top: 1px; left: 2px; font: 800 .65rem/1 var(--mono);
-  color: #ffd240; white-space: nowrap; pointer-events: none; }
+.ruler-ov-pill { position: absolute; top: 1px; bottom: 1px; background: #261d04;
+  border: 1px solid #ffd240; border-radius: 3px; padding: 0 .22rem;
+  font: 800 .68rem/1.2rem var(--mono); color: #ffd240; white-space: nowrap;
+  overflow: hidden; text-overflow: clip; pointer-events: none; z-index: 3; }
 .lane-block { position: absolute; top: 5px; bottom: 5px; min-width: 4px; border-radius: 4px;
   border: 1.5px solid var(--spk-color, #7cc4ff); background: var(--spk-bg, rgba(124,196,255,0.22));
   color: #fff; padding: 0 .38rem; font-size: .82rem; font-weight: 600; line-height: calc(2.55rem - 13px);

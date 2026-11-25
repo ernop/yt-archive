@@ -401,6 +401,9 @@ let hoveredKey = '';
 let lanesWindow = Number(localStorage.getItem('ytarchive.transcript.lanesWindow')) || 20;
 let lanesHidden = localStorage.getItem('ytarchive.transcript.lanesHidden') === 'true';
 let dualOverlay = localStorage.getItem('ytarchive.transcript.dualOverlay') === 'true';
+let showDualSubs = localStorage.getItem('ytarchive.transcript.showDualSubs') !== 'false';
+let splitView = localStorage.getItem('ytarchive.transcript.splitView') !== 'false';
+let autoScroll = localStorage.getItem('ytarchive.transcript.autoScroll') !== 'false';
 let lanesFollow = true;
 let lanesWinStart = 0;
 let renderedWinStart = -1;
@@ -409,6 +412,7 @@ let playheadEls = [];
 let blockElsByIndex = new Map();
 let dualRowBySpeaker = new Map();
 let dualHeadEl = null;
+let ytpObserver = null;
 let rafId = 0;
 
 function buildOverlapModel(data) {
@@ -820,6 +824,25 @@ function setHoverLink(indices, primaryIdx, highlightPrimaryRow) {
   }
 }
 
+function scrollRowIntoCaptionBox(row, center) {
+  const box = document.getElementById('caption-box');
+  if (!box || !row || row.hidden) return;
+  const boxRect = box.getBoundingClientRect();
+  const rowRect = row.getBoundingClientRect();
+  if (center) {
+    const delta = (rowRect.top + rowRect.height / 2) - (boxRect.top + boxRect.height / 2);
+    box.scrollTop += delta;
+    return;
+  }
+  const topDelta = rowRect.top - boxRect.top;
+  const bottomDelta = rowRect.bottom - boxRect.bottom;
+  if (topDelta < 0) {
+    box.scrollTop += topDelta - 12;
+  } else if (bottomDelta > 0) {
+    box.scrollTop += bottomDelta + 12;
+  }
+}
+
 function seekAndPlay(time) {
   const playerVideo = document.querySelector('#ytp video');
   if (!playerVideo) return;
@@ -839,7 +862,7 @@ if (captionBox) {
       if (target) {
         seekAndPlay(target.start);
         const row = rowByIndex.get(targetIdx);
-        if (row && !row.hidden) row.scrollIntoView({block: 'nearest'});
+        if (row && !row.hidden) scrollRowIntoCaptionBox(row, true);
       }
       return;
     }
@@ -954,7 +977,9 @@ function ensureOverlapDom() {
       + '        <option value="60">60s</option>'
       + '      </select></label>'
       + '      <button type="button" id="lanes-follow" aria-pressed="true" title="Keep timeline synced to playback">Follow</button>'
+      + '      <button type="button" id="toggle-dual-subs" aria-pressed="true" title="Show or hide live dual-color subtitle rows">Live subs</button>'
       + '      <button type="button" id="toggle-overlay-subs" aria-pressed="false" title="Show dual-color speaker subtitles over the video frame">Overlay on video</button>'
+      + '      <button type="button" id="toggle-split-view" aria-pressed="true" title="Side-by-side video and transcript with full-width timeline below">Split view</button>'
       + '    </div>'
       + '  </div>'
       + '  <div class="lanes-stage" id="lanes-stage">'
@@ -987,6 +1012,17 @@ function ensureOverlapDom() {
     if (search) search.insertAdjacentElement('afterend', wrap);
     else controls.prepend(wrap);
   }
+  if (controls && !document.getElementById('toggle-autoscroll')) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'toggle-autoscroll';
+    btn.setAttribute('aria-pressed', String(autoScroll));
+    btn.title = 'Scroll the transcript list as playback moves';
+    btn.textContent = 'Auto-scroll';
+    const cc = document.getElementById('toggle-cc');
+    if (cc) cc.insertAdjacentElement('beforebegin', btn);
+    else controls.appendChild(btn);
+  }
   if (controls && !document.getElementById('toggle-lanes')) {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -1010,18 +1046,62 @@ function applyDualOverlayPosition() {
   const dualStage = document.getElementById('dual-stage');
   const ytp = document.getElementById('ytp');
   const overlayBtn = document.getElementById('toggle-overlay-subs');
+  const subsBtn = document.getElementById('toggle-dual-subs');
   if (!dualSubs || !dualStage) return;
-  const activeOverlay = Boolean(dualOverlay && ytp && model && model.speakers.length >= 2 && !lanesHidden);
+  const visible = Boolean(showDualSubs && model && model.speakers.length >= 2 && !lanesHidden);
+  dualSubs.hidden = !visible;
+  const activeOverlay = Boolean(visible && dualOverlay && ytp);
   dualSubs.classList.toggle('is-overlay', activeOverlay);
   if (activeOverlay) {
     if (dualSubs.parentNode !== ytp) ytp.appendChild(dualSubs);
   } else {
     if (dualSubs.parentNode !== dualStage) dualStage.prepend(dualSubs);
   }
+  if (subsBtn) subsBtn.setAttribute('aria-pressed', String(showDualSubs));
   if (overlayBtn) {
     overlayBtn.setAttribute('aria-pressed', String(dualOverlay));
     overlayBtn.textContent = dualOverlay ? 'Dock below video' : 'Overlay on video';
   }
+}
+
+function syncSplitHeight() {
+  const main = document.querySelector('main');
+  const ytp = document.getElementById('ytp');
+  const panel = document.getElementById('transcript-panel');
+  if (!main || !ytp || !panel) return;
+  const active = main.classList.contains('split-view') && window.innerWidth >= 1000;
+  if (!active) {
+    panel.style.height = '';
+    return;
+  }
+  const h = Math.round(ytp.getBoundingClientRect().height);
+  if (h >= 200) panel.style.height = h + 'px';
+}
+
+function applySplitLayout() {
+  const main = document.querySelector('main');
+  const ytp = document.getElementById('ytp');
+  const splitBtn = document.getElementById('toggle-split-view');
+  if (!main) return;
+  const active = Boolean(
+    splitView && ytp && model && model.speakers.length >= 2 && !lanesHidden
+  );
+  main.classList.toggle('split-view', active);
+  if (splitBtn) {
+    splitBtn.setAttribute('aria-pressed', String(splitView));
+    splitBtn.textContent = splitView ? 'Split view' : 'Stacked view';
+  }
+  if (active && ytp && !ytpObserver && typeof ResizeObserver !== 'undefined') {
+    ytpObserver = new ResizeObserver(() => {
+      syncSplitHeight();
+      if (model && !lanesHidden && model.speakers.length >= 2) drawMinimap();
+    });
+    ytpObserver.observe(ytp);
+  }
+  requestAnimationFrame(() => {
+    syncSplitHeight();
+    if (model && !lanesHidden && model.speakers.length >= 2) drawMinimap();
+  });
 }
 
 function renderDualSubsShell() {
@@ -1155,6 +1235,7 @@ function setupLanes() {
   if (!multi) {
     dualStage.hidden = true;
     applyDualOverlayPosition();
+    applySplitLayout();
     return;
   }
   dualStage.hidden = lanesHidden;
@@ -1173,6 +1254,7 @@ function setupLanes() {
   renderedWinDur = -1;
   renderDualSubsShell();
   applyDualOverlayPosition();
+  applySplitLayout();
   if (!lanesHidden) {
     drawMinimap();
     renderLanesWindow(true);
@@ -1252,18 +1334,18 @@ function renderLanesWindow(force) {
       '<span class="ruler-tick" style="left:' + pct.toFixed(3) + '%">' + clock(t) + '</span>'
     );
   }
-  ruler.innerHTML = ticks.join('') + '<div class="lane-playhead"></div>';
-
   const visibleOverlaps = model.overlapSpans.filter(ov => ov.end > winStart && ov.start < winEnd);
-  const ovBandsWithLabels = visibleOverlaps.map(ov => {
+  const rulerOvHtml = visibleOverlaps.map(ov => {
     const left = ((Math.max(ov.start, winStart) - winStart) / winDur) * 100;
     const right = ((Math.min(ov.end, winEnd) - winStart) / winDur) * 100;
     const width = Math.max(0.25, right - left);
+    if (width < 2.6) return '';
     const dur = Math.max(0.1, ov.end - ov.start);
-    const label = width >= 3.2 ? '<span class="lane-ov-dur">' + dur.toFixed(1) + 's</span>' : '';
-    return '<div class="lane-ov-band" style="left:' + left.toFixed(3)
-      + '%;width:' + width.toFixed(3) + '%">' + label + '</div>';
+    return '<span class="ruler-ov-pill" style="left:' + left.toFixed(3)
+      + '%;max-width:' + width.toFixed(3) + '%">∥ ' + dur.toFixed(1) + 's</span>';
   }).join('');
+  ruler.innerHTML = ticks.join('') + rulerOvHtml + '<div class="lane-playhead"></div>';
+
   const ovBandsPlain = visibleOverlaps.map(ov => {
     const left = ((Math.max(ov.start, winStart) - winStart) / winDur) * 100;
     const right = ((Math.min(ov.end, winEnd) - winStart) / winDur) * 100;
@@ -1272,7 +1354,7 @@ function renderLanesWindow(force) {
   }).join('');
 
   const filter = document.getElementById('transcript-filter')?.value || 'all';
-  const rowsHtml = model.speakers.map((spk, spkIdx) => {
+  const rowsHtml = model.speakers.map(spk => {
     const c = model.colorOf(spk);
     const segs = model.bySpeaker.get(spk) || [];
     const blocks = [];
@@ -1299,7 +1381,7 @@ function renderLanesWindow(force) {
       + '<div class="lane-label' + (isFiltered ? ' filtered' : '') + '"'
       + ' data-speaker="' + html(spk) + '" style="--spk-color:' + c.fg + '"'
       + ' title="Click to filter transcript to ' + html(spk) + '">' + html(spk) + '</div>'
-      + '<div class="lane-track">' + (spkIdx === 0 ? ovBandsWithLabels : ovBandsPlain) + blocks.join('')
+      + '<div class="lane-track">' + ovBandsPlain + blocks.join('')
       + '<div class="lane-playhead"></div></div></div>';
   }).join('');
   body.innerHTML = rowsHtml;
@@ -1393,7 +1475,7 @@ function jumpOverlap(direction) {
   seekAndPlay(jumpTime);
   const firstIdx = Math.min(...target.indices);
   const row = rowByIndex.get(firstIdx);
-  if (row && !row.hidden) row.scrollIntoView({block: 'nearest'});
+  if (row && !row.hidden) scrollRowIntoCaptionBox(row, true);
 }
 
 // Dual-sub & swimlane controls & drag/click interactions
@@ -1404,12 +1486,40 @@ if (dualSubsBox) {
     if (w) seekAndPlay(Number(w.dataset.t));
   });
 }
+const toggleAutoScrollBtn = document.getElementById('toggle-autoscroll');
+if (toggleAutoScrollBtn) {
+  toggleAutoScrollBtn.setAttribute('aria-pressed', String(autoScroll));
+  toggleAutoScrollBtn.onclick = () => {
+    autoScroll = !autoScroll;
+    localStorage.setItem('ytarchive.transcript.autoScroll', String(autoScroll));
+    toggleAutoScrollBtn.setAttribute('aria-pressed', String(autoScroll));
+    if (autoScroll) syncTranscript(true);
+  };
+}
+const toggleDualSubsBtn = document.getElementById('toggle-dual-subs');
+if (toggleDualSubsBtn) {
+  toggleDualSubsBtn.setAttribute('aria-pressed', String(showDualSubs));
+  toggleDualSubsBtn.onclick = () => {
+    showDualSubs = !showDualSubs;
+    localStorage.setItem('ytarchive.transcript.showDualSubs', String(showDualSubs));
+    applyDualOverlayPosition();
+  };
+}
 const overlaySubsBtn = document.getElementById('toggle-overlay-subs');
 if (overlaySubsBtn) {
   overlaySubsBtn.onclick = () => {
     dualOverlay = !dualOverlay;
     localStorage.setItem('ytarchive.transcript.dualOverlay', String(dualOverlay));
     applyDualOverlayPosition();
+  };
+}
+const splitViewBtn = document.getElementById('toggle-split-view');
+if (splitViewBtn) {
+  splitViewBtn.setAttribute('aria-pressed', String(splitView));
+  splitViewBtn.onclick = () => {
+    splitView = !splitView;
+    localStorage.setItem('ytarchive.transcript.splitView', String(splitView));
+    applySplitLayout();
   };
 }
 const toggleLanesBtn = document.getElementById('toggle-lanes');
@@ -1553,6 +1663,7 @@ if (minimapWrap) {
 }
 
 window.addEventListener('resize', () => {
+  syncSplitHeight();
   if (model && !lanesHidden && model.speakers.length >= 2) drawMinimap();
 });
 
@@ -1571,9 +1682,9 @@ function syncTranscript(force) {
     for (const [idx, row] of rowByIndex.entries()) {
       row.classList.toggle('now', activeSet.has(idx));
     }
-    if (activeIndices.length && !document.getElementById('transcript-search')?.value) {
+    if (autoScroll && activeIndices.length && !document.getElementById('transcript-search')?.value) {
       const firstRow = rowByIndex.get(activeIndices[0]);
-      if (firstRow && !firstRow.hidden) firstRow.scrollIntoView({block: 'nearest'});
+      if (firstRow && !firstRow.hidden) scrollRowIntoCaptionBox(firstRow, false);
     }
   }
 

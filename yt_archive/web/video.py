@@ -229,7 +229,9 @@ def detail_html(
           </select>
         </label>
         <button type="button" id="lanes-follow" aria-pressed="true" title="Keep timeline synced to playback">Follow</button>
+        <button type="button" id="toggle-dual-subs" aria-pressed="true" title="Show or hide live dual-color subtitle rows">Live subs</button>
         <button type="button" id="toggle-overlay-subs" aria-pressed="false" title="Show dual-color speaker subtitles over the video frame">Overlay on video</button>
+        <button type="button" id="toggle-split-view" aria-pressed="true" title="Side-by-side video and transcript with full-width timeline below">Split view</button>
       </div>
     </div>
     <div class="lanes-stage" id="lanes-stage">
@@ -352,6 +354,7 @@ def detail_html(
         <option value="large">large</option>
       </select>
     </label>
+    <button type="button" id="toggle-autoscroll" aria-pressed="true" title="Scroll the transcript list as playback moves">Auto-scroll</button>
     <button type="button" id="toggle-lanes" hidden>Hide overlap view</button>
     <button type="button" id="toggle-cc">Enable video CC</button>
     {" ".join(download_links)}
