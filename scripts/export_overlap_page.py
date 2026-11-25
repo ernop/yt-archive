@@ -98,137 +98,146 @@ def _compact_transcript(data_dir: Path, video_id: str) -> dict:
 
 APP_CSS = r"""* { box-sizing: border-box; }
 :root {
-  --bg: #070707;
-  --panel: #111;
-  --border: #333;
-  --fg: #fff;
+  --bg: #07080a;
+  --panel: #0e1014;
+  --border: #262b33;
+  --fg: #ffffff;
   --accent: #7cc4ff;
   --gold: #ffd240;
-  --red: #ff4d4d;
+  --red: #ff4747;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
-html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
-  font: 15px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-a { color: #7cc4ff; }
-button, select, input {
-  font: inherit; color: #fff; background: #181818; border: 1px solid #4a4a4a;
-  border-radius: 5px; padding: .28rem .55rem; cursor: pointer;
+html, body {
+  margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+  font: 15px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
-button:hover, select:hover { background: #242424; border-color: #777; }
-button:disabled { opacity: 1; border-color: #333; background: #121212; cursor: not-allowed; }
-button[aria-pressed="true"] { border-color: #68c77b; background: #162819; }
+a { color: #7cc4ff; text-decoration: none; }
+a:hover { text-decoration: underline; }
+button, select, input {
+  font: inherit; color: #fff; background: #14171d; border: 1px solid #383f4b;
+  border-radius: 5px; padding: .26rem .52rem; cursor: pointer;
+}
+button:hover, select:hover { background: #1e232c; border-color: #637083; }
+button:disabled { opacity: 1; border-color: #252a32; background: #101216; cursor: not-allowed; }
+button[aria-pressed="true"] { border-color: #68c77b; background: #142618; }
 input[type="search"], input[type="text"] { cursor: text; }
 input::placeholder { color: #fff; opacity: 1; }
+[hidden] { display: none !important; }
 
 header.top {
-  padding: .65rem 1rem .45rem; border-bottom: 1px solid #262626; background: #0c0c0c;
+  padding: .55rem 1rem .45rem; border-bottom: 1px solid #1d2129; background: #0a0b0e;
 }
-.top-nav { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem 1rem; font-size: .86rem; }
-.top-nav .sep { opacity: .6; }
-header.top h1 { margin: .25rem 0 .2rem; font-size: 1.25rem; line-height: 1.25; }
-.facts { display: flex; flex-wrap: wrap; gap: .35rem .9rem; font-size: .86rem; }
-.chapters { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-top: .45rem; }
-.chapters .chap-label { font-size: .82rem; font-weight: 700; }
-.chapters button { font-size: .8rem; padding: .18rem .48rem; }
+.top-row {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+  gap: .35rem 1rem;
+}
+header.top h1 { margin: 0; font-size: 1.12rem; line-height: 1.25; font-weight: 700; }
+.top-nav { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .85rem; font-size: .84rem; }
+.top-nav .sep { opacity: .45; }
+.top-nav button { font-size: .8rem; padding: .16rem .46rem; }
+.chapters { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin-top: .38rem; }
+.chapters button { font-size: .78rem; padding: .14rem .45rem; background: #111419; border-color: #2d333e; }
 
-main { padding: .65rem 1rem 2rem; max-width: 1760px; margin: 0 auto; }
+main { padding: .6rem 1rem 2rem; max-width: 1800px; margin: 0 auto; }
 main.split-view { display: block; }
 
-.player-wrap { position: relative; background: #000; border: 1px solid #2a2a2a;
-  border-radius: 7px; overflow: hidden; }
+.player-wrap {
+  position: relative; background: #000; border: 1px solid var(--border);
+  border-radius: 7px; overflow: hidden;
+}
 .video-box { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; }
 .video-box iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 
-.dual-stage { margin: .65rem 0 .9rem; display: grid; gap: .55rem; }
-.dual-subs[hidden] { display: none; }
-.dual-subs { display: grid; gap: .35rem; padding: .5rem .65rem; border: 1px solid #383838;
-  border-radius: 6px; background: #050505; }
-.dual-subs.is-overlay {
-  position: absolute; left: .75rem; right: .75rem; bottom: 3.6rem; z-index: 20;
-  padding: 0; gap: 0; background: rgba(6, 6, 6, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 7px;
-  overflow: hidden; pointer-events: auto; backdrop-filter: blur(4px);
+/* Overlay timeline over the bottom of the YouTube player (opt-in via Overlay button) */
+.ov-overlay {
+  position: absolute; left: .7rem; right: .7rem; bottom: 3.6rem; z-index: 20;
+  background: rgba(7, 8, 10, 0.88); border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 7px; overflow: hidden; pointer-events: auto; backdrop-filter: blur(5px);
+  user-select: none;
 }
-.dual-subs .ov-timeline { display: none; }
-.dual-subs.is-overlay .dual-sub-head,
-.dual-subs.is-overlay .dual-sub-row { display: none; }
-.dual-subs.is-overlay .ov-timeline { display: block; user-select: none; }
-
-.dual-sub-head { display: flex; align-items: center; gap: .6rem; font-size: .82rem; font-weight: 800;
-  min-height: 1.25rem; }
-.dual-sub-head .ov-live { display: inline-flex; align-items: center; gap: .35rem;
-  padding: .05rem .45rem; border-radius: 4px; background: #2a2104; border: 1px solid var(--gold);
-  color: var(--gold); font-weight: 800; }
-.dual-sub-row { position: relative; display: grid; grid-template-columns: 8.5rem minmax(0, 1fr) auto;
-  gap: .65rem; align-items: baseline; min-height: 2.35rem; padding: .35rem .55rem;
-  border-radius: 5px; border: 1px solid #222; background: #0a0a0a; overflow: hidden; }
-.dual-sub-row.active { border-color: var(--spk-color, #7cc4ff); background: #0f1216; }
-.dual-sub-row.active.overlapping { box-shadow: inset 3px 0 var(--gold); }
-.dual-sub-spk { display: flex; align-items: center; gap: .4rem; font-size: .88rem; font-weight: 800;
-  color: var(--spk-color, #fff); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dual-sub-dot { width: .55rem; height: .55rem; border-radius: 999px; flex: 0 0 auto;
-  border: 1.5px solid var(--spk-color, #fff); }
-.dual-sub-row.active .dual-sub-dot { background: var(--spk-color, #fff);
-  box-shadow: 0 0 8px var(--spk-color, #fff); }
-.dual-sub-text { font-size: 1.14rem; line-height: 1.38; font-weight: 600; color: var(--spk-color, #fff); }
-.dual-sub-text .word { cursor: pointer; padding: 0 .06rem; }
-.dual-sub-text .word.word-now { background: var(--spk-color, #7cc4ff); color: #000;
-  font-weight: 800; border-radius: 3px; }
-.dual-sub-text .word.word-ov { border-bottom: 2px solid var(--ov-color, var(--gold)); }
-.dual-sub-time { font: 700 .78rem/1.4 var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.dual-sub-prog { position: absolute; left: 0; bottom: 0; height: 3px; width: 0;
-  background: var(--spk-color, #7cc4ff); pointer-events: none; }
-
-.ov-ruler-row, .ov-row { display: grid; grid-template-columns: 7.2rem minmax(0, 1fr); }
-.ov-ruler-row { height: 1.35rem; background: rgba(14, 14, 14, 0.92);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.14); }
+.ov-ruler-row, .ov-row { display: grid; grid-template-columns: 7.4rem minmax(0, 1fr); }
+.ov-ruler-row {
+  height: 1.3rem; background: rgba(14, 16, 20, 0.94);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
 .ov-gutter { border-right: 1px solid rgba(255, 255, 255, 0.14); }
 .ov-ruler { position: relative; overflow: hidden; cursor: pointer; }
-.ov-row { height: 2.35rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.ov-row { height: 2.55rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
 .ov-row:last-child { border-bottom: 0; }
-.ov-label { display: flex; align-items: center; padding: 0 .45rem;
+.ov-label {
+  display: flex; align-items: center; padding: 0 .48rem;
   border-right: 1px solid rgba(255, 255, 255, 0.14); font-size: .82rem; font-weight: 800;
-  color: var(--spk-color, #fff); background: rgba(10, 10, 10, 0.82);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  color: var(--spk-color, #fff); background: rgba(10, 12, 16, 0.86);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .ov-track { position: relative; overflow: hidden; cursor: pointer; }
-.ov-timeline .lane-block { top: 4px; bottom: 4px; line-height: calc(2.35rem - 11px); }
+.ov-overlay .lane-block { top: 4px; bottom: 4px; line-height: calc(2.55rem - 11px); font-size: .84rem; }
 
-.speaker-lanes { border: 1px solid #383838; border-radius: 6px; background: #080808; overflow: hidden; }
-.lanes-head { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .7rem;
-  padding: .45rem .7rem; background: #111; border-bottom: 1px solid #2b2b2b; }
-.lanes-title { font-weight: 800; font-size: .9rem; }
-.lanes-status { flex: 1 1 12rem; min-width: 0; font-size: .85rem;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lanes-status .ov-badge { color: var(--gold); font-weight: 800; margin-right: .35rem; }
-.lanes-tools { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-left: auto; }
-.lanes-tools button, .lanes-tools select { padding: .22rem .5rem; font-size: .82rem; }
-.lanes-tools label { display: inline-flex; align-items: center; gap: .3rem; font-size: .82rem; font-weight: 700; }
+/* Primary speech-overlap swimlane visualization */
+.viz-stage { margin: .65rem 0 .8rem; }
+.speaker-lanes {
+  border: 1px solid var(--border); border-radius: 7px;
+  background: #08090c; overflow: hidden;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
 .lanes-stage { position: relative; user-select: none; }
-.lanes-ruler-row, .lane-row { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); }
-.lanes-ruler-row { border-bottom: 1px solid #2a2a2a; background: #0d0d0d; height: 1.45rem; }
-.lanes-gutter { border-right: 1px solid #2a2a2a; }
+.lanes-ruler-row, .lane-row { display: grid; grid-template-columns: 8.6rem minmax(0, 1fr); }
+.lanes-ruler-row {
+  border-bottom: 1px solid #222730; background: #0d1015; height: 1.55rem;
+}
+.lanes-gutter { border-right: 1px solid #222730; }
 .lanes-ruler { position: relative; overflow: hidden; cursor: pointer; }
-.ruler-tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid #333;
-  padding-left: .25rem; font: 700 .72rem/1.45rem var(--mono); color: #fff;
-  font-variant-numeric: tabular-nums; pointer-events: none; white-space: nowrap; }
-.ruler-ov-pill { position: absolute; top: 1px; bottom: 1px; background: #261d04;
+.ruler-tick {
+  position: absolute; top: 0; bottom: 0; border-left: 1px solid #2a303b;
+  padding-left: .28rem; font: 700 .72rem/1.55rem var(--mono); color: #fff;
+  font-variant-numeric: tabular-nums; pointer-events: none; white-space: nowrap;
+}
+.lane-gridline {
+  position: absolute; top: 0; bottom: 0; border-left: 1px solid rgba(255, 255, 255, 0.05);
+  pointer-events: none; z-index: 0;
+}
+.ruler-ov-pill {
+  position: absolute; top: 2px; bottom: 2px; background: #261d04;
   border: 1px solid var(--gold); border-radius: 3px; padding: 0 .22rem;
-  font: 800 .68rem/1.2rem var(--mono); color: var(--gold); white-space: nowrap;
-  overflow: hidden; text-overflow: clip; pointer-events: none; z-index: 3; }
-.lane-row { border-bottom: 1px solid #222; height: 2.55rem; }
+  font: 800 .68rem/1.15rem var(--mono); color: var(--gold); white-space: nowrap;
+  overflow: hidden; text-overflow: clip; pointer-events: none; z-index: 3;
+}
+.ruler-note-pin {
+  position: absolute; top: 2px; bottom: 2px; min-width: 6px; padding: 0 .25rem;
+  border-radius: 3px; background: #14304a; border: 1px solid var(--accent);
+  font: 700 .66rem/1.15rem var(--mono); color: #fff; white-space: nowrap;
+  z-index: 4; cursor: pointer; transform: translateX(-2px);
+}
+.lane-row { border-bottom: 1px solid #1b1f27; height: 3.05rem; }
 .lane-row:last-child { border-bottom: 0; }
-.lane-label { display: flex; align-items: center; padding: 0 .55rem; border-right: 1px solid #2a2a2a;
-  font-size: .86rem; font-weight: 800; color: var(--spk-color, #fff); background: #0c0c0c;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
-.lane-label:hover { background: #181818; }
-.lane-label.filtered { background: #1d222c; box-shadow: inset 3px 0 var(--spk-color, #fff); }
-.lane-track { position: relative; overflow: hidden; cursor: pointer; background: #070707; }
-.lane-ov-band { position: absolute; top: 0; bottom: 0; background: rgba(255, 210, 64, 0.16);
-  border-top: 2px solid var(--gold); border-bottom: 2px solid var(--gold); pointer-events: none; z-index: 1; }
-.lane-block { position: absolute; top: 5px; bottom: 5px; min-width: 4px; border-radius: 4px;
-  border: 1.5px solid var(--spk-color, #7cc4ff); background: var(--spk-bg, rgba(124,196,255,0.22));
-  color: #fff; padding: 0 .38rem; font-size: .82rem; font-weight: 600; line-height: calc(2.55rem - 13px);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 2; cursor: pointer; }
+.lane-label {
+  display: flex; align-items: center; gap: .45rem; padding: 0 .6rem;
+  border-right: 1px solid #222730; font-size: .88rem; font-weight: 800;
+  color: var(--spk-color, #fff); background: #0c0e12;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+}
+.lane-label::before {
+  content: ""; width: .5rem; height: .5rem; border-radius: 999px; flex: 0 0 auto;
+  background: var(--spk-color, #fff);
+}
+.lane-label:hover { background: #151922; }
+.lane-label.filtered { background: #182130; box-shadow: inset 3px 0 var(--spk-color, #fff); }
+.lane-track { position: relative; overflow: hidden; cursor: pointer; background: #08090c; }
+.lane-ov-band {
+  position: absolute; top: 0; bottom: 0;
+  background: linear-gradient(180deg, rgba(255, 210, 64, 0.14), rgba(255, 210, 64, 0.08));
+  border-top: 1px solid rgba(255, 210, 64, 0.55);
+  border-bottom: 1px solid rgba(255, 210, 64, 0.55);
+  pointer-events: none; z-index: 1;
+}
+.lane-block {
+  position: absolute; top: 5px; bottom: 5px; min-width: 4px; border-radius: 5px;
+  border: 1.5px solid var(--spk-color, #7cc4ff);
+  background: var(--spk-bg, rgba(124, 196, 255, 0.2));
+  color: #fff; padding: 0 .4rem; font-size: .9rem; font-weight: 600;
+  line-height: calc(3.05rem - 13px); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; z-index: 2; cursor: pointer;
+}
 .lane-block.has-words { padding: 0; text-overflow: clip; }
 .lane-words { position: relative; width: 100%; height: 100%; overflow: hidden; }
 .lane-block.is-clipped .lane-words {
@@ -236,89 +245,140 @@ main.split-view { display: block; }
   mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent 100%);
 }
 .lane-word { position: absolute; top: 0; bottom: 0; white-space: nowrap; color: #fff; border-radius: 3px; }
-.lane-word.lw-ov { text-decoration: underline; text-decoration-color: var(--ov-color, var(--gold));
-  text-decoration-thickness: 2px; text-underline-offset: 3px; }
-.lane-word.lw-now { background: rgba(255, 255, 255, 0.26);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.26); color: #fff; }
-.lane-block.has-ov { box-shadow: inset 0 -2px 0 var(--gold); }
-.lane-block.now { border-color: #fff; background: var(--spk-bg-hi, rgba(124,196,255,0.45));
-  box-shadow: 0 0 0 1px #fff; z-index: 3; }
-.lane-block.ov-linked { border-color: var(--gold); background: rgba(255, 210, 64, 0.34); z-index: 4; }
-.lane-playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--red);
-  pointer-events: none; z-index: 5; }
-.lanes-minimap-wrap { position: relative; height: 24px; background: #050505;
-  border-top: 1px solid #2b2b2b; cursor: pointer; }
-.lanes-minimap { display: block; width: 100%; height: 24px; }
-.minimap-viewport { position: absolute; top: 0; bottom: 0; border: 1px solid #fff;
-  background: rgba(255, 255, 255, 0.14); pointer-events: none; }
-.minimap-playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--red);
-  pointer-events: none; }
+.lane-word.lw-ov {
+  text-decoration: underline; text-decoration-color: var(--ov-color, var(--gold));
+  text-decoration-thickness: 2px; text-underline-offset: 3px;
+}
+.lane-word.lw-now {
+  background: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.28);
+  color: #fff; font-weight: 800;
+}
+.lane-block.has-ov { box-shadow: inset 0 -2px 0 rgba(255, 210, 64, 0.85); }
+.lane-block.now {
+  border-color: #fff; background: var(--spk-bg-hi, rgba(124, 196, 255, 0.4));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85); z-index: 3;
+}
+.lane-block.ov-linked { border-color: var(--gold); background: rgba(255, 210, 64, 0.3); z-index: 4; }
+.lane-playhead {
+  position: absolute; top: 0; bottom: 0; width: 2px; background: var(--red);
+  box-shadow: 0 0 8px rgba(255, 71, 71, 0.7); pointer-events: none; z-index: 6;
+}
 
-.transcript { margin-top: .75rem; padding: .7rem .85rem; border: 1px solid #333;
-  border-radius: 7px; background: var(--panel); }
-.transcript h2 { margin: 0 0 .35rem; font-size: 1.05rem; }
-.transcript-meta { font-size: .84rem; margin: .25rem 0 .45rem; }
-.transcript-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
-.transcript-controls label { display: inline-flex; align-items: center; gap: .3rem;
-  font-size: .82rem; font-weight: 700; }
-.transcript-search { flex: 1 1 11rem; min-width: 8rem; }
-.caption-box { margin-top: .5rem; border: 1px solid #2c2c2c; border-radius: 6px;
-  background: #090909; max-height: 28rem; overflow-y: auto; }
-.segment { display: grid; grid-template-columns: 4.8rem 7.2rem minmax(0, 1fr); gap: .5rem;
-  align-items: baseline; padding: .45rem .65rem; border-bottom: 1px solid #242424; cursor: pointer; }
+.lanes-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .65rem;
+  padding: .36rem .6rem; background: #0d1015; border-top: 1px solid #20252e;
+}
+.lanes-status {
+  flex: 1 1 10rem; min-width: 0; font-size: .82rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lanes-status .ov-badge { color: var(--gold); font-weight: 800; margin-right: .35rem; }
+.lanes-tools { display: flex; flex-wrap: wrap; align-items: center; gap: .32rem; margin-left: auto; }
+.lanes-tools button, .lanes-tools select { padding: .2rem .46rem; font-size: .8rem; }
+.lanes-tools label { display: inline-flex; align-items: center; gap: .28rem; font-size: .8rem; font-weight: 700; }
+
+.lanes-minimap-wrap {
+  position: relative; height: 22px; background: #050608;
+  border-top: 1px solid #20252e; cursor: pointer;
+}
+.lanes-minimap { display: block; width: 100%; height: 22px; }
+.minimap-viewport {
+  position: absolute; top: 0; bottom: 0; border: 1px solid #fff;
+  background: rgba(255, 255, 255, 0.14); pointer-events: none;
+}
+.minimap-playhead {
+  position: absolute; top: 0; bottom: 0; width: 2px; background: var(--red);
+  pointer-events: none;
+}
+
+.transcript {
+  margin-top: .7rem; padding: .6rem .75rem; border: 1px solid var(--border);
+  border-radius: 7px; background: var(--panel);
+}
+.transcript-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .38rem; }
+.transcript-controls label { display: inline-flex; align-items: center; gap: .28rem; font-size: .8rem; font-weight: 700; }
+.transcript-controls button, .transcript-controls select, .transcript-controls input {
+  font-size: .82rem; padding: .22rem .46rem;
+}
+.transcript-search { flex: 1 1 10rem; min-width: 7.5rem; }
+.caption-box {
+  margin-top: .45rem; border: 1px solid #222730; border-radius: 6px;
+  background: #08090c; max-height: 28rem; overflow-y: auto;
+}
+.segment {
+  display: grid; grid-template-columns: 4.5rem 7rem minmax(0, 1fr); gap: .48rem;
+  align-items: baseline; padding: .4rem .6rem; border-bottom: 1px solid #191d24; cursor: pointer;
+}
 .segment:last-child { border-bottom: 0; }
-.segment:hover { background: #171717; }
-.segment.ov-child { background: #0f1218; box-shadow: inset 3px 0 var(--spk-color, #a9d6ff);
-  padding-left: .85rem; }
+.segment:hover { background: #141820; }
+.segment.ov-child {
+  background: #0d1017; box-shadow: inset 3px 0 var(--spk-color, #a9d6ff);
+  padding-left: .8rem;
+}
 .segment.ov-linked { background: #242110 !important; box-shadow: inset 4px 0 var(--gold); }
-.segment.now { background: #1d2a20; box-shadow: inset 4px 0 #68c77b; }
+.segment.now { background: #18271c; box-shadow: inset 4px 0 #68c77b; }
 .segment.match { background: #28230f; }
-.segment-time { font: 700 .88rem/1.4 var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ov-mark { display: inline-block; margin-left: .25rem; padding: 0 .22rem; border-radius: 3px;
-  font: 800 .74rem/1.25 var(--mono); color: var(--gold); border: 1px solid #8a6e14; background: #1d1604; }
-.segment-speaker { color: var(--spk-color, #a9d6ff); font-size: .86rem; font-weight: 800;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.segment-text { line-height: 1.48; }
+.segment-time { font: 700 .84rem/1.4 var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ov-mark {
+  display: inline-block; margin-left: .22rem; padding: 0 .2rem; border-radius: 3px;
+  font: 800 .72rem/1.25 var(--mono); color: var(--gold); border: 1px solid #8a6e14; background: #1d1604;
+}
+.segment-speaker {
+  color: var(--spk-color, #a9d6ff); font-size: .84rem; font-weight: 800;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.segment-text { line-height: 1.46; }
 .word { border-radius: 3px; }
 .word:hover { background: #554b19; }
 .word.word-ov { border-bottom: 2px solid var(--ov-color, var(--gold)); padding-bottom: 1px; }
 .word.word-ov-hi { background: rgba(255, 210, 64, 0.28); }
 .word.word-now { background: #2e5937; }
-.ov-chip { display: inline-block; margin: 0 .25rem; padding: .02rem .4rem; border-radius: 4px;
-  border: 1px solid var(--ov-color, var(--gold)); background: #141414; color: #fff;
-  font-size: .82em; line-height: 1.35; cursor: pointer; white-space: nowrap; max-width: 24rem;
-  overflow: hidden; text-overflow: ellipsis; vertical-align: -0.12em; }
+.ov-chip {
+  display: inline-block; margin: 0 .22rem; padding: .02rem .38rem; border-radius: 4px;
+  border: 1px solid var(--ov-color, var(--gold)); background: #12151b; color: #fff;
+  font-size: .8em; line-height: 1.35; cursor: pointer; white-space: nowrap; max-width: 22rem;
+  overflow: hidden; text-overflow: ellipsis; vertical-align: -0.12em;
+}
 .ov-chip strong { color: var(--ov-color, var(--gold)); }
 
-.notes-panel { margin-top: .85rem; padding: .65rem .8rem; border: 1px solid #333;
-  border-radius: 7px; background: #0d0d0d; }
-.notes-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; }
-.notes-bar h2 { margin: 0; font-size: .98rem; margin-right: .4rem; }
-.notes-bar input[type="text"] { flex: 1 1 14rem; min-width: 10rem; }
-.notes-list { margin-top: .5rem; display: grid; gap: .3rem; }
-.note-row { display: grid; grid-template-columns: 4.5rem 7.5rem minmax(0, 1fr) auto; gap: .5rem;
-  align-items: baseline; padding: .3rem .45rem; border: 1px solid #262626; border-radius: 4px;
-  background: #121212; font-size: .86rem; }
+.notes-panel {
+  margin-top: .7rem; padding: .55rem .75rem; border: 1px solid var(--border);
+  border-radius: 7px; background: var(--panel);
+}
+.notes-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.notes-bar h2 { margin: 0; font-size: .92rem; margin-right: .3rem; }
+.notes-bar input[type="text"] { flex: 1 1 14rem; min-width: 10rem; font-size: .86rem; }
+.notes-bar select, .notes-bar button { font-size: .84rem; }
+.notes-list { margin-top: .45rem; display: grid; gap: .28rem; }
+.notes-list:empty { display: none; }
+.note-row {
+  display: grid; grid-template-columns: 4.5rem 8.5rem minmax(0, 1fr) auto; gap: .5rem;
+  align-items: baseline; padding: .28rem .45rem; border: 1px solid #222730; border-radius: 4px;
+  background: #101319; font-size: .85rem;
+}
 .note-row .nt-time { font: 700 .84rem/1.3 var(--mono); color: #7cc4ff; cursor: pointer; }
 .note-row .nt-tag { font-weight: 800; color: var(--gold); }
-.note-row .nt-del { padding: .1rem .4rem; font-size: .78rem; }
+.note-row .nt-del { padding: .08rem .38rem; font-size: .78rem; }
 
 @media (min-width: 1040px) {
-  main.split-view { display: grid; grid-template-columns: minmax(0, 3fr) minmax(22rem, 2fr);
-    column-gap: .9rem; row-gap: .65rem; align-items: start; }
+  main.split-view {
+    display: grid; grid-template-columns: minmax(0, 3fr) minmax(22rem, 2fr);
+    column-gap: .85rem; row-gap: .65rem; align-items: start;
+  }
   main.split-view > .player-wrap { grid-column: 1; grid-row: 1; }
-  main.split-view > .transcript { grid-column: 2; grid-row: 1; margin: 0;
-    display: flex; flex-direction: column; overflow: hidden; }
+  main.split-view > .transcript {
+    grid-column: 2; grid-row: 1; margin: 0;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
   main.split-view > .transcript .caption-box { flex: 1 1 0; max-height: none; min-height: 0; }
-  main.split-view > .dual-stage,
+  main.split-view > .viz-stage,
   main.split-view > .notes-panel { grid-column: 1 / -1; margin-top: 0; }
 }
 @media (max-width: 760px) {
-  .lanes-ruler-row, .lane-row { grid-template-columns: 5.5rem minmax(0, 1fr); }
+  .lanes-ruler-row, .lane-row { grid-template-columns: 5.8rem minmax(0, 1fr); }
   .ov-ruler-row, .ov-row { grid-template-columns: 5.2rem minmax(0, 1fr); }
-  .dual-sub-row { grid-template-columns: 5.5rem minmax(0, 1fr); }
-  .dual-sub-time { display: none; }
-  .segment { grid-template-columns: 4.2rem 5.5rem minmax(0, 1fr); gap: .4rem; }
+  .segment { grid-template-columns: 4.2rem 5.5rem minmax(0, 1fr); gap: .38rem; }
   .note-row { grid-template-columns: 4rem 6rem minmax(0, 1fr) auto; }
 }
 """
@@ -327,12 +387,12 @@ APP_JS = r"""(() => {
   'use strict';
 
   const SPEAKER_PALETTE = [
-    {fg: '#7cc4ff', bg: 'rgba(124,196,255,0.22)', bgHi: 'rgba(124,196,255,0.44)'},
-    {fg: '#ffb84d', bg: 'rgba(255,184,77,0.22)',  bgHi: 'rgba(255,184,77,0.44)'},
-    {fg: '#7ee787', bg: 'rgba(126,231,135,0.22)', bgHi: 'rgba(126,231,135,0.44)'},
-    {fg: '#d2a8ff', bg: 'rgba(210,168,255,0.22)', bgHi: 'rgba(210,168,255,0.44)'},
-    {fg: '#ff85a2', bg: 'rgba(255,133,162,0.22)', bgHi: 'rgba(255,133,162,0.44)'},
-    {fg: '#66e3d8', bg: 'rgba(102,227,216,0.22)', bgHi: 'rgba(102,227,216,0.44)'},
+    {fg: '#7cc4ff', bg: 'rgba(124,196,255,0.20)', bgHi: 'rgba(124,196,255,0.40)'},
+    {fg: '#ffb84d', bg: 'rgba(255,184,77,0.20)',  bgHi: 'rgba(255,184,77,0.40)'},
+    {fg: '#7ee787', bg: 'rgba(126,231,135,0.20)', bgHi: 'rgba(126,231,135,0.40)'},
+    {fg: '#d2a8ff', bg: 'rgba(210,168,255,0.20)', bgHi: 'rgba(210,168,255,0.40)'},
+    {fg: '#ff85a2', bg: 'rgba(255,133,162,0.20)', bgHi: 'rgba(255,133,162,0.40)'},
+    {fg: '#66e3d8', bg: 'rgba(102,227,216,0.20)', bgHi: 'rgba(102,227,216,0.40)'},
   ];
   const UNASSIGNED = {fg: '#a9d6ff', bg: 'rgba(169,214,255,0.16)', bgHi: 'rgba(169,214,255,0.36)'};
   const YT_ORIGIN = 'https://www.youtube-nocookie.com';
@@ -357,8 +417,9 @@ APP_JS = r"""(() => {
 
   let lanesWindow = Number(localStorage.getItem('ovpub.window')) || 20;
   let lanesFollow = true;
-  let showDualSubs = localStorage.getItem('ovpub.showSubs') !== 'false';
-  let dualOverlay = localStorage.getItem('ovpub.overlay') === 'true';
+  let showOverlay = localStorage.getItem('ovpub.overlay') === 'true';
+  let showMinimap = localStorage.getItem('ovpub.minimap') === 'true';
+  let showBadges = localStorage.getItem('ovpub.badges') === 'true';
   let splitView = localStorage.getItem('ovpub.split') !== 'false';
   let autoScroll = localStorage.getItem('ovpub.autoScroll') !== 'false';
 
@@ -369,8 +430,6 @@ APP_JS = r"""(() => {
   let playheadEls = [];
   let blockElsByIndex = new Map();
 
-  let dualHeadEl = null;
-  let dualRowBySpeaker = new Map();
   let ovWinStart = 0;
   let ovRenderedStart = -1;
   let ovRenderedTrackPx = 0;
@@ -625,13 +684,14 @@ APP_JS = r"""(() => {
     };
   }
 
-  function getLaneMeasurer() {
+  function getLaneMeasurer(isOverlay) {
     if (!laneMeasureCtx) {
       laneMeasureCtx = document.createElement('canvas').getContext('2d');
     }
     const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 15;
     const family = getComputedStyle(document.body).fontFamily || 'sans-serif';
-    const font = '600 ' + (0.82 * rootPx).toFixed(2) + 'px ' + family;
+    const scale = isOverlay ? 0.84 : 0.9;
+    const font = '600 ' + (scale * rootPx).toFixed(2) + 'px ' + family;
     if (laneMeasureCtx && font !== laneMeasureFont) {
       laneMeasureCtx.font = font;
       laneMeasureFont = font;
@@ -703,7 +763,7 @@ APP_JS = r"""(() => {
   }
 
   function buildLaneBlockContent(seg, s0, s1, blockPx, info, ctx) {
-    const pad = 5;
+    const pad = 6;
     const innerPx = blockPx - pad * 2;
     if (!ctx || innerPx < 28) return {cls: '', inner: html(seg.text)};
     const tokens = laneTokensForSpan(seg, s0, s1);
@@ -766,16 +826,18 @@ APP_JS = r"""(() => {
   function renderTimelineInto(ruler, body, winStart, winDur, isOverlay) {
     const trackPx = ruler.getBoundingClientRect().width || 0;
     const winEnd = winStart + winDur;
-    const measurer = trackPx > 0 ? getLaneMeasurer() : null;
+    const measurer = trackPx > 0 ? getLaneMeasurer(isOverlay) : null;
     const step = winDur <= 10 ? 2 : winDur <= 20 ? 4 : winDur <= 30 ? 5 : 10;
     const firstTick = Math.ceil(winStart / step) * step;
     const ticks = [];
+    const gridlines = [];
     for (let t = firstTick; t <= winEnd; t += step) {
       const pct = ((t - winStart) / winDur) * 100;
       ticks.push('<span class="ruler-tick" style="left:' + pct.toFixed(3) + '%">' + clock(t) + '</span>');
+      gridlines.push('<span class="lane-gridline" style="left:' + pct.toFixed(3) + '%"></span>');
     }
     const visibleOverlaps = model.overlapSpans.filter(ov => ov.end > winStart && ov.start < winEnd);
-    const pills = visibleOverlaps.map(ov => {
+    const pills = showBadges ? visibleOverlaps.map(ov => {
       const left = ((Math.max(ov.start, winStart) - winStart) / winDur) * 100;
       const right = ((Math.min(ov.end, winEnd) - winStart) / winDur) * 100;
       const width = Math.max(0.25, right - left);
@@ -783,8 +845,16 @@ APP_JS = r"""(() => {
       const dur = Math.max(0.1, ov.end - ov.start);
       return '<span class="ruler-ov-pill" style="left:' + left.toFixed(3)
         + '%;max-width:' + width.toFixed(3) + '%">∥ ' + dur.toFixed(1) + 's</span>';
+    }).join('') : '';
+
+    const notePins = notes.filter(n => n.t >= winStart && n.t <= winEnd).map(n => {
+      const pct = ((n.t - winStart) / winDur) * 100;
+      const tip = clock(n.t) + ' [' + n.tag + ']' + (n.note ? ' ' + n.note : '');
+      return '<span class="ruler-note-pin" data-t="' + n.t + '" style="left:' + pct.toFixed(3) + '%" title="'
+        + html(tip) + '">' + html(clipText(n.tag, 14)) + '</span>';
     }).join('');
-    ruler.innerHTML = ticks.join('') + pills + '<div class="lane-playhead"></div>';
+
+    ruler.innerHTML = ticks.join('') + pills + notePins + '<div class="lane-playhead"></div>';
 
     const bands = visibleOverlaps.map(ov => {
       const left = ((Math.max(ov.start, winStart) - winStart) / winDur) * 100;
@@ -792,6 +862,7 @@ APP_JS = r"""(() => {
       return '<div class="lane-ov-band" style="left:' + left.toFixed(3)
         + '%;width:' + Math.max(0.25, right - left).toFixed(3) + '%"></div>';
     }).join('');
+    const gridHtml = gridlines.join('');
 
     const filter = document.getElementById('transcript-filter')?.value || 'all';
     const rowCls = isOverlay ? 'ov-row' : 'lane-row';
@@ -825,7 +896,7 @@ APP_JS = r"""(() => {
       return '<div class="' + rowCls + '">'
         + '<div class="' + lblCls + (isFiltered ? ' filtered' : '') + '"'
         + ' data-speaker="' + html(spk) + '" style="--spk-color:' + c.fg + '">' + html(spk) + '</div>'
-        + '<div class="' + trkCls + '">' + bands + blocks.join('')
+        + '<div class="' + trkCls + '">' + gridHtml + bands + blocks.join('')
         + '<div class="lane-playhead"></div></div></div>';
     }).join('');
     return trackPx;
@@ -886,100 +957,74 @@ APP_JS = r"""(() => {
       }
     }
     updatePlayheadOn(playheadEls, blockElsByIndex, time, lanesWinStart, lanesWindow);
-    const vp = document.getElementById('minimap-viewport');
-    const mp = document.getElementById('minimap-playhead');
-    if (vp) {
-      vp.style.left = ((lanesWinStart / model.duration) * 100).toFixed(3) + '%';
-      vp.style.width = Math.min(100, (lanesWindow / model.duration) * 100).toFixed(3) + '%';
+    if (showMinimap) {
+      const vp = document.getElementById('minimap-viewport');
+      const mp = document.getElementById('minimap-playhead');
+      if (vp) {
+        vp.style.left = ((lanesWinStart / model.duration) * 100).toFixed(3) + '%';
+        vp.style.width = Math.min(100, (lanesWindow / model.duration) * 100).toFixed(3) + '%';
+      }
+      if (mp) mp.style.left = Math.min(100, (time / model.duration) * 100).toFixed(3) + '%';
     }
-    if (mp) mp.style.left = Math.min(100, (time / model.duration) * 100).toFixed(3) + '%';
     if (!hoveredIndices) paintLanesStatus(time);
   }
 
   function paintLanesStatus(time) {
     const status = document.getElementById('lanes-status');
     if (!status || !model) return;
+    if (!showBadges) {
+      status.innerHTML = '';
+      return;
+    }
     const t = time != null ? time : currentTime();
     const ovIdx = model.overlapSpans.findIndex(ov => t >= ov.start && t <= ov.end);
     if (ovIdx !== -1) {
       const ov = model.overlapSpans[ovIdx];
+      const dur = Math.max(0.1, ov.end - ov.start);
       const who = [...ov.speakers].map(s => '<strong style="color:' + model.colorOf(s).fg + '">' + html(s) + '</strong>').join(' + ');
-      status.innerHTML = '<span class="ov-badge">∥ OVERLAP ' + (ovIdx + 1) + '/' + model.overlapSpans.length + '</span>' + who;
+      status.innerHTML = '<span class="ov-badge">∥ ' + (ovIdx + 1) + '/' + model.overlapSpans.length + ' · ' + dur.toFixed(1) + 's</span>' + who;
       return;
     }
-    status.textContent = model.overlapSpans.length + ' simultaneous overlaps · click to seek, drag to pan';
+    status.textContent = model.overlapSpans.length + ' overlaps';
   }
 
-  function renderDualSubsShell() {
-    const dualSubs = document.getElementById('dual-subs');
-    if (!dualSubs || !model) return;
-    const rows = model.speakers.map(spk => {
-      const c = model.colorOf(spk);
-      return '<div class="dual-sub-row" data-speaker="' + html(spk) + '" style="--spk-color:' + c.fg + '">'
-        + '<div class="dual-sub-spk"><span class="dual-sub-dot"></span><span>' + html(spk) + '</span></div>'
-        + '<div class="dual-sub-text"></div>'
-        + '<div class="dual-sub-time"></div>'
-        + '<div class="dual-sub-prog"></div></div>';
-    }).join('');
-    dualSubs.innerHTML = '<div class="dual-sub-head" id="dual-sub-head"></div>' + rows
-      + '<div class="ov-timeline" id="ov-timeline">'
-      + '<div class="ov-ruler-row"><div class="ov-gutter"></div><div class="ov-ruler" id="ov-ruler"></div></div>'
-      + '<div class="ov-body" id="ov-body"></div></div>';
-    dualHeadEl = document.getElementById('dual-sub-head');
-    dualRowBySpeaker = new Map();
-    dualSubs.querySelectorAll('.dual-sub-row').forEach(row => {
-      dualRowBySpeaker.set(row.dataset.speaker, {
-        row,
-        textEl: row.querySelector('.dual-sub-text'),
-        timeEl: row.querySelector('.dual-sub-time'),
-        progEl: row.querySelector('.dual-sub-prog'),
-        renderedSegIdx: -1,
-      });
-    });
-    dualSubs.addEventListener('click', event => {
-      const w = event.target.closest('.dual-sub-text .word');
-      if (w) seekAndPlay(Number(w.dataset.t));
-    });
-    const ovTimeline = document.getElementById('ov-timeline');
-    ovTimeline.addEventListener('click', event => {
-      event.stopPropagation();
-      const trk = event.target.closest('.ov-track, .ov-ruler');
-      if (!trk || !model) return;
-      const rect = trk.getBoundingClientRect();
-      if (rect.width <= 0) return;
-      const frac = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-      const winDur = Math.min(OV_WINDOW_SEC, Math.max(4, lanesWindow));
-      seekAndPlay(ovWinStart + frac * winDur);
-    });
-  }
-
-  function applyDualOverlayPosition() {
-    const dualSubs = document.getElementById('dual-subs');
-    const dualStage = document.getElementById('dual-stage');
-    const playerWrap = document.getElementById('player-wrap');
-    const overlayBtn = document.getElementById('toggle-overlay-subs');
-    const subsBtn = document.getElementById('toggle-dual-subs');
-    if (!dualSubs || !dualStage) return;
-    dualSubs.hidden = !showDualSubs;
-    const activeOverlay = Boolean(showDualSubs && dualOverlay && playerWrap);
-    dualSubs.classList.toggle('is-overlay', activeOverlay);
-    if (activeOverlay) {
-      if (dualSubs.parentNode !== playerWrap) playerWrap.appendChild(dualSubs);
+  function applyOverlayState() {
+    const ovEl = document.getElementById('ov-overlay');
+    const btn = document.getElementById('toggle-overlay');
+    if (btn) btn.setAttribute('aria-pressed', String(showOverlay));
+    if (!ovEl) return;
+    ovEl.hidden = !showOverlay;
+    if (showOverlay) {
       ovRenderedStart = -1;
       requestAnimationFrame(() => updateOverlayTimeline(currentTime(), true));
-    } else {
-      if (dualSubs.parentNode !== dualStage) dualStage.prepend(dualSubs);
     }
-    if (subsBtn) subsBtn.setAttribute('aria-pressed', String(showDualSubs));
-    if (overlayBtn) {
-      overlayBtn.setAttribute('aria-pressed', String(dualOverlay));
-      overlayBtn.textContent = dualOverlay ? 'Dock below video' : 'Overlay on video';
+  }
+
+  function applyMinimapState() {
+    const wrap = document.getElementById('lanes-minimap-wrap');
+    const btn = document.getElementById('toggle-minimap');
+    if (btn) btn.setAttribute('aria-pressed', String(showMinimap));
+    if (!wrap) return;
+    wrap.hidden = !showMinimap;
+    if (showMinimap) {
+      requestAnimationFrame(() => {
+        drawMinimap();
+        updateLanesPlayhead(currentTime());
+      });
     }
+  }
+
+  function applyBadgesState() {
+    const btn = document.getElementById('toggle-badges');
+    if (btn) btn.setAttribute('aria-pressed', String(showBadges));
+    renderLanesWindow(true);
+    if (showOverlay) updateOverlayTimeline(currentTime(), true);
+    paintLanesStatus();
   }
 
   function updateOverlayTimeline(time, force) {
-    const dualSubs = document.getElementById('dual-subs');
-    if (!dualSubs || !dualSubs.classList.contains('is-overlay') || !model) return;
+    const ovEl = document.getElementById('ov-overlay');
+    if (!ovEl || ovEl.hidden || !model) return;
     const ruler = document.getElementById('ov-ruler');
     const body = document.getElementById('ov-body');
     if (!ruler || !body) return;
@@ -993,89 +1038,23 @@ APP_JS = r"""(() => {
         : Math.max(0, Math.min(maxStart, ovWinStart));
       ovRenderedStart = ovWinStart;
       ovRenderedTrackPx = renderTimelineInto(ruler, body, ovWinStart, winDur, true);
-      ovPlayheadEls = [...dualSubs.querySelectorAll('.ov-timeline .lane-playhead')];
+      ovPlayheadEls = [...ovEl.querySelectorAll('.lane-playhead')];
       ovBlockElsByIndex = new Map();
       body.querySelectorAll('.lane-block').forEach(el => ovBlockElsByIndex.set(Number(el.dataset.index), el));
     }
     updatePlayheadOn(ovPlayheadEls, ovBlockElsByIndex, time, ovWinStart, winDur);
   }
 
-  function dualWordsHtml(seg) {
-    const info = model.infoByIndex.get(seg.index);
-    const partners = info ? info.partners : [];
-    const words = seg.words || [];
-    if (!words.length) return html(seg.text);
-    return words.map((w, wi) => {
-      const gap = wi && !/^[,.;:!?)]/.test(w.word) ? ' ' : '';
-      let ovColor = '';
-      for (const p of partners) {
-        if (w.start < p.ovEnd && w.end > p.ovStart) { ovColor = model.colorOf(p.other.speaker).fg; break; }
-      }
-      return gap + '<span class="word' + (ovColor ? ' word-ov' : '') + '" data-t="' + w.start + '" data-e="' + w.end + '"'
-        + (ovColor ? ' style="--ov-color:' + ovColor + '"' : '') + '>' + html(w.word) + '</span>';
-    }).join('');
-  }
-
-  function updateDualSubs(time) {
-    if (!model || !showDualSubs) return;
-    if (dualOverlay) { updateOverlayTimeline(time, false); return; }
-    const activeBySpeaker = new Map();
-    for (const spk of model.speakers) {
-      for (const seg of (model.bySpeaker.get(spk) || [])) {
-        if (seg.start > time) break;
-        if (time >= seg.start && time < seg.end) { activeBySpeaker.set(spk, seg); break; }
-      }
-    }
-    const activeList = [...activeBySpeaker.values()].sort((a, b) => a.start - b.start);
-    const isOv = activeList.length >= 2;
-    if (dualHeadEl) {
-      if (isOv) {
-        const ovDur = Math.max(0, Math.min(activeList[0].end, activeList[1].end) - Math.max(activeList[0].start, activeList[1].start));
-        const off = Math.max(0, activeList[1].start - activeList[0].start);
-        dualHeadEl.innerHTML = '<span class="ov-live">∥ OVERLAPPING · ' + ovDur.toFixed(1) + 's</span><span>'
-          + (off >= 0.1 ? html(activeList[1].speaker) + ' cut in +' + off.toFixed(1) + 's into ' + html(activeList[0].speaker) : 'both started together')
-          + '</span>';
-      } else {
-        dualHeadEl.innerHTML = '<span>Live dual-speaker captions: '
-          + model.speakers.map(s => '<span style="color:' + model.colorOf(s).fg + '">' + html(s) + '</span>').join(' · ')
-          + '</span>';
-      }
-    }
-    for (const [spk, slot] of dualRowBySpeaker.entries()) {
-      const seg = activeBySpeaker.get(spk) || null;
-      if (!seg) {
-        slot.row.classList.remove('active', 'overlapping');
-        if (slot.renderedSegIdx !== -1) {
-          slot.textEl.textContent = ''; slot.timeEl.textContent = ''; slot.progEl.style.width = '0%';
-          slot.renderedSegIdx = -1;
-        }
-        continue;
-      }
-      slot.row.classList.add('active');
-      slot.row.classList.toggle('overlapping', isOv);
-      if (slot.renderedSegIdx !== seg.index) {
-        slot.textEl.innerHTML = dualWordsHtml(seg);
-        slot.timeEl.textContent = clockPrecise(seg.start) + '–' + clockPrecise(seg.end);
-        slot.renderedSegIdx = seg.index;
-      }
-      const frac = Math.max(0, Math.min(1, (time - seg.start) / Math.max(0.05, seg.end - seg.start)));
-      slot.progEl.style.width = (frac * 100).toFixed(1) + '%';
-      slot.textEl.querySelectorAll('.word').forEach(w => {
-        const ws = Number(w.dataset.t), we = Number(w.dataset.e);
-        w.classList.toggle('word-now', time >= ws && time <= Math.max(we, ws + 0.08));
-      });
-    }
-  }
-
   function drawMinimap() {
+    if (!showMinimap) return;
     const canvas = document.getElementById('lanes-minimap');
     if (!canvas || !model) return;
     const rect = canvas.getBoundingClientRect();
     const width = Math.max(200, Math.round(rect.width * (window.devicePixelRatio || 1)));
-    const height = Math.round(24 * (window.devicePixelRatio || 1));
+    const height = Math.round(22 * (window.devicePixelRatio || 1));
     if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#050505';
+    ctx.fillStyle = '#050608';
     ctx.fillRect(0, 0, width, height);
     const rowH = height / Math.max(1, model.speakers.length);
     model.speakers.forEach((spk, i) => {
@@ -1106,7 +1085,6 @@ APP_JS = r"""(() => {
     const box = document.getElementById('caption-box');
     const query = (document.getElementById('transcript-search').value || '').trim().toLowerCase();
     const filter = document.getElementById('transcript-filter').value || 'all';
-    let shown = 0;
     box.innerHTML = doc.segments.map(seg => {
       const info = model.infoByIndex.get(seg.index);
       const partners = info ? info.partners : [];
@@ -1115,7 +1093,6 @@ APP_JS = r"""(() => {
       else if (filter.startsWith('spk:')) passF = seg.speaker === filter.slice(4);
       const passQ = !query || seg.text.toLowerCase().includes(query) || seg.speaker.toLowerCase().includes(query);
       const vis = passF && passQ;
-      if (vis) shown += 1;
       const color = model.colorOf(seg.speaker);
       const partnerIds = partners.length ? [...new Set(partners.map(p => p.other.index))].join(',') : '';
       let body = '';
@@ -1145,9 +1122,6 @@ APP_JS = r"""(() => {
     }).join('');
     rowByIndex = new Map();
     box.querySelectorAll('.segment').forEach(r => rowByIndex.set(Number(r.dataset.index), r));
-    document.getElementById('transcript-meta').textContent =
-      (query || filter !== 'all' ? shown + ' of ' + doc.segments.length + ' shown' : doc.segments.length + ' segments')
-      + ' · ' + model.speakers.length + ' speakers · ' + model.overlapSpans.length + ' overlaps';
     activeKey = '';
     syncAll(true);
   }
@@ -1194,14 +1168,14 @@ APP_JS = r"""(() => {
     if (!model) return;
     const t = currentTime();
     syncTranscript(t, force);
-    updateDualSubs(t);
+    if (showOverlay) updateOverlayTimeline(t, force);
     updateLanesPlayhead(t);
   }
 
   function tick() {
     if (!ytPlaying) { rafId = 0; return; }
     const t = currentTime();
-    updateDualSubs(t);
+    if (showOverlay) updateOverlayTimeline(t, false);
     updateLanesPlayhead(t);
     syncTranscript(t, false);
     rafId = requestAnimationFrame(tick);
@@ -1234,7 +1208,7 @@ APP_JS = r"""(() => {
     const active = splitView && window.innerWidth >= 1040;
     main.classList.toggle('split-view', active);
     btn.setAttribute('aria-pressed', String(splitView));
-    btn.textContent = splitView ? 'Split view' : 'Stacked view';
+    btn.textContent = splitView ? 'Split' : 'Stacked';
     if (!active) panel.style.height = '';
     else {
       const h = Math.round(pw.getBoundingClientRect().height);
@@ -1245,9 +1219,9 @@ APP_JS = r"""(() => {
         const h = Math.round(pw.getBoundingClientRect().height);
         if (h >= 200) panel.style.height = h + 'px';
       }
-      drawMinimap();
+      if (showMinimap) drawMinimap();
       renderLanesWindow(true);
-      if (dualOverlay) updateOverlayTimeline(currentTime(), true);
+      if (showOverlay) updateOverlayTimeline(currentTime(), true);
     });
   }
 
@@ -1259,7 +1233,7 @@ APP_JS = r"""(() => {
     for (const [idx, row] of rowByIndex.entries()) row.classList.toggle('ov-linked', Boolean(hoveredIndices && hoveredIndices.has(idx)));
     for (const [idx, blk] of blockElsByIndex.entries()) blk.classList.toggle('ov-linked', Boolean(hoveredIndices && hoveredIndices.has(idx)));
     const status = document.getElementById('lanes-status');
-    if (status && hoveredIndices && hoveredIndices.size) {
+    if (status && showBadges && hoveredIndices && hoveredIndices.size) {
       const segs = [...hoveredIndices].map(i => model.byIndex.get(i)).filter(Boolean).sort((a, b) => a.start - b.start);
       status.innerHTML = segs.map(s =>
         '<strong style="color:' + model.colorOf(s.speaker).fg + '">' + html(s.speaker) + '</strong>: “' + html(clipText(s.text, 48)) + '”'
@@ -1277,11 +1251,13 @@ APP_JS = r"""(() => {
   function saveNotes() {
     localStorage.setItem('ovpub.notes.' + doc.video_id, JSON.stringify(notes));
     paintNotes();
+    renderLanesWindow(true);
+    if (showOverlay) updateOverlayTimeline(currentTime(), true);
   }
   function paintNotes() {
     const list = document.getElementById('notes-list');
     if (!notes.length) {
-      list.innerHTML = '<div style="font-size:.84rem;">No moments noted yet. Press <strong>+ Note moment</strong> while watching to log timestamps and active lines.</div>';
+      list.innerHTML = '';
       return;
     }
     list.innerHTML = notes.map((n, i) =>
@@ -1310,20 +1286,15 @@ APP_JS = r"""(() => {
     doc = expandCompact(await res.json());
     model = buildOverlapModel(doc);
 
-    document.title = doc.title + ' — Speaker Overlap Viewer';
+    document.title = doc.title;
     document.getElementById('vid-title').textContent = doc.title;
     const ytLink = document.getElementById('yt-orig-link');
     ytLink.href = 'https://www.youtube.com/watch?v=' + encodeURIComponent(doc.video_id);
-    document.getElementById('vid-facts').innerHTML =
-      '<span><strong>' + html(doc.channel) + '</strong></span>'
-      + '<span>' + clock(doc.duration) + '</span>'
-      + '<span>' + model.speakers.map(s => '<strong style="color:' + model.colorOf(s).fg + '">' + html(s) + '</strong>').join(' + ') + '</span>'
-      + '<span><strong>' + model.overlapSpans.length + '</strong> simultaneous overlaps</span>';
 
     if (doc.chapters.length) {
       const chEl = document.getElementById('chapters');
       chEl.hidden = false;
-      chEl.innerHTML = '<span class="chap-label">Chapters:</span>' + doc.chapters.map(c =>
+      chEl.innerHTML = doc.chapters.map(c =>
         '<button type="button" data-t="' + c.s + '">' + clock(c.s) + ' ' + html(c.t) + '</button>'
       ).join('');
       chEl.addEventListener('click', ev => {
@@ -1333,8 +1304,8 @@ APP_JS = r"""(() => {
     }
 
     const filterSel = document.getElementById('transcript-filter');
-    filterSel.innerHTML = '<option value="all">all segments</option>'
-      + '<option value="overlaps">overlaps only (' + model.overlapSpans.length + ')</option>'
+    filterSel.innerHTML = '<option value="all">all</option>'
+      + '<option value="overlaps">overlaps (' + model.overlapSpans.length + ')</option>'
       + model.speakers.map(s => '<option value="spk:' + html(s) + '">' + html(s) + ' (' + model.speakerCounts.get(s) + ')</option>').join('');
 
     const winSel = document.getElementById('lanes-window');
@@ -1343,11 +1314,28 @@ APP_JS = r"""(() => {
     document.getElementById('toggle-autoscroll').setAttribute('aria-pressed', String(autoScroll));
 
     setupYouTube(doc.video_id);
-    renderDualSubsShell();
-    applyDualOverlayPosition();
-    paintTranscript();
-    applySplitLayout();
     loadNotes();
+    paintTranscript();
+    applyOverlayState();
+    applyMinimapState();
+    applyBadgesState();
+    applySplitLayout();
+
+    const ovEl = document.getElementById('ov-overlay');
+    if (ovEl) {
+      ovEl.addEventListener('click', ev => {
+        ev.stopPropagation();
+        const pin = ev.target.closest('.ruler-note-pin');
+        if (pin) { seekAndPlay(Number(pin.dataset.t)); return; }
+        const trk = ev.target.closest('.ov-track, .ov-ruler');
+        if (!trk || !model) return;
+        const rect = trk.getBoundingClientRect();
+        if (rect.width <= 0) return;
+        const frac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+        const winDur = Math.min(OV_WINDOW_SEC, Math.max(4, lanesWindow));
+        seekAndPlay(ovWinStart + frac * winDur);
+      });
+    }
 
     document.getElementById('transcript-search').addEventListener('input', paintTranscript);
     filterSel.addEventListener('change', paintTranscript);
@@ -1356,6 +1344,7 @@ APP_JS = r"""(() => {
       localStorage.setItem('ovpub.window', String(lanesWindow));
       lanesWinStart = clampWinStart(currentTime() - lanesWindow * 0.25);
       renderLanesWindow(true);
+      if (showOverlay) updateOverlayTimeline(currentTime(), true);
     });
     document.getElementById('lanes-follow').onclick = () => {
       lanesFollow = !lanesFollow;
@@ -1364,16 +1353,20 @@ APP_JS = r"""(() => {
     };
     document.getElementById('prev-overlap').onclick = () => jumpOverlap(-1);
     document.getElementById('next-overlap').onclick = () => jumpOverlap(1);
-    document.getElementById('toggle-dual-subs').onclick = () => {
-      showDualSubs = !showDualSubs;
-      localStorage.setItem('ovpub.showSubs', String(showDualSubs));
-      applyDualOverlayPosition();
-      updateDualSubs(currentTime());
+    document.getElementById('toggle-overlay').onclick = () => {
+      showOverlay = !showOverlay;
+      localStorage.setItem('ovpub.overlay', String(showOverlay));
+      applyOverlayState();
     };
-    document.getElementById('toggle-overlay-subs').onclick = () => {
-      dualOverlay = !dualOverlay;
-      localStorage.setItem('ovpub.overlay', String(dualOverlay));
-      applyDualOverlayPosition();
+    document.getElementById('toggle-minimap').onclick = () => {
+      showMinimap = !showMinimap;
+      localStorage.setItem('ovpub.minimap', String(showMinimap));
+      applyMinimapState();
+    };
+    document.getElementById('toggle-badges').onclick = () => {
+      showBadges = !showBadges;
+      localStorage.setItem('ovpub.badges', String(showBadges));
+      applyBadgesState();
     };
     document.getElementById('toggle-split-view').onclick = () => {
       splitView = !splitView;
@@ -1451,6 +1444,11 @@ APP_JS = r"""(() => {
     let drag = null;
     lanesStage.addEventListener('pointerdown', ev => {
       if (ev.button !== 0) return;
+      const pin = ev.target.closest('.ruler-note-pin');
+      if (pin) {
+        seekAndPlay(Number(pin.dataset.t));
+        return;
+      }
       const lbl = ev.target.closest('.lane-label');
       if (lbl) {
         const val = 'spk:' + lbl.dataset.speaker;
@@ -1548,18 +1546,19 @@ def _index_html(title: str, back_url: str, back_label: str, css_hash: str, js_ha
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(title)} — Speaker Overlap Viewer</title>
+<title>{html.escape(title)}</title>
 <link rel="stylesheet" href="app.css?v={css_hash}">
 </head>
 <body>
 <header class="top">
-  <div class="top-nav">
-    {back}<a id="yt-orig-link" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer">Watch on YouTube</a>
-    <span class="sep">·</span>
-    <button type="button" id="copy-link-btn">Copy link @ time</button>
+  <div class="top-row">
+    <h1 id="vid-title">{html.escape(title)}</h1>
+    <div class="top-nav">
+      {back}<a id="yt-orig-link" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer">YouTube</a>
+      <span class="sep">·</span>
+      <button type="button" id="copy-link-btn">Copy link @ time</button>
+    </div>
   </div>
-  <h1 id="vid-title">{html.escape(title)}</h1>
-  <div class="facts" id="vid-facts">Loading transcript…</div>
   <div class="chapters" id="chapters" hidden></div>
 </header>
 <main class="split-view">
@@ -1569,31 +1568,43 @@ def _index_html(title: str, back_url: str, back_label: str, css_hash: str, js_ha
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
     </div>
+    <div class="ov-overlay" id="ov-overlay" hidden>
+      <div class="ov-ruler-row"><div class="ov-gutter"></div><div class="ov-ruler" id="ov-ruler"></div></div>
+      <div class="ov-body" id="ov-body"></div>
+    </div>
   </div>
 
   <section class="transcript" id="transcript-panel">
-    <h2>Speaker-separated transcript</h2>
-    <div class="transcript-meta" id="transcript-meta">Loading…</div>
     <div class="transcript-controls">
       <input class="transcript-search" id="transcript-search" type="search"
-        placeholder="search words or speaker…" autocomplete="off">
+        placeholder="search words…" autocomplete="off">
       <label>Filter
-        <select id="transcript-filter"><option value="all">all segments</option></select>
+        <select id="transcript-filter"><option value="all">all</option></select>
       </label>
       <button type="button" id="toggle-autoscroll" aria-pressed="true">Auto-scroll</button>
     </div>
     <div class="caption-box" id="caption-box"></div>
   </section>
 
-  <section class="dual-stage" id="dual-stage">
-    <div class="dual-subs" id="dual-subs" aria-live="polite"></div>
+  <section class="viz-stage" id="viz-stage">
     <div class="speaker-lanes" id="speaker-lanes">
-      <div class="lanes-head">
-        <span class="lanes-title">Speaker overlap timeline</span>
+      <div class="lanes-stage" id="lanes-stage">
+        <div class="lanes-ruler-row">
+          <div class="lanes-gutter"></div>
+          <div class="lanes-ruler" id="lanes-ruler"></div>
+        </div>
+        <div class="lanes-body" id="lanes-body"></div>
+      </div>
+      <div class="lanes-minimap-wrap" id="lanes-minimap-wrap" hidden title="Click or drag to jump anywhere">
+        <canvas class="lanes-minimap" id="lanes-minimap" height="22"></canvas>
+        <div class="minimap-viewport" id="minimap-viewport"></div>
+        <div class="minimap-playhead" id="minimap-playhead"></div>
+      </div>
+      <div class="lanes-bar">
         <span class="lanes-status" id="lanes-status"></span>
         <div class="lanes-tools">
-          <button type="button" id="prev-overlap">◀ Prev overlap</button>
-          <button type="button" id="next-overlap">Next overlap ▶</button>
+          <button type="button" id="prev-overlap" title="Jump to previous overlap">◀ Prev</button>
+          <button type="button" id="next-overlap" title="Jump to next overlap">Next ▶</button>
           <label>Window
             <select id="lanes-window">
               <option value="10">10s</option>
@@ -1602,30 +1613,19 @@ def _index_html(title: str, back_url: str, back_label: str, css_hash: str, js_ha
               <option value="60">60s</option>
             </select>
           </label>
-          <button type="button" id="lanes-follow" aria-pressed="true">Follow</button>
-          <button type="button" id="toggle-dual-subs" aria-pressed="true">Live subs</button>
-          <button type="button" id="toggle-overlay-subs" aria-pressed="false">Overlay on video</button>
-          <button type="button" id="toggle-split-view" aria-pressed="true">Split view</button>
+          <button type="button" id="lanes-follow" aria-pressed="true" title="Keep timeline synced to playback">Follow</button>
+          <button type="button" id="toggle-overlay" aria-pressed="false" title="Show compact red-playhead swimlane over the video">Overlay</button>
+          <button type="button" id="toggle-minimap" aria-pressed="false" title="Show or hide full-video overview bar">Minimap</button>
+          <button type="button" id="toggle-badges" aria-pressed="false" title="Show or hide overlap duration badges and counters">Badges</button>
+          <button type="button" id="toggle-split-view" aria-pressed="true" title="Toggle side-by-side or stacked layout">Split</button>
         </div>
-      </div>
-      <div class="lanes-stage" id="lanes-stage">
-        <div class="lanes-ruler-row">
-          <div class="lanes-gutter"></div>
-          <div class="lanes-ruler" id="lanes-ruler"></div>
-        </div>
-        <div class="lanes-body" id="lanes-body"></div>
-      </div>
-      <div class="lanes-minimap-wrap" id="lanes-minimap-wrap" title="Click or drag to jump anywhere">
-        <canvas class="lanes-minimap" id="lanes-minimap" height="24"></canvas>
-        <div class="minimap-viewport" id="minimap-viewport"></div>
-        <div class="minimap-playhead" id="minimap-playhead"></div>
       </div>
     </div>
   </section>
 
   <section class="notes-panel" id="notes-panel">
     <div class="notes-bar">
-      <h2>Timestamp notes</h2>
+      <h2>Notes</h2>
       <select id="note-tag">
         <option value="leaving space">leaving space</option>
         <option value="cooperative overtalk">cooperative overtalk</option>
@@ -1633,8 +1633,8 @@ def _index_html(title: str, back_url: str, back_label: str, css_hash: str, js_ha
         <option value="affirmation">affirmation</option>
         <option value="other">other</option>
       </select>
-      <input type="text" id="note-text" placeholder="optional note about this moment…">
-      <button type="button" id="add-note-btn">+ Note moment</button>
+      <input type="text" id="note-text" placeholder="note this moment…">
+      <button type="button" id="add-note-btn">+ Note</button>
       <button type="button" id="copy-notes-btn">Copy all notes</button>
     </div>
     <div class="notes-list" id="notes-list"></div>

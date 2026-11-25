@@ -115,6 +115,11 @@ class ExportOverlapPageTests(unittest.TestCase):
             self.assertIn("https://example.test/", index_html)
             self.assertIn("youtube-nocookie.com", app_js)
             self.assertNotIn("youtube.com/iframe_api", app_js)
+            self.assertNotIn("Live dual-speaker captions", index_html + app_js)
+            self.assertNotIn("Speaker overlap timeline", index_html + app_js)
+            self.assertIn('id="lanes-minimap-wrap" hidden', index_html)
+            self.assertIn('id="toggle-minimap" aria-pressed="false"', index_html)
+            self.assertIn('id="toggle-badges" aria-pressed="false"', index_html)
             self.assertTrue(len(app_css) > 1000)
 
             self.assertEqual(tr["chapters"][1]["t"], "Discussion")
