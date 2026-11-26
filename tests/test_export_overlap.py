@@ -309,6 +309,77 @@ class ExportOverlapPageTests(unittest.TestCase):
             self.assertEqual(len(study_tr["overlaps"]), 1)
             self.assertEqual(len(study_tr["pulses"]), 1)
 
+            # With --prosody: exports prosody.json and unhides #toggle-tone.
+            prosody_src = Path(tmp) / "prosody.json"
+            prosody_src.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "video_id": vid,
+                        "dt": 0.06,
+                        "speakers": {
+                            "Speaker A": {"median_f0_hz": 120.0, "p10_st": -3.0, "p90_st": 5.0, "median_db": -25.0, "median_sps": 4.0},
+                            "Speaker B": {"median_f0_hz": 180.0, "p10_st": -2.5, "p90_st": 4.5, "median_db": -26.0, "median_sps": 3.5},
+                        },
+                        "segments": [
+                            {"i": 0, "p": [0, 12, 45, 110, 20], "d": [0, 2, 6, 12, 2], "pk": 11.0, "mn": 0.0, "md": 2.0, "sl": 1.2, "db": 2.0, "pdb": 6.0, "rt": 1.1, "tg": ["falsetto"]},
+                            {"i": 1, "p": [-40, -42, -38], "d": [-12, -14, -12], "pk": -3.8, "mn": -4.2, "md": -4.0, "sl": -0.2, "db": -6.0, "pdb": -6.0, "rt": 0.9, "tg": ["low-drop", "quiet"]},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            out_dir_pr = Path(tmp) / "out_prosody"
+            proc_pr = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    vid,
+                    str(out_dir_pr),
+                    "--data",
+                    str(data_dir),
+                    "--prosody",
+                    str(prosody_src),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            summary_pr = json.loads(proc_pr.stdout)
+            self.assertEqual(summary_pr["prosody"], 2)
+            self.assertTrue((out_dir_pr / "prosody.json").is_file())
+            pr_html = (out_dir_pr / "index.html").read_text(encoding="utf-8")
+            self.assertRegex(pr_html, r'data-prosody="prosody\.json\?v=[0-9a-f]{10}"')
+            self.assertIn('id="toggle-tone" aria-pressed="true" title=', pr_html)
+            self.assertIn('id="tone-legend" hidden', pr_html)
+
+    def test_extract_prosody_yin_tracks_pitch_and_loudness(self):
+        import importlib.util
+        import numpy as np
+
+        spec = importlib.util.spec_from_file_location("extract_prosody", ROOT / "scripts" / "extract_prosody.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        sr = mod.SR
+        t = np.arange(int(sr * 1.6), dtype=np.float32) / sr
+        sig = np.zeros_like(t)
+        # First 0.8s: 120 Hz modal tone at 0.2 amplitude; next 0.8s: 240 Hz (+12 st) at 0.6 amplitude (+9.5 dB).
+        m1 = t < 0.8
+        m2 = ~m1
+        sig[m1] = 0.2 * np.sin(2.0 * np.pi * 120.0 * t[m1])
+        sig[m2] = 0.6 * np.sin(2.0 * np.pi * 240.0 * t[m2])
+        f0, db, _ = mod.extract_raw_tracks(sig)
+        # Evaluate interior steady frames away from the 0.8s step edge
+        f0_lo = f0[8:32]
+        f0_hi = f0[48:72]
+        self.assertAlmostEqual(float(np.nanmedian(f0_lo)), 120.0, delta=1.5)
+        self.assertAlmostEqual(float(np.nanmedian(f0_hi)), 240.0, delta=2.5)
+        st_jump = 12.0 * np.log2(float(np.nanmedian(f0_hi)) / float(np.nanmedian(f0_lo)))
+        self.assertAlmostEqual(st_jump, 12.0, delta=0.2)
+        db_jump = float(np.median(db[48:72]) - np.median(db[8:32]))
+        self.assertAlmostEqual(db_jump, 9.54, delta=0.5)
+
 
 if __name__ == "__main__":
     unittest.main()

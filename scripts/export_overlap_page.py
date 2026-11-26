@@ -204,8 +204,11 @@ main.split-view { display: block; }
   font-size: calc(.65rem * var(--ov-scale)); line-height: calc(1.35rem * var(--ov-scale) - 4px);
 }
 .ov-row { height: calc(2.55rem * var(--ov-scale)); border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.ov-overlay.has-tone .ov-row { height: calc(3.35rem * var(--ov-scale)); }
 .ov-row.row-ja { height: calc(2.5rem * var(--ov-scale)); }
+.ov-overlay.has-tone .ov-row.row-ja { height: calc(3.3rem * var(--ov-scale)); }
 .ov-row.row-ja-furi { height: calc(3.15rem * var(--ov-scale)); }
+.ov-overlay.has-tone .ov-row.row-ja-furi { height: calc(3.95rem * var(--ov-scale)); }
 .ov-row.row-literal { height: calc(1.95rem * var(--ov-scale)); }
 .ov-row.row-en { height: calc(2.0rem * var(--ov-scale)); }
 .ov-row.row-grp-end { border-bottom: 2px solid rgba(255, 255, 255, 0.28); }
@@ -246,6 +249,12 @@ main.split-view { display: block; }
 .ov-overlay .lane-block.lb-en {
   line-height: calc(2.0rem * var(--ov-scale) - 6px);
   font-size: calc(.78rem * var(--ov-scale));
+}
+.ov-overlay.has-tone .lane-block.has-tone-blk {
+  line-height: calc(1.5rem * var(--ov-scale));
+}
+.ov-overlay.has-tone .lane-block.has-tone-blk .lane-words {
+  height: 50%; line-height: calc(1.5rem * var(--ov-scale));
 }
 .lbl-grip {
   color: rgba(255, 255, 255, 0.34); font-size: .78em; line-height: 1; flex: 0 0 auto;
@@ -311,8 +320,11 @@ main.split-view { display: block; }
 .ann-live-note { color: #fff; flex: 1 1 18rem; }
 .ann-live button { font-size: .76rem; padding: .12rem .4rem; margin-left: auto; }
 .lane-row { border-bottom: 1px solid #1b1f27; height: 3.05rem; }
+.lanes-stage.has-tone .lane-row { height: 4.35rem; }
 .lane-row.row-ja { height: 3.05rem; }
+.lanes-stage.has-tone .lane-row.row-ja { height: 4.35rem; }
 .lane-row.row-ja-furi { height: 3.6rem; }
+.lanes-stage.has-tone .lane-row.row-ja-furi { height: 4.9rem; }
 .lane-row.row-literal { height: 2.1rem; }
 .lane-row.row-en { height: 2.2rem; }
 .lane-row.row-grp-end { border-bottom: 2px solid #2e3748; }
@@ -459,7 +471,34 @@ main.split-view { display: block; }
   text-overflow: ellipsis; z-index: 2; cursor: pointer;
 }
 .lane-block.has-words { padding: 0; text-overflow: clip; }
-.lane-words { position: relative; width: 100%; height: 100%; overflow: hidden; }
+.lane-words { position: relative; width: 100%; height: 100%; overflow: hidden; z-index: 2; }
+.lanes-stage.has-tone .lane-block.has-tone-blk { line-height: 1.75rem; }
+.lanes-stage.has-tone .lane-block.has-tone-blk .lane-words { height: 52%; line-height: 1.75rem; }
+.tone-svg {
+  position: absolute; left: 0; right: 0; bottom: 1px; height: 48%; width: 100%;
+  pointer-events: none; z-index: 1; display: block;
+}
+.tone-badge {
+  position: absolute; top: 1px; right: 3px; z-index: 4; padding: 0 .22rem;
+  border-radius: 3px; font: 800 .62rem/1.25 var(--mono);
+  background: rgba(7, 8, 12, 0.84); border: 1px solid currentColor;
+  pointer-events: none; white-space: nowrap;
+}
+.tone-badge.tb-falsetto { color: #ff5ca8; }
+.tone-badge.tb-high { color: #ffd240; }
+.tone-badge.tb-low { color: #9aa7ff; }
+.tone-badge.tb-quiet { color: #94a3b8; }
+.tone-badge.tb-fast { color: #66e3d8; }
+.tone-legend {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .7rem;
+  padding: .28rem .62rem; background: #0b0e14; border-top: 1px solid #1e2430;
+  font-size: .75rem; color: #cbd5e1;
+}
+.tone-legend .tl-spk { font-family: var(--mono); font-size: .72rem; }
+.tone-swatch {
+  display: inline-block; width: .68rem; height: 3px; border-radius: 2px;
+  vertical-align: middle; margin-right: .22rem;
+}
 .lane-block.is-clipped .lane-words {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent 100%);
   mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent 100%);
@@ -765,6 +804,12 @@ APP_JS = r"""(() => {
   let overlayRows = [];
   let ctxMenuState = null;
 
+  let hasProsody = false;
+  let prosodyDt = 0.06;
+  let prosodyByIndex = new Map();
+  let prosodySpeakers = {};
+  let showTone = localStorage.getItem('ovpub.tone') !== 'false';
+
   function readNumStorage(key, fallback) {
     const raw = localStorage.getItem(key);
     if (raw == null || raw === '') return fallback;
@@ -788,11 +833,12 @@ APP_JS = r"""(() => {
     return isPlayerFullscreen() ? ovBottomFs : ovBottomWin;
   }
   function ovRowRem(kind) {
-    if (kind === 'ja-furi') return 3.15;
-    if (kind === 'ja') return 2.5;
+    const extra = hasProsody && showTone && (kind === 'text' || kind === 'ja' || kind === 'ja-furi') ? 0.8 : 0;
+    if (kind === 'ja-furi') return 3.15 + extra;
+    if (kind === 'ja') return 2.5 + extra;
     if (kind === 'literal') return 1.95;
     if (kind === 'en') return 2.0;
-    return 2.55;
+    return 2.55 + extra;
   }
   function fitOverlayLayout() {
     const ovEl = document.getElementById('ov-overlay');
@@ -1871,6 +1917,149 @@ APP_JS = r"""(() => {
     };
   }
 
+  function fmtSigned(n) {
+    const v = Number(n) || 0;
+    return (v >= 0 ? '+' : '') + v.toFixed(1);
+  }
+  function buildToneOverlay(seg, s0, s1, blockPx, spkColor) {
+    if (!hasProsody || !showTone) return null;
+    const pr = prosodyByIndex.get(seg.index);
+    if (!pr || !Array.isArray(pr.p) || !pr.p.length) return null;
+    const span = Math.max(0.01, s1 - s0);
+    const dt = prosodyDt || 0.06;
+    const pArr = pr.p;
+    const dArr = pr.d || [];
+    const kStart = Math.max(0, Math.floor((s0 - seg.start) / dt));
+    const kEnd = Math.min(pArr.length, Math.ceil((s1 - seg.start) / dt) + 1);
+    if (kEnd <= kStart) return null;
+
+    const pts = [];
+    for (let k = kStart; k < kEnd; k++) {
+      const t = seg.start + (k + 0.5) * dt;
+      const x = Math.max(0, Math.min(1000, ((t - s0) / span) * 1000));
+      const pRaw = pArr[k];
+      const st = pRaw == null ? null : pRaw / 10;
+      const db = dArr[k] != null ? dArr[k] / 2 : -14;
+      pts.push({x, st, db});
+    }
+    if (!pts.length) return null;
+
+    // Loudness silhouette polygon along the bottom of the tone strip
+    const polyPts = [pts[0].x.toFixed(1) + ',98'];
+    for (const pt of pts) {
+      const frac = Math.max(0.04, Math.min(1, (pt.db + 16) / 28));
+      const ly = 98 - frac * 86;
+      polyPts.push(pt.x.toFixed(1) + ',' + ly.toFixed(1));
+    }
+    polyPts.push(pts[pts.length - 1].x.toFixed(1) + ',98');
+
+    const stToY = st => Math.max(5, Math.min(95, 65 - st * 3.333));
+    const pitchClr = st => (st >= 9.5 ? '#ff5ca8' : st >= 5.0 ? '#ffd240' : st <= -3.5 ? '#9aa7ff' : spkColor);
+    const dbStyle = db => (db >= 4.5 ? {w: 4.0, o: 0.98} : db <= -5.0 ? {w: 1.6, o: 0.68} : {w: 2.6, o: 0.9});
+
+    // Group adjacent voiced segments sharing (color, stroke-width) into minimal SVG paths
+    const paths = [];
+    let curKey = '';
+    let curD = '';
+    let curMeta = null;
+    const flush = () => {
+      if (curD && curMeta) {
+        paths.push(
+          '<path d="' + curD + '" fill="none" stroke="' + curMeta.clr + '" stroke-width="' + curMeta.w
+          + '" stroke-opacity="' + curMeta.o + '" stroke-linecap="round" stroke-linejoin="round"/>'
+        );
+      }
+      curKey = ''; curD = ''; curMeta = null;
+    };
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i];
+      if (a.st == null) continue;
+      const b = i + 1 < pts.length ? pts[i + 1] : null;
+      const ya = stToY(a.st);
+      if (b && b.st != null) {
+        const yb = stToY(b.st);
+        const midSt = (a.st + b.st) * 0.5;
+        const midDb = (a.db + b.db) * 0.5;
+        const clr = pitchClr(midSt);
+        const ds = dbStyle(midDb);
+        const key = clr + '|' + ds.w;
+        if (key !== curKey) {
+          flush();
+          curKey = key;
+          curMeta = {clr, w: ds.w, o: ds.o};
+          curD = 'M' + a.x.toFixed(1) + ' ' + ya.toFixed(1) + 'L' + b.x.toFixed(1) + ' ' + yb.toFixed(1);
+        } else {
+          curD += 'M' + a.x.toFixed(1) + ' ' + ya.toFixed(1) + 'L' + b.x.toFixed(1) + ' ' + yb.toFixed(1);
+        }
+      } else if (i === 0 || pts[i - 1].st == null) {
+        const clr = pitchClr(a.st);
+        const ds = dbStyle(a.db);
+        paths.push('<circle cx="' + a.x.toFixed(1) + '" cy="' + ya.toFixed(1) + '" r="' + (ds.w * 0.6).toFixed(1)
+          + '" fill="' + clr + '" fill-opacity="' + ds.o + '"/>');
+      }
+    }
+    flush();
+
+    const svg = '<svg class="tone-svg" viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">'
+      + '<line x1="0" y1="65" x2="1000" y2="65" stroke="rgba(255,255,255,0.22)" stroke-dasharray="14,10" stroke-width="1"/>'
+      + '<polygon points="' + polyPts.join(' ') + '" fill="' + spkColor + '" fill-opacity="0.16"/>'
+      + paths.join('') + '</svg>';
+
+    let badge = '';
+    if (blockPx >= 72) {
+      if (pr.pk >= 9.5) badge = '<span class="tone-badge tb-falsetto">↑+' + Math.round(pr.pk) + 'st</span>';
+      else if (pr.pk >= 6.0 && pr.sl >= 3.5) badge = '<span class="tone-badge tb-high">↗+' + Math.round(pr.pk) + 'st</span>';
+      else if (pr.md <= -3.5) badge = '<span class="tone-badge tb-low">↓' + Math.round(pr.md) + 'st</span>';
+      else if (pr.db <= -6.5) badge = '<span class="tone-badge tb-quiet">quiet</span>';
+      else if (pr.rt >= 1.45) badge = '<span class="tone-badge tb-fast">⚡' + pr.rt.toFixed(1) + '×</span>';
+      else if (pr.pdb >= 7.5) badge = '<span class="tone-badge tb-high">loud</span>';
+    }
+    const tags = Array.isArray(pr.tg) && pr.tg.length ? ' [' + pr.tg.join(', ') + ']' : '';
+    const tip = ' | pitch ' + fmtSigned(pr.md) + 'st (peak ' + fmtSigned(pr.pk) + 'st) · vol '
+      + fmtSigned(pr.db) + 'dB · ' + (Number(pr.rt) || 1).toFixed(2) + '× pace' + tags;
+    return {svg, badge, tip};
+  }
+
+  function applyToneState() {
+    const active = hasProsody && showTone;
+    const btn = document.getElementById('toggle-tone');
+    if (btn) {
+      btn.hidden = !hasProsody;
+      btn.setAttribute('aria-pressed', String(active));
+    }
+    const ls = document.getElementById('lanes-stage');
+    if (ls) ls.classList.toggle('has-tone', active);
+    const ov = document.getElementById('ov-overlay');
+    if (ov) ov.classList.toggle('has-tone', active);
+    const leg = document.getElementById('tone-legend');
+    if (leg) {
+      leg.hidden = !active;
+      if (active) {
+        const spkNotes = Object.entries(prosodySpeakers || {}).map(([s, st]) => {
+          const c = model ? model.colorOf(s).fg : '#fff';
+          return '<span class="tl-spk" style="color:' + c + '">' + html(s) + ' '
+            + Math.round(st.median_f0_hz || 0) + 'Hz · ' + (st.median_sps || 0).toFixed(1) + 'syl/s</span>';
+        }).join('');
+        leg.innerHTML =
+          '<span><strong>Tone:</strong> height = pitch vs baseline</span>'
+          + '<span><span class="tone-swatch" style="background:#9aa7ff"></span>low (&le;−3.5st)</span>'
+          + '<span><span class="tone-swatch" style="background:#7cc4ff"></span>normal</span>'
+          + '<span><span class="tone-swatch" style="background:#ffd240"></span>high (+5st)</span>'
+          + '<span><span class="tone-swatch" style="background:#ff5ca8"></span>falsetto (+9.5st+)</span>'
+          + '<span>thickness/fill = loudness</span>'
+          + spkNotes;
+      }
+    }
+    if (model) {
+      fitOverlayLayout();
+      renderLanesWindow(true);
+      if (showOverlay) {
+        ovRenderedStart = -1;
+        updateOverlayTimeline(currentTime(), true);
+      }
+    }
+  }
+
   function clampWinStart(start) {
     if (!model) return 0;
     return Math.max(0, Math.min(start, Math.max(0, model.duration - lanesWindow)));
@@ -1996,10 +2185,13 @@ APP_JS = r"""(() => {
           const withFuri = kind === 'ja-furi';
           const content = buildLaneBlockContent(seg, s0, s1, blockPx, info, measurer, withFuri);
           const extraBlkCls = kind === 'ja-furi' ? ' ja-furi-blk' : kind === 'ja' ? ' ja-plain-blk' : '';
+          const tone = buildToneOverlay(seg, s0, s1, blockPx, c.fg);
+          const toneCls = tone ? ' has-tone-blk' : '';
+          const fullTitle = title + (tone ? tone.tip : '');
           blocks.push(
-            '<div class="lane-block' + extraBlkCls + (hasOv ? ' has-ov' : '') + content.cls + '"'
+            '<div class="lane-block' + extraBlkCls + toneCls + (hasOv ? ' has-ov' : '') + content.cls + '"'
             + ' data-index="' + seg.index + '" style="' + posStyle + '"'
-            + ' title="' + html(title) + '">' + content.inner + '</div>'
+            + ' title="' + html(fullTitle) + '">' + (tone ? tone.svg + tone.badge : '') + content.inner + '</div>'
           );
         }
       }
@@ -2901,6 +3093,22 @@ APP_JS = r"""(() => {
       } catch {}
     }
 
+    const prosodyUrl = document.querySelector('main')?.dataset.prosody || '';
+    if (prosodyUrl) {
+      try {
+        const prRes = await fetch(prosodyUrl);
+        if (prRes.ok) {
+          const prDoc = await prRes.json();
+          if (prDoc && Array.isArray(prDoc.segments) && prDoc.segments.length) {
+            hasProsody = true;
+            prosodyDt = Number(prDoc.dt) || 0.06;
+            prosodySpeakers = prDoc.speakers && typeof prDoc.speakers === 'object' ? prDoc.speakers : {};
+            prosodyByIndex = new Map(prDoc.segments.map(s => [Number(s.i), s]));
+          }
+        }
+      } catch {}
+    }
+
     document.title = doc.title;
     document.getElementById('vid-title').textContent = doc.title;
     const ytLink = document.getElementById('yt-orig-link');
@@ -2949,6 +3157,7 @@ APP_JS = r"""(() => {
 
     setupYouTube(doc.video_id);
     paintTranscript();
+    applyToneState();
     applyOverlayState();
     applyMinimapState();
     applyBadgesState();
@@ -3201,6 +3410,11 @@ APP_JS = r"""(() => {
         showOverlay = !showOverlay;
         localStorage.setItem('ovpub.overlay', String(showOverlay));
         applyOverlayState();
+      } else if ((ev.key === 't' || ev.key === 'T') && hasProsody) {
+        ev.preventDefault();
+        showTone = !showTone;
+        localStorage.setItem('ovpub.tone', String(showTone));
+        applyToneState();
       }
     });
 
@@ -3262,6 +3476,14 @@ APP_JS = r"""(() => {
           else setSurfaceRows('main', mainRows.filter(r => r.kind !== 'en'));
         }
         applyStudyLayersState();
+      };
+    }
+    const toneBtn = document.getElementById('toggle-tone');
+    if (toneBtn) {
+      toneBtn.onclick = () => {
+        showTone = !showTone;
+        localStorage.setItem('ovpub.tone', String(showTone));
+        applyToneState();
       };
     }
     document.getElementById('toggle-overlay').onclick = () => {
@@ -3577,6 +3799,7 @@ def _index_html(
     js_hash: str,
     ann_url: str = "",
     has_study: bool = False,
+    prosody_url: str = "",
 ) -> str:
     back = (
         f'<a href="{html.escape(back_url, quote=True)}">← {html.escape(back_label)}</a>'
@@ -3585,7 +3808,9 @@ def _index_html(
         else ""
     )
     ann_attr = f' data-annotations="{html.escape(ann_url, quote=True)}"' if ann_url else ""
+    prosody_attr = f' data-prosody="{html.escape(prosody_url, quote=True)}"' if prosody_url else ""
     ann_btn_hidden = "" if ann_url else " hidden"
+    tone_btn_hidden = "" if prosody_url else " hidden"
     study_hidden = "" if has_study else " hidden"
     sel10 = " selected" if has_study else ""
     sel20 = "" if has_study else " selected"
@@ -3609,7 +3834,7 @@ def _index_html(
   </div>
   <div class="chapters" id="chapters" hidden></div>
 </header>
-<main class="split-view"{ann_attr}>
+<main class="split-view"{ann_attr}{prosody_attr}>
   <div class="player-wrap" id="player-wrap">
     <div class="video-box">
       <iframe id="yt-frame" title="YouTube video player"
@@ -3656,6 +3881,7 @@ def _index_html(
       </div>
       <div class="word-inspector" id="word-inspector" hidden></div>
       <div class="ann-live" id="ann-live" hidden></div>
+      <div class="tone-legend" id="tone-legend" hidden></div>
       <div class="lanes-bar">
         <span class="lanes-status" id="lanes-status"></span>
         <div class="lanes-tools">
@@ -3671,6 +3897,7 @@ def _index_html(
             </select>
           </label>
           <button type="button" id="lanes-follow" aria-pressed="true" title="Keep timeline synced to playback">Follow</button>
+          <button type="button" id="toggle-tone" aria-pressed="true"{tone_btn_hidden} title="Show or hide live pitch & loudness tone contour inside each speaker's lane (T)">Tone</button>
           <button type="button" id="toggle-furigana" aria-pressed="true"{study_hidden} title="Show or hide furigana readings over kanji">Furigana</button>
           <button type="button" id="toggle-gloss" aria-pressed="true"{study_hidden} title="Show or hide word-by-word meaning stream">Word-by-word</button>
           <button type="button" id="toggle-english" aria-pressed="true"{study_hidden} title="Show or hide per-speaker English stream">English</button>
@@ -3759,6 +3986,15 @@ def _load_study(path: Path) -> dict:
         raise ValueError(f"Study file must be a JSON object with a 'segments' list: {path}")
     if "vocab" in raw and not isinstance(raw["vocab"], list):
         raise ValueError(f"Study file 'vocab' must be a list: {path}")
+    return raw
+
+
+def _load_prosody(path: Path) -> dict:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict) or not isinstance(raw.get("segments"), list):
+        raise ValueError(f"Prosody file must be a JSON object with a 'segments' list: {path}")
+    if not isinstance(raw.get("dt"), (int, float)) or float(raw["dt"]) <= 0:
+        raise ValueError(f"Prosody file must define positive numeric 'dt': {path}")
     return raw
 
 
@@ -3859,6 +4095,7 @@ def export_page(
     title: str = "",
     annotations: Path | None = None,
     study: Path | None = None,
+    prosody: Path | None = None,
     avatars: Path | None = None,
     back_url: str = "",
     back_label: str = "home",
@@ -3895,6 +4132,16 @@ def export_page(
         ann_url = f"annotations.json?v={ann_hash}"
         ann_count = len(ann_doc["items"])
 
+    prosody_url = ""
+    prosody_count = 0
+    if prosody is not None:
+        pr_doc = _load_prosody(prosody)
+        pr_bytes = json.dumps(pr_doc, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        pr_hash = hashlib.sha256(pr_bytes).hexdigest()[:10]
+        (out_dir / "prosody.json").write_bytes(pr_bytes)
+        prosody_url = f"prosody.json?v={pr_hash}"
+        prosody_count = len(pr_doc["segments"])
+
     (out_dir / "app.css").write_bytes(css_bytes)
     (out_dir / "app.js").write_bytes(js_bytes)
     (out_dir / "transcript.json").write_text(
@@ -3910,6 +4157,7 @@ def export_page(
             js_hash,
             ann_url,
             has_study=study is not None,
+            prosody_url=prosody_url,
         ),
         encoding="utf-8",
     )
@@ -3918,6 +4166,7 @@ def export_page(
         "segments": len(compact["segments"]),
         "speakers": compact["speakers"],
         "annotations": ann_count,
+        "prosody": prosody_count,
         "vocab": vocab_count,
         "avatars": avatar_count,
         "out_dir": str(out_dir),
@@ -3932,6 +4181,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--title", default="", help="Optional custom page title overriding video title")
     ap.add_argument("--annotations", type=Path, default=None, help="Optional JSON file of seed annotations")
     ap.add_argument("--study", type=Path, default=None, help="Optional language-study JSON (furigana, glosses, English, vocab)")
+    ap.add_argument("--prosody", type=Path, default=None, help="Optional prosody JSON (per-segment pitch & loudness contours)")
     ap.add_argument("--avatars", type=Path, default=None, help="Optional directory (with avatars.json) or avatars.json mapping speakers to face icons")
     ap.add_argument("--back-url", default="")
     ap.add_argument("--back-label", default="home")
@@ -3943,6 +4193,7 @@ def main(argv: list[str] | None = None) -> int:
         title=args.title,
         annotations=args.annotations.expanduser().resolve() if args.annotations else None,
         study=args.study.expanduser().resolve() if args.study else None,
+        prosody=args.prosody.expanduser().resolve() if args.prosody else None,
         avatars=args.avatars.expanduser().resolve() if args.avatars else None,
         back_url=args.back_url,
         back_label=args.back_label,
