@@ -152,49 +152,110 @@ main.split-view { display: block; }
   position: relative; background: #000; border: 1px solid var(--border);
   border-radius: 7px; overflow: hidden;
 }
+.player-wrap:fullscreen,
+.player-wrap:-webkit-full-screen {
+  width: 100vw; height: 100vh; max-width: none; max-height: none;
+  border: 0; border-radius: 0; background: #000;
+}
 .video-box { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; }
+.player-wrap:fullscreen .video-box,
+.player-wrap:-webkit-full-screen .video-box {
+  width: 100%; height: 100%; aspect-ratio: auto;
+}
 .video-box iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 
 /* Overlay timeline over the bottom of the YouTube player (opt-in via Overlay button) */
 .ov-overlay {
-  position: absolute; left: .7rem; right: .7rem; bottom: 3.6rem; z-index: 20;
-  max-height: 76%; overflow-y: auto;
-  background: rgba(7, 8, 10, 0.88); border: 1px solid rgba(255, 255, 255, 0.24);
+  --ov-scale: 1;
+  --ov-bottom: 62px;
+  --ov-alpha: 0.88;
+  position: absolute; left: .7rem; right: .7rem; bottom: var(--ov-bottom); z-index: 20;
+  overflow: visible;
+  background: rgba(7, 8, 10, var(--ov-alpha)); border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 7px; pointer-events: auto; backdrop-filter: blur(5px);
   user-select: none;
 }
-.ov-ruler-row, .ov-row { display: grid; grid-template-columns: 9.2rem minmax(0, 1fr); }
+.ov-ruler-row, .ov-row { display: grid; grid-template-columns: 9.8rem minmax(0, 1fr); }
 .ov-ruler-row {
-  position: sticky; top: 0; z-index: 8;
-  height: 1.35rem; background: rgba(14, 16, 20, 0.96);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  height: calc(1.35rem * var(--ov-scale)); background: rgba(14, 16, 20, 0.96);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px 6px 0 0;
 }
-.ov-gutter { border-right: 1px solid rgba(255, 255, 255, 0.14); }
+.ov-gutter {
+  display: flex; align-items: center; justify-content: space-between; gap: .25rem;
+  padding: 0 .32rem; border-right: 1px solid rgba(255, 255, 255, 0.14);
+  cursor: ns-resize; color: #94a3b8; font-size: calc(.72rem * var(--ov-scale));
+  line-height: 1; touch-action: none;
+}
+.ov-gutter:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.ov-grip { display: inline-flex; align-items: center; gap: .22rem; font-weight: 700; white-space: nowrap; }
+.ov-fs-btn {
+  padding: 0 .28rem; height: calc(1.08rem * var(--ov-scale)); min-height: 14px;
+  font-size: calc(.68rem * var(--ov-scale)); line-height: 1;
+  border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(20, 24, 32, 0.9); color: #e2e8f0; cursor: pointer;
+}
+.ov-fs-btn:hover { background: #263143; border-color: #7cc4ff; color: #fff; }
 .ov-ruler { position: relative; overflow: hidden; cursor: pointer; }
-.ov-row { height: 2.55rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
-.ov-row.row-ja { height: 2.5rem; }
-.ov-row.row-ja-furi { height: 3.1rem; }
-.ov-row.row-literal { height: 1.95rem; }
-.ov-row.row-en { height: 2.0rem; }
-.ov-row.row-grp-end { border-bottom: 2px solid rgba(255, 255, 255, 0.24); }
+.ov-overlay .ruler-tick {
+  font-size: calc(.72rem * var(--ov-scale)); line-height: calc(1.35rem * var(--ov-scale));
+}
+.ov-overlay .ruler-ov-pill,
+.ov-overlay .ruler-note-pin {
+  font-size: calc(.65rem * var(--ov-scale)); line-height: calc(1.35rem * var(--ov-scale) - 4px);
+}
+.ov-row { height: calc(2.55rem * var(--ov-scale)); border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.ov-row.row-ja { height: calc(2.5rem * var(--ov-scale)); }
+.ov-row.row-ja-furi { height: calc(3.15rem * var(--ov-scale)); }
+.ov-row.row-literal { height: calc(1.95rem * var(--ov-scale)); }
+.ov-row.row-en { height: calc(2.0rem * var(--ov-scale)); }
+.ov-row.row-grp-end { border-bottom: 2px solid rgba(255, 255, 255, 0.28); }
 .ov-row:last-child { border-bottom: 0; }
 .ov-label {
-  display: flex; align-items: center; gap: .38rem; padding: 0 .45rem;
-  border-right: 1px solid rgba(255, 255, 255, 0.14); font-size: .8rem; font-weight: 800;
+  display: flex; align-items: center; gap: .32rem; padding: 0 .4rem 0 .26rem;
+  border-right: 1px solid rgba(255, 255, 255, 0.14); font-size: calc(.8rem * var(--ov-scale)); font-weight: 800;
   color: var(--spk-color, #fff); background: rgba(10, 12, 16, 0.88);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: grab; touch-action: none;
 }
+.ov-label:hover { background: rgba(24, 30, 40, 0.94); }
 .ov-label.sub-lbl {
-  font-size: .73rem; font-weight: 700; box-shadow: inset 3px 0 var(--spk-color, #fff);
+  font-size: calc(.73rem * var(--ov-scale)); font-weight: 700; box-shadow: inset 3px 0 var(--spk-color, #fff);
   background: rgba(8, 10, 14, 0.86);
 }
+.ov-overlay .spk-avatar {
+  width: calc(20px * var(--ov-scale)); height: calc(20px * var(--ov-scale));
+  min-width: 12px; min-height: 12px; border-width: 1.5px;
+}
+.ov-overlay .lbl-kind { font-size: calc(.64rem * var(--ov-scale)); }
 .ov-track { position: relative; overflow: hidden; cursor: pointer; }
-.ov-overlay .lane-block { top: 3px; bottom: 3px; line-height: calc(2.5rem - 8px); font-size: .84rem; }
-.ov-overlay .lane-block.ja-furi-blk { line-height: 1.2; font-size: .86rem; }
-.ov-overlay .lane-block.ja-furi-blk .lane-word { top: auto; bottom: 3px; line-height: 1.2; }
+.ov-overlay .lane-block {
+  top: 2px; bottom: 2px;
+  line-height: calc(2.55rem * var(--ov-scale) - 6px);
+  font-size: calc(.84rem * var(--ov-scale));
+}
+.ov-overlay .lane-block.ja-plain-blk {
+  line-height: calc(2.5rem * var(--ov-scale) - 6px);
+  font-size: calc(.84rem * var(--ov-scale));
+}
+.ov-overlay .lane-block.ja-furi-blk { line-height: 1.18; font-size: calc(.86rem * var(--ov-scale)); }
+.ov-overlay .lane-block.ja-furi-blk .lane-word { top: auto; bottom: 2px; line-height: 1.18; }
 .ov-overlay .lane-block.ja-plain-blk .lane-word { top: 50%; bottom: auto; transform: translateY(-50%); }
-.ov-overlay .lane-block.lb-ww { line-height: calc(1.95rem - 6px); font-size: .74rem; }
-.ov-overlay .lane-block.lb-en { line-height: calc(2.0rem - 6px); font-size: .78rem; }
+.ov-overlay .lane-block.lb-ww {
+  line-height: calc(1.95rem * var(--ov-scale) - 6px);
+  font-size: calc(.74rem * var(--ov-scale));
+}
+.ov-overlay .lane-block.lb-en {
+  line-height: calc(2.0rem * var(--ov-scale) - 6px);
+  font-size: calc(.78rem * var(--ov-scale));
+}
+.lbl-grip {
+  color: rgba(255, 255, 255, 0.34); font-size: .78em; line-height: 1; flex: 0 0 auto;
+  letter-spacing: -1px;
+}
+.ov-label:hover .lbl-grip, .lane-label:hover .lbl-grip { color: rgba(255, 255, 255, 0.85); }
+.is-dragging { opacity: .42; }
+.is-dragging .ov-label, .is-dragging .lane-label { cursor: grabbing; }
+.drag-over-top { box-shadow: inset 0 2.5px 0 var(--gold); }
+.drag-over-bot { box-shadow: inset 0 -2.5px 0 var(--gold); }
 
 /* Primary speech-overlap swimlane visualization */
 .viz-stage { margin: .65rem 0 .8rem; }
@@ -303,7 +364,8 @@ main.split-view { display: block; }
   background: rgba(12, 15, 21, 0.85); cursor: context-menu;
 }
 .stream-ctx-menu {
-  position: fixed; z-index: 250; min-width: 15.5rem; max-width: 22rem;
+  position: fixed; z-index: 250; min-width: 16rem; max-width: 23rem;
+  max-height: calc(100vh - 16px); overflow-y: auto;
   background: #10141c; border: 1px solid #49566b; border-radius: 8px;
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.68); padding: .35rem 0;
   color: #fff; font-size: .84rem; user-select: none;
@@ -320,7 +382,7 @@ main.split-view { display: block; }
 .ctx-item {
   display: flex; align-items: center; gap: .45rem; width: 100%; border: 0;
   border-radius: 0; background: transparent; color: #fff; text-align: left;
-  padding: .34rem .75rem; font-size: .83rem; cursor: pointer;
+  padding: .32rem .75rem; font-size: .83rem; cursor: pointer;
 }
 .ctx-item:hover { background: #1c2433; }
 .ctx-item.ctx-danger { color: #fca5a5; }
@@ -330,6 +392,26 @@ main.split-view { display: block; }
 }
 .ctx-item.is-on .ctx-act { border-color: #68c77b; color: #7ee787; background: #112416; }
 .ctx-item.is-off .ctx-act { border-color: #7cc4ff; color: #7cc4ff; background: #0f1c2e; }
+.ctx-inline-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .26rem;
+  padding: .2rem .75rem .28rem;
+}
+.ctx-inline-lbl {
+  font-size: .74rem; font-weight: 700; color: #cbd5e1; margin-right: .15rem;
+  min-width: 2.8rem;
+}
+.ctx-meta {
+  margin-left: auto; font: 700 .72rem/1.2 var(--mono); color: #94a3b8;
+}
+.ctx-chip-btn {
+  padding: .16rem .42rem; font-size: .76rem; font-weight: 700;
+  border-radius: 4px; border: 1px solid #3c4657; background: #161c27; color: #fff;
+  cursor: pointer;
+}
+.ctx-chip-btn:hover:not(:disabled) { background: #222c3e; border-color: #7cc4ff; }
+.ctx-chip-btn:disabled { opacity: .38; cursor: not-allowed; }
+.ctx-chip-btn.is-on { border-color: #68c77b; background: #132818; color: #7ee787; }
+.ctx-chip-btn.is-off { border-color: #7cc4ff; background: #102036; color: #a9d6ff; }
 .lane-pulse {
   position: absolute; top: 8px; bottom: 8px; min-width: 6px; border-radius: 4px;
   border: 1px dashed var(--spk-color, #7cc4ff); background: var(--spk-bg, rgba(124, 196, 255, 0.14));
@@ -349,10 +431,10 @@ main.split-view { display: block; }
 .wi-btns { display: inline-flex; gap: .3rem; margin-left: auto; }
 .wi-btns button { font-size: .76rem; padding: .12rem .45rem; }
 .lane-label {
-  display: flex; align-items: center; gap: .45rem; padding: 0 .6rem;
+  display: flex; align-items: center; gap: .38rem; padding: 0 .5rem 0 .32rem;
   border-right: 1px solid #222730; font-size: .88rem; font-weight: 800;
   color: var(--spk-color, #fff); background: #0c0e12;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: grab; touch-action: none;
 }
 .lane-label::before {
   content: ""; width: .5rem; height: .5rem; border-radius: 999px; flex: 0 0 auto;
@@ -606,6 +688,7 @@ html.no-furigana .v-ja { line-height: 1.35; }
 @media (max-width: 760px) {
   .lanes-ruler-row, .lane-row { grid-template-columns: 6.4rem minmax(0, 1fr); }
   .ov-ruler-row, .ov-row { grid-template-columns: 5.8rem minmax(0, 1fr); }
+  .ov-grip-txt { display: none; }
   .segment { grid-template-columns: 4.2rem 5.8rem minmax(0, 1fr); gap: .38rem; }
   .note-row { grid-template-columns: 4rem 6rem minmax(0, 1fr) auto; }
   .vocab-row { grid-template-columns: minmax(0, 1fr) auto; }
@@ -682,6 +765,163 @@ APP_JS = r"""(() => {
   let overlayRows = [];
   let ctxMenuState = null;
 
+  function readNumStorage(key, fallback) {
+    const raw = localStorage.getItem(key);
+    if (raw == null || raw === '') return fallback;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : fallback;
+  }
+  const DEFAULT_OV_BOTTOM_WIN = 62;
+  const DEFAULT_OV_BOTTOM_FS = 84;
+  let ovBottomWin = readNumStorage('ovpub.ovBottomWin', DEFAULT_OV_BOTTOM_WIN);
+  let ovBottomFs = readNumStorage('ovpub.ovBottomFs', DEFAULT_OV_BOTTOM_FS);
+  let ovFontScale = readNumStorage('ovpub.ovFont', 1);
+  let ovAlpha = readNumStorage('ovpub.ovAlpha', 0.88);
+  let ovCurrentScale = 1;
+  let autoOverlayForFs = false;
+
+  function isPlayerFullscreen() {
+    const pw = document.getElementById('player-wrap');
+    return Boolean(pw && (document.fullscreenElement === pw || document.webkitFullscreenElement === pw));
+  }
+  function getOvBottom() {
+    return isPlayerFullscreen() ? ovBottomFs : ovBottomWin;
+  }
+  function ovRowRem(kind) {
+    if (kind === 'ja-furi') return 3.15;
+    if (kind === 'ja') return 2.5;
+    if (kind === 'literal') return 1.95;
+    if (kind === 'en') return 2.0;
+    return 2.55;
+  }
+  function fitOverlayLayout() {
+    const ovEl = document.getElementById('ov-overlay');
+    const pw = document.getElementById('player-wrap');
+    if (!ovEl || !pw) return getOvBottom();
+    const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 15;
+    const pwH = pw.clientHeight || pw.getBoundingClientRect().height
+      || (isPlayerFullscreen() ? window.innerHeight : 500);
+    const rows = overlayRows || [];
+    let natRem = 1.35;
+    if (rows.length) {
+      for (const r of rows) natRem += ovRowRem(r.kind);
+    } else {
+      natRem += 2.6;
+    }
+    const natPx = natRem * rootPx + Math.max(2, rows.length + 2);
+    const baseBottom = Math.max(12, getOvBottom());
+    const minFloorBottom = isPlayerFullscreen() ? 76 : 56;
+    const desired = Math.max(0.7, Math.min(1.4, ovFontScale || 1));
+    let effBaseBottom = baseBottom;
+    // If the user previously dragged the overlay high up and then added many rows,
+    // slide down toward YouTube's control-bar clearance before shrinking text.
+    if (pwH - effBaseBottom - 14 < natPx * desired && effBaseBottom > minFloorBottom) {
+      effBaseBottom = Math.max(minFloorBottom, Math.round(pwH - natPx * desired - 14));
+    }
+    const availH = Math.max(96, pwH - effBaseBottom - 14);
+    const scale = Math.max(0.38, Math.min(desired, availH / Math.max(1, natPx)));
+    const maxBottom = Math.max(12, pwH - natPx * scale - 10);
+    const effBottom = Math.round(Math.max(12, Math.min(effBaseBottom, maxBottom)));
+    const prevScale = ovCurrentScale;
+    ovCurrentScale = scale;
+    ovEl.style.setProperty('--ov-scale', scale.toFixed(3));
+    ovEl.style.setProperty('--ov-bottom', effBottom + 'px');
+    ovEl.style.setProperty('--ov-alpha', String(ovAlpha));
+    if (Math.abs(scale - prevScale) > 0.015) ovRenderedStart = -1;
+    return effBottom;
+  }
+  function setOvBottom(px, persist) {
+    const v = Math.max(12, Math.round(Number(px) || 0));
+    if (isPlayerFullscreen()) ovBottomFs = v;
+    else ovBottomWin = v;
+    const eff = fitOverlayLayout();
+    if (persist) {
+      if (isPlayerFullscreen()) {
+        ovBottomFs = eff;
+        localStorage.setItem('ovpub.ovBottomFs', String(ovBottomFs));
+      } else {
+        ovBottomWin = eff;
+        localStorage.setItem('ovpub.ovBottomWin', String(ovBottomWin));
+      }
+    }
+    if (showOverlay && ovRenderedStart < 0) updateOverlayTimeline(currentTime(), true);
+  }
+  function setOvFontScale(val) {
+    ovFontScale = Math.max(0.75, Math.min(1.35, Number(val) || 1));
+    localStorage.setItem('ovpub.ovFont', String(ovFontScale));
+    fitOverlayLayout();
+    if (showOverlay) {
+      ovRenderedStart = -1;
+      updateOverlayTimeline(currentTime(), true);
+    }
+  }
+  function setOvAlpha(val) {
+    ovAlpha = Math.max(0.55, Math.min(0.98, Number(val) || 0.88));
+    localStorage.setItem('ovpub.ovAlpha', String(ovAlpha));
+    fitOverlayLayout();
+  }
+  function syncFullscreenButtons() {
+    const fs = isPlayerFullscreen();
+    const btn = document.getElementById('toggle-fullscreen');
+    if (btn) {
+      btn.setAttribute('aria-pressed', String(fs));
+      btn.textContent = fs ? 'Exit Full' : 'Fullscreen';
+    }
+    const ovBtn = document.getElementById('ov-fs-btn');
+    if (ovBtn) {
+      ovBtn.textContent = fs ? 'Exit' : '⛶';
+      ovBtn.setAttribute('aria-pressed', String(fs));
+      ovBtn.title = fs ? 'Exit fullscreen (F)' : 'Fullscreen video with overlay (F)';
+    }
+  }
+  function togglePlayerFullscreen() {
+    const pw = document.getElementById('player-wrap');
+    if (!pw) return;
+    if (isPlayerFullscreen()) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) Promise.resolve(exit.call(document)).catch(() => {});
+      return;
+    }
+    if (!showOverlay) {
+      autoOverlayForFs = true;
+      showOverlay = true;
+      applyOverlayState();
+    } else {
+      autoOverlayForFs = false;
+    }
+    const req = pw.requestFullscreen || pw.webkitRequestFullscreen;
+    if (req) {
+      Promise.resolve(req.call(pw)).catch(() => {
+        if (autoOverlayForFs) {
+          autoOverlayForFs = false;
+          showOverlay = false;
+          applyOverlayState();
+        }
+      });
+    }
+  }
+  function onFullscreenChange() {
+    syncFullscreenButtons();
+    closeStreamMenu();
+    const menu = document.getElementById('stream-ctx-menu');
+    const host = document.fullscreenElement || document.webkitFullscreenElement || document.body;
+    if (menu && menu.parentElement !== host) host.appendChild(menu);
+    const fs = isPlayerFullscreen();
+    if (!fs && autoOverlayForFs) {
+      autoOverlayForFs = false;
+      showOverlay = false;
+      applyOverlayState();
+    } else if (showOverlay) {
+      fitOverlayLayout();
+      ovRenderedStart = -1;
+      requestAnimationFrame(() => {
+        fitOverlayLayout();
+        updateOverlayTimeline(currentTime(), true);
+      });
+    }
+    if (!fs) applySplitLayout();
+  }
+
   function avatarHtml(spk, sizeCls) {
     const url = doc && doc.avatars && doc.avatars[spk];
     if (!url) return '';
@@ -738,13 +978,23 @@ APP_JS = r"""(() => {
     else mainRows = rows;
     localStorage.setItem(rowsStorageKey(surface), JSON.stringify(rows));
     if (surface === 'overlay') {
+      fitOverlayLayout();
       ovRenderedStart = -1;
       if (showOverlay) updateOverlayTimeline(currentTime(), true);
     } else {
       renderLanesWindow(true);
     }
   }
-  function sortRowsCanonical(rows) {
+  function isStreamGrouped(rows) {
+    let sameKindAdj = 0;
+    let sameSpkAdj = 0;
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i].kind === rows[i - 1].kind && rows[i].spk !== rows[i - 1].spk) sameKindAdj += 1;
+      if (rows[i].spk === rows[i - 1].spk) sameSpkAdj += 1;
+    }
+    return sameKindAdj > 0 && sameSpkAdj === 0;
+  }
+  function sortRowsBySpeaker(rows) {
     const spkOrder = new Map(model.speakers.map((s, i) => [s, i]));
     return [...rows].sort((a, b) => {
       const sa = spkOrder.get(a.spk) ?? 99;
@@ -753,14 +1003,88 @@ APP_JS = r"""(() => {
       return (STREAM_ORDER.get(a.kind) ?? 99) - (STREAM_ORDER.get(b.kind) ?? 99);
     });
   }
+  function sortRowsByStream(rows) {
+    const spkOrder = new Map(model.speakers.map((s, i) => [s, i]));
+    return [...rows].sort((a, b) => {
+      const ka = STREAM_ORDER.get(a.kind) ?? 99;
+      const kb = STREAM_ORDER.get(b.kind) ?? 99;
+      if (ka !== kb) return ka - kb;
+      return (spkOrder.get(a.spk) ?? 99) - (spkOrder.get(b.spk) ?? 99);
+    });
+  }
+  function insertRowPreservingOrder(rows, spk, kind) {
+    if (rows.some(r => r.spk === spk && r.kind === kind)) return rows;
+    const next = [...rows];
+    const kOrd = STREAM_ORDER.get(kind) ?? 99;
+    if (isStreamGrouped(next)) {
+      let lastKindIdx = -1;
+      for (let i = 0; i < next.length; i++) {
+        if (next[i].kind === kind) lastKindIdx = i;
+      }
+      if (lastKindIdx >= 0) {
+        next.splice(lastKindIdx + 1, 0, {spk, kind});
+        return next;
+      }
+      const afterIdx = next.findIndex(r => (STREAM_ORDER.get(r.kind) ?? 99) > kOrd);
+      if (afterIdx >= 0) { next.splice(afterIdx, 0, {spk, kind}); return next; }
+      next.push({spk, kind});
+      return next;
+    }
+    let firstSpk = -1;
+    let lastSpk = -1;
+    for (let i = 0; i < next.length; i++) {
+      if (next[i].spk === spk) {
+        if (firstSpk < 0) firstSpk = i;
+        lastSpk = i;
+      }
+    }
+    if (firstSpk >= 0) {
+      let ins = lastSpk + 1;
+      for (let i = firstSpk; i <= lastSpk; i++) {
+        if (next[i].spk === spk && (STREAM_ORDER.get(next[i].kind) ?? 99) > kOrd) {
+          ins = i;
+          break;
+        }
+      }
+      next.splice(ins, 0, {spk, kind});
+      return next;
+    }
+    next.push({spk, kind});
+    return next;
+  }
+  function moveRowOnSurface(surface, fromIdx, toIdx) {
+    const rows = [...getSurfaceRows(surface)];
+    if (fromIdx < 0 || fromIdx >= rows.length) return;
+    toIdx = Math.max(0, Math.min(rows.length - 1, toIdx));
+    if (fromIdx === toIdx) return;
+    const [item] = rows.splice(fromIdx, 1);
+    rows.splice(toIdx, 0, item);
+    setSurfaceRows(surface, rows);
+  }
+  function groupRowsBySpeaker(surface) {
+    setSurfaceRows(surface, sortRowsBySpeaker(getSurfaceRows(surface)));
+  }
+  function groupRowsByStream(surface) {
+    setSurfaceRows(surface, sortRowsByStream(getSurfaceRows(surface)));
+  }
   function addRowToSurface(surface, spk, kind) {
     const rows = getSurfaceRows(surface);
     if (rows.some(r => r.spk === spk && r.kind === kind)) return;
-    setSurfaceRows(surface, sortRowsCanonical([...rows, {spk, kind}]));
+    setSurfaceRows(surface, insertRowPreservingOrder(rows, spk, kind));
   }
   function removeRowFromSurface(surface, spk, kind) {
     const rows = getSurfaceRows(surface).filter(r => !(r.spk === spk && r.kind === kind));
     setSurfaceRows(surface, rows);
+  }
+  function addKindForActive(surface, kind) {
+    const rows = getSurfaceRows(surface);
+    const activeSpks = [...new Set(rows.map(r => r.spk))];
+    const targetSpks = activeSpks.length ? activeSpks : model.speakers;
+    let next = [...rows];
+    for (const spk of targetSpks) {
+      next = insertRowPreservingOrder(next, spk, kind);
+    }
+    setSurfaceRows(surface, next);
   }
   function toggleKindForAllActive(surface, kind) {
     const rows = getSurfaceRows(surface);
@@ -770,11 +1094,7 @@ APP_JS = r"""(() => {
     if (allHave) {
       setSurfaceRows(surface, rows.filter(r => r.kind !== kind));
     } else {
-      const next = [...rows];
-      for (const spk of targetSpks) {
-        if (!next.some(r => r.spk === spk && r.kind === kind)) next.push({spk, kind});
-      }
-      setSurfaceRows(surface, sortRowsCanonical(next));
+      addKindForActive(surface, kind);
     }
   }
   function toggleSpeakerOnSurface(surface, spk) {
@@ -785,8 +1105,9 @@ APP_JS = r"""(() => {
     } else {
       const activeKinds = [...new Set(rows.map(r => r.kind))];
       const kinds = activeKinds.length ? activeKinds : (hasStudy ? ['ja-furi'] : ['text']);
-      const next = [...rows, ...kinds.map(kind => ({spk, kind}))];
-      setSurfaceRows(surface, sortRowsCanonical(next));
+      let next = [...rows];
+      for (const kind of kinds) next = insertRowPreservingOrder(next, spk, kind);
+      setSurfaceRows(surface, next);
     }
   }
   function closeStreamMenu() {
@@ -794,41 +1115,58 @@ APP_JS = r"""(() => {
     if (menu) { menu.hidden = true; menu.innerHTML = ''; }
     ctxMenuState = null;
   }
-  function showStreamMenu(ev, surface) {
-    if (!model) return;
-    ev.preventDefault();
-    ev.stopPropagation();
+  function renderStreamMenu(anchorX, anchorY) {
     const menu = document.getElementById('stream-ctx-menu');
-    if (!menu) return;
-    const rowEl = ev.target.closest('[data-row-spk]');
-    const hitSpk = rowEl ? rowEl.dataset.rowSpk : '';
-    const hitKind = rowEl ? rowEl.dataset.rowKind : '';
+    if (!menu || !ctxMenuState || !model) return;
+    const host = document.fullscreenElement || document.webkitFullscreenElement || document.body;
+    if (menu.parentElement !== host) host.appendChild(menu);
+
+    const {surface, hitSpk, hitKind} = ctxMenuState;
     const rows = getSurfaceRows(surface);
+    const hitIdx = hitSpk && hitKind ? rows.findIndex(r => r.spk === hitSpk && r.kind === hitKind) : -1;
+    ctxMenuState.hitIdx = hitIdx;
     const activeSpks = [...new Set(rows.map(r => r.spk))];
     const targetSpks = activeSpks.length ? activeSpks : model.speakers;
     const surfaceTitle = surface === 'overlay' ? 'Overlay streams' : 'Timeline streams';
-    ctxMenuState = {surface, hitSpk, hitKind};
+    const streamGrouped = isStreamGrouped(rows);
 
     let out = '<div class="ctx-head">'
       + (hitSpk ? avatarHtml(hitSpk, 'av-xs') : '')
-      + '<span>' + html(hitSpk ? hitSpk + ' · ' + (STREAM_MAP.get(hitKind)?.label || surfaceTitle) : surfaceTitle) + '</span></div>';
+      + '<span>' + html(hitIdx >= 0 ? hitSpk + ' · ' + (STREAM_MAP.get(hitKind)?.label || surfaceTitle) : surfaceTitle) + '</span></div>';
 
-    if (hitSpk && hitKind) {
+    if (hitIdx >= 0) {
+      const disUp = hitIdx <= 0 ? ' disabled' : '';
+      const disDn = hitIdx >= rows.length - 1 ? ' disabled' : '';
+      out += '<div class="ctx-inline-bar">'
+        + '<span class="ctx-inline-lbl">Order</span>'
+        + '<button type="button" class="ctx-chip-btn" data-act="move-up"' + disUp + ' title="Move row up">↑ Up</button>'
+        + '<button type="button" class="ctx-chip-btn" data-act="move-down"' + disDn + ' title="Move row down">↓ Down</button>'
+        + '<button type="button" class="ctx-chip-btn" data-act="move-top"' + disUp + ' title="Move row to top">⤒ Top</button>'
+        + '<button type="button" class="ctx-chip-btn" data-act="move-bot"' + disDn + ' title="Move row to bottom">⤓ Bot</button>'
+        + '</div>';
       out += '<button type="button" class="ctx-item ctx-danger" data-act="rm-one" data-spk="'
         + html(hitSpk) + '" data-kind="' + html(hitKind) + '">'
         + '<span>Remove this row</span><span class="ctx-act">− Remove</span></button>';
       if (hasStudy) {
         const missingForSpk = STUDY_STREAMS.filter(s => !rows.some(r => r.spk === hitSpk && r.kind === s.id));
         if (missingForSpk.length) {
-          out += '<div class="ctx-sec">Add for ' + html(hitSpk) + '</div>';
+          out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Add</span>';
           for (const st of missingForSpk) {
-            out += '<button type="button" class="ctx-item is-off" data-act="add-one" data-spk="'
-              + html(hitSpk) + '" data-kind="' + html(st.id) + '">'
-              + '<span>' + html(st.label) + '</span><span class="ctx-act">+ Add</span></button>';
+            out += '<button type="button" class="ctx-chip-btn is-off" data-act="add-one" data-spk="'
+              + html(hitSpk) + '" data-kind="' + html(st.id) + '" title="' + html('Add ' + st.label + ' for ' + hitSpk)
+              + '">+ ' + html(st.short) + '</button>';
           }
+          out += '</div>';
         }
       }
       out += '<div class="ctx-sep"></div>';
+    }
+
+    if (rows.length > 1 && hasStudy) {
+      out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Group</span>'
+        + '<button type="button" class="ctx-chip-btn' + (!streamGrouped ? ' is-on' : '') + '" data-act="grp-spk">By speaker</button>'
+        + '<button type="button" class="ctx-chip-btn' + (streamGrouped ? ' is-on' : '') + '" data-act="grp-stream">By stream</button>'
+        + '</div><div class="ctx-sep"></div>';
     }
 
     if (hasStudy) {
@@ -853,17 +1191,52 @@ APP_JS = r"""(() => {
         + '<span style="color:' + c.fg + ';font-weight:700">' + html(spk) + '</span>'
         + '<span class="ctx-act">' + (present ? '✓ Remove' : '+ Add') + '</span></button>';
     }
+
+    if (surface === 'overlay') {
+      const fs = isPlayerFullscreen();
+      const curBot = Math.round(getOvBottom());
+      out += '<div class="ctx-sep"></div><div class="ctx-sec">Overlay layout</div>'
+        + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Height</span>'
+        + '<button type="button" class="ctx-chip-btn" data-act="ov-up">↑ Higher</button>'
+        + '<button type="button" class="ctx-chip-btn" data-act="ov-down">↓ Lower</button>'
+        + '<span class="ctx-meta">' + curBot + 'px</span></div>'
+        + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Text</span>'
+        + '<button type="button" class="ctx-chip-btn' + (ovFontScale < 0.92 ? ' is-on' : '') + '" data-act="ov-font" data-val="0.84">S</button>'
+        + '<button type="button" class="ctx-chip-btn' + (ovFontScale >= 0.92 && ovFontScale <= 1.08 ? ' is-on' : '') + '" data-act="ov-font" data-val="1">M</button>'
+        + '<button type="button" class="ctx-chip-btn' + (ovFontScale > 1.08 ? ' is-on' : '') + '" data-act="ov-font" data-val="1.2">L</button>'
+        + '<span class="ctx-meta">' + Math.round(ovCurrentScale * 100) + '%</span></div>'
+        + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">BG</span>'
+        + '<button type="button" class="ctx-chip-btn' + (ovAlpha < 0.8 ? ' is-on' : '') + '" data-act="ov-alpha" data-val="0.72">Light</button>'
+        + '<button type="button" class="ctx-chip-btn' + (ovAlpha >= 0.8 && ovAlpha <= 0.92 ? ' is-on' : '') + '" data-act="ov-alpha" data-val="0.88">Med</button>'
+        + '<button type="button" class="ctx-chip-btn' + (ovAlpha > 0.92 ? ' is-on' : '') + '" data-act="ov-alpha" data-val="0.96">Dark</button>'
+        + '</div>'
+        + '<button type="button" class="ctx-item" data-act="toggle-fs"><span>'
+        + (fs ? 'Exit Fullscreen (F)' : 'Enter Fullscreen (F)') + '</span></button>';
+    }
+
     out += '<div class="ctx-sep"></div>'
-      + '<button type="button" class="ctx-item" data-act="reset"><span>Reset default rows</span></button>';
+      + '<button type="button" class="ctx-item" data-act="reset"><span>Reset defaults</span></button>';
 
     menu.innerHTML = out;
     menu.hidden = false;
     const mw = menu.offsetWidth || 260;
-    const mh = menu.offsetHeight || 320;
-    const x = Math.max(8, Math.min(ev.clientX, window.innerWidth - mw - 10));
-    const y = Math.max(8, Math.min(ev.clientY, window.innerHeight - mh - 10));
+    const mh = menu.offsetHeight || 340;
+    const x = Math.max(8, Math.min(anchorX, window.innerWidth - mw - 10));
+    const y = Math.max(8, Math.min(anchorY, window.innerHeight - mh - 10));
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
+    ctxMenuState.x = x;
+    ctxMenuState.y = y;
+  }
+  function showStreamMenu(ev, surface) {
+    if (!model) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const rowEl = ev.target.closest('[data-row-spk]');
+    const hitSpk = rowEl ? rowEl.dataset.rowSpk : '';
+    const hitKind = rowEl ? rowEl.dataset.rowKind : '';
+    ctxMenuState = {surface, hitSpk, hitKind, hitIdx: -1, x: ev.clientX, y: ev.clientY};
+    renderStreamMenu(ev.clientX, ev.clientY);
   }
 
   function rubyHtml(ruby, fallback) {
@@ -1506,8 +1879,13 @@ APP_JS = r"""(() => {
   function renderTimelineInto(ruler, body, winStart, winDur, isOverlay) {
     const trackPx = ruler.getBoundingClientRect().width || 0;
     const winEnd = winStart + winDur;
-    const measurer = trackPx > 0 ? getLaneMeasurer(isOverlay) : null;
-    const glossMeasurer = hasStudy && trackPx > 0 ? getLaneMeasurer(isOverlay, 0.76) : null;
+    const ovMul = isOverlay ? ovCurrentScale : 1;
+    const measurer = trackPx > 0
+      ? getLaneMeasurer(isOverlay, isOverlay ? (hasStudy ? 0.86 : 0.84) * ovMul : (hasStudy ? 0.92 : 0.9))
+      : null;
+    const glossMeasurer = hasStudy && trackPx > 0
+      ? getLaneMeasurer(isOverlay, (isOverlay ? 0.74 : 0.78) * ovMul)
+      : null;
     const step = winDur <= 8 ? 1 : winDur <= 12 ? 2 : winDur <= 20 ? 4 : winDur <= 30 ? 5 : 10;
     const firstTick = Math.ceil(winStart / step) * step;
     const ticks = [];
@@ -1569,19 +1947,20 @@ APP_JS = r"""(() => {
       body.innerHTML = '<div class="lanes-empty">No streams shown — right-click here to add streams or speakers</div>';
       return trackPx;
     }
-    // Count how many rows each speaker has so single-row speakers stay compact and multi-row speakers show clear tags.
     const spkRowCount = new Map();
     for (const r of rows) spkRowCount.set(r.spk, (spkRowCount.get(r.spk) || 0) + 1);
-    const seenSpk = new Set();
+    const streamGrouped = isStreamGrouped(rows);
+    const seenPulseSpk = new Set();
 
     body.innerHTML = rows.map((row, ri) => {
       const spk = row.spk;
       const kind = row.kind;
       const c = model.colorOf(spk);
       const segs = model.bySpeaker.get(spk) || [];
-      const isFirstForSpk = !seenSpk.has(spk);
-      seenSpk.add(spk);
-      const isGroupEnd = ri < rows.length - 1 && rows[ri + 1].spk !== spk;
+      const sameAsPrev = ri > 0 && rows[ri - 1].spk === spk;
+      const isGroupEnd = ri < rows.length - 1 && (
+        streamGrouped ? rows[ri + 1].kind !== kind : rows[ri + 1].spk !== spk
+      );
       const blocks = [];
       for (const seg of segs) {
         if (seg.end <= winStart) continue;
@@ -1624,7 +2003,8 @@ APP_JS = r"""(() => {
           );
         }
       }
-      const showPulses = isFirstForSpk && (kind === 'ja-furi' || kind === 'ja' || kind === 'text');
+      const showPulses = !seenPulseSpk.has(spk) && (kind === 'ja-furi' || kind === 'ja' || kind === 'text');
+      if (showPulses) seenPulseSpk.add(spk);
       const pulses = showPulses ? (model.pulsesBySpeaker?.get(spk) || []).filter(p => p.end > winStart && p.start < winEnd).map(p => {
         const p0 = Math.max(p.start, winStart);
         const p1 = Math.min(p.end, winEnd);
@@ -1636,20 +2016,22 @@ APP_JS = r"""(() => {
           + ' title="' + html(spk + ' vocal overlap / backchannel (' + dur + 's)') + '"></div>';
       }).join('') : '';
 
-      const av = avatarHtml(spk, isOverlay ? 'av-sm' : (isFirstForSpk ? '' : 'av-sm'));
+      const av = avatarHtml(spk, isOverlay ? 'av-sm' : (sameAsPrev ? 'av-sm' : ''));
       const kindShort = STREAM_MAP.get(kind)?.short || '';
       const isFiltered = !isOverlay && filter === 'spk:' + spk;
       const rowKindCls = hasStudy ? ' row-' + kind : '';
-      const labelHtml = isFirstForSpk
-        ? av + '<span class="lbl-txt">' + html(spk) + '</span>'
-          + (hasStudy && (spkRowCount.get(spk) > 1 || kind !== 'ja-furi') ? '<span class="lbl-kind">' + html(kindShort) + '</span>' : '')
-        : av + '<span class="lbl-txt">' + html(kindShort) + '</span>';
+      const grip = '<span class="lbl-grip" aria-hidden="true">⋮</span>';
+      const labelHtml = !sameAsPrev
+        ? grip + av + '<span class="lbl-txt">' + html(spk) + '</span>'
+          + (hasStudy && (spkRowCount.get(spk) > 1 || kind !== 'ja-furi' || streamGrouped)
+            ? '<span class="lbl-kind">' + html(kindShort) + '</span>' : '')
+        : grip + av + '<span class="lbl-txt">' + html(kindShort) + '</span>';
 
       return '<div class="' + rowCls + rowKindCls + (isGroupEnd ? ' row-grp-end' : '') + '"'
-        + ' data-row-spk="' + html(spk) + '" data-row-kind="' + html(kind) + '">'
-        + '<div class="' + lblCls + (av ? ' has-avatar' : '') + (!isFirstForSpk ? ' sub-lbl' : '') + (isFiltered ? ' filtered' : '') + '"'
+        + ' data-row-idx="' + ri + '" data-row-spk="' + html(spk) + '" data-row-kind="' + html(kind) + '">'
+        + '<div class="' + lblCls + (av ? ' has-avatar' : '') + (sameAsPrev ? ' sub-lbl' : '') + (isFiltered ? ' filtered' : '') + '"'
         + ' data-speaker="' + html(spk) + '" style="--spk-color:' + c.fg + '"'
-        + ' title="Right-click to add/remove streams or voices">' + labelHtml + '</div>'
+        + ' title="Drag up/down to reorder · Right-click to add/remove streams or arrange">' + labelHtml + '</div>'
         + '<div class="' + trkCls + '">' + gridHtml + bands + pulses + blocks.join('')
         + '<div class="lane-playhead"></div></div></div>';
     }).join('');
@@ -1760,8 +2142,12 @@ APP_JS = r"""(() => {
     if (!ovEl) return;
     ovEl.hidden = !showOverlay;
     if (showOverlay) {
+      fitOverlayLayout();
       ovRenderedStart = -1;
-      requestAnimationFrame(() => updateOverlayTimeline(currentTime(), true));
+      requestAnimationFrame(() => {
+        fitOverlayLayout();
+        updateOverlayTimeline(currentTime(), true);
+      });
     }
   }
 
@@ -1793,6 +2179,7 @@ APP_JS = r"""(() => {
     const ruler = document.getElementById('ov-ruler');
     const body = document.getElementById('ov-body');
     if (!ruler || !body) return;
+    fitOverlayLayout();
     const winDur = Math.min(OV_WINDOW_SEC, Math.max(4, lanesWindow));
     const maxStart = Math.max(0, model.duration - winDur);
     const trackPx = ruler.getBoundingClientRect().width || 0;
@@ -1998,6 +2385,13 @@ APP_JS = r"""(() => {
   }
 
   function applySplitLayout() {
+    if (isPlayerFullscreen()) {
+      if (showOverlay) {
+        fitOverlayLayout();
+        updateOverlayTimeline(currentTime(), true);
+      }
+      return;
+    }
     const main = document.querySelector('main');
     const pw = document.getElementById('player-wrap');
     const panel = document.getElementById('transcript-panel');
@@ -2018,7 +2412,10 @@ APP_JS = r"""(() => {
       }
       if (showMinimap) drawMinimap();
       renderLanesWindow(true);
-      if (showOverlay) updateOverlayTimeline(currentTime(), true);
+      if (showOverlay) {
+        fitOverlayLayout();
+        updateOverlayTimeline(currentTime(), true);
+      }
     });
   }
 
@@ -2564,6 +2961,7 @@ APP_JS = r"""(() => {
       ovEl.addEventListener('click', ev => {
         ev.stopPropagation();
         closeStreamMenu();
+        if (ev.target.closest('#ov-drag-handle')) return;
         const pin = ev.target.closest('.ruler-note-pin');
         if (pin) { seekAndPlay(Number(pin.dataset.t)); return; }
         const lw = ev.target.closest('.lane-word[data-v]');
@@ -2579,29 +2977,232 @@ APP_JS = r"""(() => {
       ovEl.addEventListener('contextmenu', ev => showStreamMenu(ev, 'overlay'));
     }
 
+    const ovDragHandle = document.getElementById('ov-drag-handle');
+    if (ovDragHandle) {
+      let ovPosDrag = null;
+      ovDragHandle.addEventListener('pointerdown', ev => {
+        if (ev.button !== 0 || ev.target.closest('button')) return;
+        ev.stopPropagation();
+        ev.preventDefault();
+        closeStreamMenu();
+        ovPosDrag = {startY: ev.clientY, startBottom: getOvBottom()};
+        try { ovDragHandle.setPointerCapture(ev.pointerId); } catch {}
+      });
+      ovDragHandle.addEventListener('pointermove', ev => {
+        if (!ovPosDrag) return;
+        const dy = ovPosDrag.startY - ev.clientY;
+        setOvBottom(ovPosDrag.startBottom + dy, false);
+      });
+      const finishOvPos = () => {
+        if (!ovPosDrag) return;
+        ovPosDrag = null;
+        setOvBottom(getOvBottom(), true);
+      };
+      ovDragHandle.addEventListener('pointerup', finishOvPos);
+      ovDragHandle.addEventListener('pointercancel', finishOvPos);
+    }
+    const ovFsBtn = document.getElementById('ov-fs-btn');
+    if (ovFsBtn) {
+      ovFsBtn.addEventListener('click', ev => {
+        ev.stopPropagation();
+        togglePlayerFullscreen();
+      });
+    }
+    const fsBtn = document.getElementById('toggle-fullscreen');
+    if (fsBtn) fsBtn.onclick = togglePlayerFullscreen;
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+    syncFullscreenButtons();
+
+    function setupRowDragReorder(stageEl, surface, labelSel, onLabelClick) {
+      if (!stageEl) return;
+      let rd = null;
+      const clearCls = () => {
+        stageEl.querySelectorAll('.is-dragging, .drag-over-top, .drag-over-bot')
+          .forEach(el => el.classList.remove('is-dragging', 'drag-over-top', 'drag-over-bot'));
+      };
+      stageEl.addEventListener('pointerdown', ev => {
+        if (ev.button !== 0) return;
+        const lbl = ev.target.closest(labelSel);
+        if (!lbl) return;
+        const rowEl = lbl.closest('[data-row-idx]');
+        if (!rowEl) return;
+        const fromIdx = Number(rowEl.dataset.rowIdx);
+        if (!Number.isInteger(fromIdx)) return;
+        ev.stopPropagation();
+        rd = {fromIdx, targetIdx: fromIdx, placeAfter: false, startY: ev.clientY, moved: false, rowEl, lbl};
+        try { lbl.setPointerCapture(ev.pointerId); } catch {}
+      });
+      stageEl.addEventListener('pointermove', ev => {
+        if (!rd) return;
+        if (!rd.moved && Math.abs(ev.clientY - rd.startY) >= 5) {
+          rd.moved = true;
+          rd.rowEl.classList.add('is-dragging');
+          closeStreamMenu();
+        }
+        if (!rd.moved) return;
+        const rowEls = [...stageEl.querySelectorAll('[data-row-idx]')];
+        for (const el of rowEls) el.classList.remove('drag-over-top', 'drag-over-bot');
+        let overEl = rowEls[0];
+        let placeAfter = false;
+        for (const el of rowEls) {
+          const r = el.getBoundingClientRect();
+          if (ev.clientY < r.top + r.height / 2) { overEl = el; placeAfter = false; break; }
+          overEl = el;
+          placeAfter = true;
+        }
+        if (overEl) {
+          const overIdx = Number(overEl.dataset.rowIdx);
+          rd.targetIdx = overIdx;
+          rd.placeAfter = placeAfter;
+          if (overIdx !== rd.fromIdx) {
+            overEl.classList.add(placeAfter ? 'drag-over-bot' : 'drag-over-top');
+          }
+        }
+      });
+      const finish = ev => {
+        if (!rd) return;
+        const d = rd;
+        rd = null;
+        clearCls();
+        if (d.moved) {
+          const ins = d.placeAfter ? d.targetIdx + 1 : d.targetIdx;
+          const toIdx = ins > d.fromIdx ? ins - 1 : ins;
+          moveRowOnSurface(surface, d.fromIdx, toIdx);
+        } else if (ev && ev.type === 'pointerup' && onLabelClick) {
+          onLabelClick(d.lbl);
+        }
+      };
+      stageEl.addEventListener('pointerup', finish);
+      stageEl.addEventListener('pointercancel', () => finish(null));
+    }
+
+    setupRowDragReorder(ovEl, 'overlay', '.ov-label', null);
+
     const lanesStageCtx = document.getElementById('lanes-stage');
     if (lanesStageCtx) {
       lanesStageCtx.addEventListener('contextmenu', ev => showStreamMenu(ev, 'main'));
+      setupRowDragReorder(lanesStageCtx, 'main', '.lane-label', lbl => {
+        if (!lbl.dataset.speaker) return;
+        const val = 'spk:' + lbl.dataset.speaker;
+        filterSel.value = filterSel.value === val ? 'all' : val;
+        paintTranscript();
+      });
     }
     const ctxMenu = document.getElementById('stream-ctx-menu');
     if (ctxMenu) {
       ctxMenu.addEventListener('click', ev => {
         ev.stopPropagation();
         const btn = ev.target.closest('button[data-act]');
-        if (!btn || !ctxMenuState) return;
-        const {surface} = ctxMenuState;
+        if (!btn || btn.disabled || !ctxMenuState) return;
+        const {surface, hitIdx} = ctxMenuState;
         const act = btn.dataset.act;
-        if (act === 'rm-one') removeRowFromSurface(surface, btn.dataset.spk, btn.dataset.kind);
-        else if (act === 'add-one') addRowToSurface(surface, btn.dataset.spk, btn.dataset.kind);
-        else if (act === 'toggle-kind') toggleKindForAllActive(surface, btn.dataset.kind);
-        else if (act === 'toggle-spk') toggleSpeakerOnSurface(surface, btn.dataset.spk);
-        else if (act === 'reset') setSurfaceRows(surface, defaultRowsForSurface(surface));
+        if (act === 'move-up' && hitIdx > 0) {
+          moveRowOnSurface(surface, hitIdx, hitIdx - 1);
+          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
+          return;
+        }
+        if (act === 'move-down' && hitIdx >= 0) {
+          moveRowOnSurface(surface, hitIdx, hitIdx + 1);
+          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
+          return;
+        }
+        if (act === 'move-top' && hitIdx > 0) {
+          moveRowOnSurface(surface, hitIdx, 0);
+          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
+          return;
+        }
+        if (act === 'move-bot' && hitIdx >= 0) {
+          moveRowOnSurface(surface, hitIdx, getSurfaceRows(surface).length - 1);
+          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
+          return;
+        }
+        if (act === 'grp-spk') {
+          groupRowsBySpeaker(surface);
+          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
+          return;
+        }
+        if (act === 'grp-stream') {
+          groupRowsByStream(surface);
+          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
+          return;
+        }
+        if (act === 'ov-up') {
+          setOvBottom(getOvBottom() + 24, true);
+          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
+          return;
+        }
+        if (act === 'ov-down') {
+          setOvBottom(getOvBottom() - 24, true);
+          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
+          return;
+        }
+        if (act === 'ov-font') {
+          setOvFontScale(Number(btn.dataset.val));
+          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
+          return;
+        }
+        if (act === 'ov-alpha') {
+          setOvAlpha(Number(btn.dataset.val));
+          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
+          return;
+        }
+        if (act === 'toggle-fs') {
+          closeStreamMenu();
+          togglePlayerFullscreen();
+          return;
+        }
+        if (act === 'add-one') {
+          addRowToSurface(surface, btn.dataset.spk, btn.dataset.kind);
+          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
+          return;
+        }
+        if (act === 'toggle-kind') {
+          toggleKindForAllActive(surface, btn.dataset.kind);
+          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
+          return;
+        }
+        if (act === 'toggle-spk') {
+          toggleSpeakerOnSurface(surface, btn.dataset.spk);
+          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
+          return;
+        }
+        if (act === 'rm-one') {
+          removeRowFromSurface(surface, btn.dataset.spk, btn.dataset.kind);
+        } else if (act === 'reset') {
+          if (surface === 'overlay') {
+            ovBottomWin = DEFAULT_OV_BOTTOM_WIN;
+            ovBottomFs = DEFAULT_OV_BOTTOM_FS;
+            ovFontScale = 1;
+            ovAlpha = 0.88;
+            localStorage.removeItem('ovpub.ovBottomWin');
+            localStorage.removeItem('ovpub.ovBottomFs');
+            localStorage.removeItem('ovpub.ovFont');
+            localStorage.removeItem('ovpub.ovAlpha');
+          }
+          setSurfaceRows(surface, defaultRowsForSurface(surface));
+        }
         closeStreamMenu();
       });
       ctxMenu.addEventListener('contextmenu', ev => ev.preventDefault());
     }
     document.addEventListener('click', closeStreamMenu);
-    document.addEventListener('keydown', ev => { if (ev.key === 'Escape') closeStreamMenu(); });
+    document.addEventListener('keydown', ev => {
+      if (ev.key === 'Escape') { closeStreamMenu(); return; }
+      if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      const tag = ev.target && ev.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (ev.target && ev.target.isContentEditable)) return;
+      if (ev.key === 'f' || ev.key === 'F') {
+        ev.preventDefault();
+        togglePlayerFullscreen();
+      } else if (ev.key === 'o' || ev.key === 'O') {
+        ev.preventDefault();
+        autoOverlayForFs = false;
+        showOverlay = !showOverlay;
+        localStorage.setItem('ovpub.overlay', String(showOverlay));
+        applyOverlayState();
+      }
+    });
 
     document.getElementById('transcript-search').addEventListener('input', paintTranscript);
     filterSel.addEventListener('change', paintTranscript);
@@ -2634,7 +3235,7 @@ APP_JS = r"""(() => {
             const key = r.spk + '\0' + k;
             if (!seen.has(key)) { seen.add(key); next.push({spk: r.spk, kind: k}); }
           }
-          setSurfaceRows('main', sortRowsCanonical(next));
+          setSurfaceRows('main', next);
         }
         applyFuriganaState();
       };
@@ -2645,12 +3246,8 @@ APP_JS = r"""(() => {
         showGloss = !showGloss;
         localStorage.setItem('ovpub.gloss', String(showGloss));
         if (hasStudy && model) {
-          const activeSpks = [...new Set(mainRows.map(r => r.spk))];
-          const spks = activeSpks.length ? activeSpks : model.speakers;
-          const next = showGloss
-            ? sortRowsCanonical([...mainRows, ...spks.filter(s => !mainRows.some(r => r.spk === s && r.kind === 'literal')).map(spk => ({spk, kind: 'literal'}))])
-            : mainRows.filter(r => r.kind !== 'literal');
-          setSurfaceRows('main', next);
+          if (showGloss) addKindForActive('main', 'literal');
+          else setSurfaceRows('main', mainRows.filter(r => r.kind !== 'literal'));
         }
         applyStudyLayersState();
       };
@@ -2661,17 +3258,14 @@ APP_JS = r"""(() => {
         showEnglish = !showEnglish;
         localStorage.setItem('ovpub.english', String(showEnglish));
         if (hasStudy && model) {
-          const activeSpks = [...new Set(mainRows.map(r => r.spk))];
-          const spks = activeSpks.length ? activeSpks : model.speakers;
-          const next = showEnglish
-            ? sortRowsCanonical([...mainRows, ...spks.filter(s => !mainRows.some(r => r.spk === s && r.kind === 'en')).map(spk => ({spk, kind: 'en'}))])
-            : mainRows.filter(r => r.kind !== 'en');
-          setSurfaceRows('main', next);
+          if (showEnglish) addKindForActive('main', 'en');
+          else setSurfaceRows('main', mainRows.filter(r => r.kind !== 'en'));
         }
         applyStudyLayersState();
       };
     }
     document.getElementById('toggle-overlay').onclick = () => {
+      autoOverlayForFs = false;
       showOverlay = !showOverlay;
       localStorage.setItem('ovpub.overlay', String(showOverlay));
       applyOverlayState();
@@ -2885,14 +3479,6 @@ APP_JS = r"""(() => {
         seekAndPlay(Number(pin.dataset.t));
         return;
       }
-      const lbl = ev.target.closest('.lane-label');
-      if (lbl) {
-        if (!lbl.dataset.speaker) return;
-        const val = 'spk:' + lbl.dataset.speaker;
-        filterSel.value = filterSel.value === val ? 'all' : val;
-        paintTranscript();
-        return;
-      }
       const trk = ev.target.closest('.lane-track, .lanes-ruler');
       if (!trk) return;
       const lw = ev.target.closest('.lane-word[data-v]');
@@ -2959,6 +3545,15 @@ APP_JS = r"""(() => {
 
     if (typeof ResizeObserver !== 'undefined') {
       new ResizeObserver(() => renderLanesWindow(false)).observe(document.getElementById('lanes-ruler'));
+      const pwEl = document.getElementById('player-wrap');
+      if (pwEl) {
+        new ResizeObserver(() => {
+          if (showOverlay) {
+            fitOverlayLayout();
+            updateOverlayTimeline(currentTime(), false);
+          }
+        }).observe(pwEl);
+      }
     }
     window.addEventListener('resize', applySplitLayout);
     window.addEventListener('hashchange', () => {
@@ -3022,7 +3617,13 @@ def _index_html(
         allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
     </div>
     <div class="ov-overlay" id="ov-overlay" hidden>
-      <div class="ov-ruler-row"><div class="ov-gutter"></div><div class="ov-ruler" id="ov-ruler"></div></div>
+      <div class="ov-ruler-row">
+        <div class="ov-gutter" id="ov-drag-handle" title="Drag up or down to position overlay · Right-click for menu">
+          <span class="ov-grip">↕<span class="ov-grip-txt"> Move</span></span>
+          <button type="button" class="ov-fs-btn" id="ov-fs-btn" aria-pressed="false" title="Fullscreen video with overlay (F)">⛶</button>
+        </div>
+        <div class="ov-ruler" id="ov-ruler"></div>
+      </div>
       <div class="ov-body" id="ov-body"></div>
     </div>
   </div>
@@ -3073,7 +3674,8 @@ def _index_html(
           <button type="button" id="toggle-furigana" aria-pressed="true"{study_hidden} title="Show or hide furigana readings over kanji">Furigana</button>
           <button type="button" id="toggle-gloss" aria-pressed="true"{study_hidden} title="Show or hide word-by-word meaning stream">Word-by-word</button>
           <button type="button" id="toggle-english" aria-pressed="true"{study_hidden} title="Show or hide per-speaker English stream">English</button>
-          <button type="button" id="toggle-overlay" aria-pressed="false" title="Show compact red-playhead swimlane over the video">Overlay</button>
+          <button type="button" id="toggle-overlay" aria-pressed="false" title="Show compact red-playhead swimlane over the video (O)">Overlay</button>
+          <button type="button" id="toggle-fullscreen" aria-pressed="false" title="Fullscreen video with overlay (F)">Fullscreen</button>
           <button type="button" id="toggle-minimap" aria-pressed="false" title="Show or hide full-video overview bar">Minimap</button>
           <button type="button" id="toggle-badges" aria-pressed="false" title="Show or hide overlap duration badges and counters">Badges</button>
           <button type="button" id="toggle-annotations" aria-pressed="false"{ann_btn_hidden} title="Show or hide editable behavior annotations on timeline and page">Annotations</button>
