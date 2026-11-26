@@ -262,6 +262,13 @@ class ExportOverlapPageTests(unittest.TestCase):
                 encoding="utf-8",
             )
             out_dir_study = Path(tmp) / "out_study"
+            av_dir = Path(tmp) / "avatars_src"
+            av_dir.mkdir()
+            (av_dir / "a.jpg").write_bytes(b"\xff\xd8\xff\xe0fake-jpeg-a")
+            (av_dir / "b.jpg").write_bytes(b"\xff\xd8\xff\xe0fake-jpeg-b")
+            (av_dir / "avatars.json").write_text(
+                json.dumps({"Speaker A": "a.jpg", "Speaker B": "b.jpg"}), encoding="utf-8"
+            )
             proc_study = subprocess.run(
                 [
                     sys.executable,
@@ -272,6 +279,8 @@ class ExportOverlapPageTests(unittest.TestCase):
                     str(data_dir),
                     "--study",
                     str(study_src),
+                    "--avatars",
+                    str(av_dir),
                 ],
                 check=True,
                 capture_output=True,
@@ -279,14 +288,19 @@ class ExportOverlapPageTests(unittest.TestCase):
             )
             summary_study = json.loads(proc_study.stdout)
             self.assertEqual(summary_study["vocab"], 4)
+            self.assertEqual(summary_study["avatars"], 2)
+            self.assertTrue((out_dir_study / "avatars" / "a.jpg").is_file())
+            self.assertTrue((out_dir_study / "avatars" / "b.jpg").is_file())
             study_html = (out_dir_study / "index.html").read_text(encoding="utf-8")
             self.assertIn('id="toggle-furigana" aria-pressed="true" title=', study_html)
             self.assertIn('id="toggle-gloss" aria-pressed="true" title=', study_html)
             self.assertIn('id="toggle-english" aria-pressed="true" title=', study_html)
+            self.assertIn('id="stream-ctx-menu" hidden', study_html)
             self.assertIn('<option value="10" selected>10s</option>', study_html)
             study_tr = json.loads((out_dir_study / "transcript.json").read_text(encoding="utf-8"))
             self.assertEqual(study_tr["language"], "ja")
             self.assertEqual(len(study_tr["vocab"]), 4)
+            self.assertRegex(study_tr["avatars"]["Speaker A"], r"^avatars/a\.jpg\?v=[0-9a-f]{10}$")
             self.assertEqual(study_tr["segments"][0]["en"], "Let's head out today.")
             self.assertEqual(study_tr["segments"][0]["tk"][0][4], "today")
             self.assertEqual(len(study_tr["overlaps"]), 1)

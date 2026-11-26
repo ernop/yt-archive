@@ -145,7 +145,7 @@ header.top h1 { margin: 0; font-size: 1.12rem; line-height: 1.25; font-weight: 7
 .chapters { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin-top: .38rem; }
 .chapters button { font-size: .78rem; padding: .14rem .45rem; background: #111419; border-color: #2d333e; }
 
-main { padding: .6rem 1rem 2rem; max-width: 1800px; margin: 0 auto; }
+main { padding: .6rem 1rem 2rem; width: 100%; max-width: none; margin: 0 auto; }
 main.split-view { display: block; }
 
 .player-wrap {
@@ -158,27 +158,43 @@ main.split-view { display: block; }
 /* Overlay timeline over the bottom of the YouTube player (opt-in via Overlay button) */
 .ov-overlay {
   position: absolute; left: .7rem; right: .7rem; bottom: 3.6rem; z-index: 20;
+  max-height: 76%; overflow-y: auto;
   background: rgba(7, 8, 10, 0.88); border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 7px; overflow: hidden; pointer-events: auto; backdrop-filter: blur(5px);
+  border-radius: 7px; pointer-events: auto; backdrop-filter: blur(5px);
   user-select: none;
 }
-.ov-ruler-row, .ov-row { display: grid; grid-template-columns: 7.4rem minmax(0, 1fr); }
+.ov-ruler-row, .ov-row { display: grid; grid-template-columns: 9.2rem minmax(0, 1fr); }
 .ov-ruler-row {
-  height: 1.3rem; background: rgba(14, 16, 20, 0.94);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  position: sticky; top: 0; z-index: 8;
+  height: 1.35rem; background: rgba(14, 16, 20, 0.96);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
 }
 .ov-gutter { border-right: 1px solid rgba(255, 255, 255, 0.14); }
 .ov-ruler { position: relative; overflow: hidden; cursor: pointer; }
 .ov-row { height: 2.55rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.ov-row.row-ja { height: 2.5rem; }
+.ov-row.row-ja-furi { height: 3.1rem; }
+.ov-row.row-literal { height: 1.95rem; }
+.ov-row.row-en { height: 2.0rem; }
+.ov-row.row-grp-end { border-bottom: 2px solid rgba(255, 255, 255, 0.24); }
 .ov-row:last-child { border-bottom: 0; }
 .ov-label {
-  display: flex; align-items: center; padding: 0 .48rem;
-  border-right: 1px solid rgba(255, 255, 255, 0.14); font-size: .82rem; font-weight: 800;
-  color: var(--spk-color, #fff); background: rgba(10, 12, 16, 0.86);
+  display: flex; align-items: center; gap: .38rem; padding: 0 .45rem;
+  border-right: 1px solid rgba(255, 255, 255, 0.14); font-size: .8rem; font-weight: 800;
+  color: var(--spk-color, #fff); background: rgba(10, 12, 16, 0.88);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.ov-label.sub-lbl {
+  font-size: .73rem; font-weight: 700; box-shadow: inset 3px 0 var(--spk-color, #fff);
+  background: rgba(8, 10, 14, 0.86);
+}
 .ov-track { position: relative; overflow: hidden; cursor: pointer; }
-.ov-overlay .lane-block { top: 4px; bottom: 4px; line-height: calc(2.55rem - 11px); font-size: .84rem; }
+.ov-overlay .lane-block { top: 3px; bottom: 3px; line-height: calc(2.5rem - 8px); font-size: .84rem; }
+.ov-overlay .lane-block.ja-furi-blk { line-height: 1.2; font-size: .86rem; }
+.ov-overlay .lane-block.ja-furi-blk .lane-word { top: auto; bottom: 3px; line-height: 1.2; }
+.ov-overlay .lane-block.ja-plain-blk .lane-word { top: 50%; bottom: auto; transform: translateY(-50%); }
+.ov-overlay .lane-block.lb-ww { line-height: calc(1.95rem - 6px); font-size: .74rem; }
+.ov-overlay .lane-block.lb-en { line-height: calc(2.0rem - 6px); font-size: .78rem; }
 
 /* Primary speech-overlap swimlane visualization */
 .viz-stage { margin: .65rem 0 .8rem; }
@@ -188,7 +204,7 @@ main.split-view { display: block; }
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
 }
 .lanes-stage { position: relative; user-select: none; }
-.lanes-ruler-row, .lane-row { display: grid; grid-template-columns: 8.6rem minmax(0, 1fr); }
+.lanes-ruler-row, .lane-row { display: grid; grid-template-columns: 10.2rem minmax(0, 1fr); }
 .lanes-ruler-row {
   border-bottom: 1px solid #222730; background: #0d1015; height: 1.55rem;
 }
@@ -234,40 +250,86 @@ main.split-view { display: block; }
 .ann-live-note { color: #fff; flex: 1 1 18rem; }
 .ann-live button { font-size: .76rem; padding: .12rem .4rem; margin-left: auto; }
 .lane-row { border-bottom: 1px solid #1b1f27; height: 3.05rem; }
+.lane-row.row-ja { height: 3.05rem; }
+.lane-row.row-ja-furi { height: 3.6rem; }
+.lane-row.row-literal { height: 2.1rem; }
+.lane-row.row-en { height: 2.2rem; }
+.lane-row.row-grp-end { border-bottom: 2px solid #2e3748; }
 .lane-row:last-child { border-bottom: 0; }
-.lane-group { border-bottom: 2px solid #2b3342; }
-.lane-group:last-child { border-bottom: 0; }
-.lane-row.ja-main { height: 3.6rem; border-bottom: 1px solid #161a22; }
-html.no-furigana .lane-row.ja-main { height: 3.05rem; }
-.lane-row.lane-sub-ww { height: 2.05rem; border-bottom: 1px solid #151921; }
-.lane-row.lane-sub-en { height: 2.15rem; border-bottom: 0; }
 .lane-label.sub-lbl {
-  font-size: .74rem; font-weight: 700; color: #b9c7dc; background: #090b0f;
-  padding-left: 1.05rem; box-shadow: inset 3px 0 var(--spk-color, #fff); cursor: default;
+  font-size: .76rem; font-weight: 700; color: var(--spk-color, #fff); background: #090b0f;
+  padding-left: .55rem; box-shadow: inset 3px 0 var(--spk-color, #fff); cursor: pointer;
 }
 .lane-label.sub-lbl::before { display: none; }
-.lane-block.ja-blk {
+.lane-label.has-avatar::before { display: none; }
+.lbl-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lbl-kind {
+  margin-left: auto; font: 700 .66rem/1.2 var(--mono); padding: .04rem .26rem;
+  border-radius: 3px; border: 1px solid var(--spk-color, #7cc4ff); color: var(--spk-color, #fff);
+  opacity: .9; flex: 0 0 auto;
+}
+.spk-avatar {
+  width: 26px; height: 26px; border-radius: 999px; object-fit: cover; flex: 0 0 auto;
+  border: 2px solid var(--spk-color, #7cc4ff); background: #141820;
+}
+.spk-avatar.av-sm { width: 20px; height: 20px; border-width: 1.5px; }
+.spk-avatar.av-xs { width: 18px; height: 18px; border-width: 1.5px; }
+.lane-block.ja-furi-blk {
   top: 4px; bottom: 4px; line-height: 1.25; font-size: .92rem;
 }
-.lane-block.ja-blk .lane-word {
-  top: auto; bottom: 4px; line-height: 1.25;
+.lane-block.ja-furi-blk .lane-word { top: auto; bottom: 4px; line-height: 1.25; }
+.lane-block.ja-furi-blk rt { display: ruby-text !important; }
+.lane-block.ja-plain-blk {
+  top: 4px; bottom: 4px; line-height: calc(3.05rem - 10px); font-size: .92rem;
 }
-html.no-furigana .lane-block.ja-blk .lane-word {
-  top: 50%; bottom: auto; transform: translateY(-50%);
-}
+.lane-block.ja-plain-blk rt { display: none !important; }
 .lane-block.lb-ww {
-  top: 3px; bottom: 3px; border-width: 1px; border-style: solid;
-  border-color: rgba(255, 255, 255, 0.22); background: rgba(255, 255, 255, 0.05);
-  font-size: .76rem; font-weight: 600; line-height: calc(2.05rem - 8px);
+  top: 3px; bottom: 3px; border: 1px dashed var(--spk-color, #7cc4ff);
+  background: var(--spk-bg, rgba(124, 196, 255, 0.16));
+  font-size: .78rem; font-weight: 600; line-height: calc(2.1rem - 8px);
 }
-.lane-block.lb-ww .lane-word { color: #dce8fb; font-weight: 600; }
-.lane-block.lb-ww .lane-word.lw-now { color: #fff; background: rgba(255, 255, 255, 0.28); }
+.lane-block.lb-ww .lane-word { color: #fff; font-weight: 600; }
+.lane-block.lb-ww.now { border-style: solid; border-color: #fff; background: var(--spk-bg-hi, rgba(124, 196, 255, 0.36)); }
+.lane-block.lb-ww .lane-word.lw-now { color: #fff; background: rgba(255, 255, 255, 0.32); }
 .lane-block.lb-en {
-  top: 3px; bottom: 3px; border-width: 1px; border-color: rgba(255, 255, 255, 0.24);
-  background: rgba(18, 22, 30, 0.85); color: #eef3fb; font-size: .8rem; font-weight: 500;
-  line-height: calc(2.15rem - 8px); padding: 0 .45rem;
+  top: 3px; bottom: 3px; border: 1px solid var(--spk-color, #7cc4ff);
+  border-left: 3px solid var(--spk-color, #7cc4ff);
+  background: var(--spk-bg, rgba(124, 196, 255, 0.14)); color: #fff;
+  font-size: .82rem; font-weight: 500; line-height: calc(2.2rem - 8px); padding: 0 .45rem;
 }
-.lane-block.lb-en.now { border-color: #fff; background: var(--spk-bg-hi, rgba(124, 196, 255, 0.35)); }
+.lane-block.lb-en.now { border-color: #fff; background: var(--spk-bg-hi, rgba(124, 196, 255, 0.38)); }
+.lanes-empty {
+  padding: .65rem .9rem; font-size: .84rem; color: #cbd5e1; text-align: center;
+  background: rgba(12, 15, 21, 0.85); cursor: context-menu;
+}
+.stream-ctx-menu {
+  position: fixed; z-index: 250; min-width: 15.5rem; max-width: 22rem;
+  background: #10141c; border: 1px solid #49566b; border-radius: 8px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.68); padding: .35rem 0;
+  color: #fff; font-size: .84rem; user-select: none;
+}
+.ctx-head {
+  display: flex; align-items: center; gap: .4rem; padding: .3rem .75rem .35rem;
+  font-size: .78rem; font-weight: 800; color: #a9d6ff; border-bottom: 1px solid #232a36;
+}
+.ctx-sec {
+  padding: .3rem .75rem .15rem; font-size: .7rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .04em; color: #94a3b8;
+}
+.ctx-sep { height: 1px; background: #232a36; margin: .25rem 0; }
+.ctx-item {
+  display: flex; align-items: center; gap: .45rem; width: 100%; border: 0;
+  border-radius: 0; background: transparent; color: #fff; text-align: left;
+  padding: .34rem .75rem; font-size: .83rem; cursor: pointer;
+}
+.ctx-item:hover { background: #1c2433; }
+.ctx-item.ctx-danger { color: #fca5a5; }
+.ctx-item .ctx-act {
+  margin-left: auto; font: 700 .72rem/1.2 var(--mono); padding: .04rem .3rem;
+  border-radius: 3px; border: 1px solid #3c4657; color: #cbd5e1;
+}
+.ctx-item.is-on .ctx-act { border-color: #68c77b; color: #7ee787; background: #112416; }
+.ctx-item.is-off .ctx-act { border-color: #7cc4ff; color: #7cc4ff; background: #0f1c2e; }
 .lane-pulse {
   position: absolute; top: 8px; bottom: 8px; min-width: 6px; border-radius: 4px;
   border: 1px dashed var(--spk-color, #7cc4ff); background: var(--spk-bg, rgba(124, 196, 255, 0.14));
@@ -401,6 +463,7 @@ html.no-furigana .lane-block.ja-blk .lane-word {
   font: 800 .72rem/1.25 var(--mono); color: var(--gold); border: 1px solid #8a6e14; background: #1d1604;
 }
 .segment-speaker {
+  display: inline-flex; align-items: center; gap: .32rem;
   color: var(--spk-color, #a9d6ff); font-size: .84rem; font-weight: 800;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
@@ -526,7 +589,8 @@ html.no-furigana .v-ja { line-height: 1.35; }
 
 @media (min-width: 1040px) {
   main.split-view {
-    display: grid; grid-template-columns: minmax(0, 3fr) minmax(22rem, 2fr);
+    display: grid;
+    grid-template-columns: minmax(0, min(62vw, calc(66vh * 16 / 9))) minmax(22rem, 1fr);
     column-gap: .85rem; row-gap: .65rem; align-items: start;
   }
   main.split-view > .player-wrap { grid-column: 1; grid-row: 1; }
@@ -540,9 +604,9 @@ html.no-furigana .v-ja { line-height: 1.35; }
   main.split-view > .notes-panel { grid-column: 1 / -1; margin-top: 0; }
 }
 @media (max-width: 760px) {
-  .lanes-ruler-row, .lane-row { grid-template-columns: 5.8rem minmax(0, 1fr); }
-  .ov-ruler-row, .ov-row { grid-template-columns: 5.2rem minmax(0, 1fr); }
-  .segment { grid-template-columns: 4.2rem 5.5rem minmax(0, 1fr); gap: .38rem; }
+  .lanes-ruler-row, .lane-row { grid-template-columns: 6.4rem minmax(0, 1fr); }
+  .ov-ruler-row, .ov-row { grid-template-columns: 5.8rem minmax(0, 1fr); }
+  .segment { grid-template-columns: 4.2rem 5.8rem minmax(0, 1fr); gap: .38rem; }
   .note-row { grid-template-columns: 4rem 6rem minmax(0, 1fr) auto; }
   .vocab-row { grid-template-columns: minmax(0, 1fr) auto; }
   .v-times { grid-column: 1 / -1; justify-content: flex-start; max-width: none; }
@@ -605,6 +669,202 @@ APP_JS = r"""(() => {
     mtg: 'MTG', slang: 'Slang', n1: 'N1', n2: 'N2', n3: 'N3', basic: 'Basic',
   };
   const DIFF_ORDER = {mtg: 5, slang: 4, n1: 3, n2: 2, n3: 1, basic: 0};
+
+  const STUDY_STREAMS = [
+    {id: 'ja', label: 'Native Japanese', short: 'JP'},
+    {id: 'ja-furi', label: 'Japanese + Furigana', short: 'JP+furi'},
+    {id: 'literal', label: 'English literal (word-by-word)', short: 'literal'},
+    {id: 'en', label: 'English translation', short: 'English'},
+  ];
+  const STREAM_MAP = new Map(STUDY_STREAMS.map(s => [s.id, s]));
+  const STREAM_ORDER = new Map(STUDY_STREAMS.map((s, i) => [s.id, i]));
+  let mainRows = [];
+  let overlayRows = [];
+  let ctxMenuState = null;
+
+  function avatarHtml(spk, sizeCls) {
+    const url = doc && doc.avatars && doc.avatars[spk];
+    if (!url) return '';
+    return '<img class="spk-avatar' + (sizeCls ? ' ' + sizeCls : '') + '" src="' + html(url)
+      + '" alt="' + html(spk) + '" loading="lazy">';
+  }
+  function defaultRowsForSurface(surface) {
+    if (!model) return [];
+    const kinds = !hasStudy
+      ? ['text']
+      : surface === 'overlay'
+        ? ['ja-furi', 'literal', 'en']
+        : ['ja-furi', 'literal', 'en'];
+    const out = [];
+    for (const spk of model.speakers) {
+      for (const kind of kinds) out.push({spk, kind});
+    }
+    return out;
+  }
+  function rowsStorageKey(surface) {
+    return 'ovpub.' + (surface === 'overlay' ? 'ovRows.' : 'mainRows.') + doc.video_id;
+  }
+  function sanitizeRows(arr) {
+    if (!Array.isArray(arr) || !model) return null;
+    const validSpk = new Set(model.speakers);
+    const validKinds = hasStudy ? new Set(STUDY_STREAMS.map(s => s.id)) : new Set(['text']);
+    const seen = new Set();
+    const out = [];
+    for (const r of arr) {
+      if (!r || typeof r !== 'object') continue;
+      if (!validSpk.has(r.spk) || !validKinds.has(r.kind)) continue;
+      const k = r.spk + '\0' + r.kind;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push({spk: r.spk, kind: r.kind});
+    }
+    return out;
+  }
+  function loadSurfaceRows(surface) {
+    const raw = localStorage.getItem(rowsStorageKey(surface));
+    if (raw != null) {
+      try {
+        const clean = sanitizeRows(JSON.parse(raw));
+        if (clean) return clean;
+      } catch {}
+    }
+    return defaultRowsForSurface(surface);
+  }
+  function getSurfaceRows(surface) {
+    return surface === 'overlay' ? overlayRows : mainRows;
+  }
+  function setSurfaceRows(surface, rows) {
+    if (surface === 'overlay') overlayRows = rows;
+    else mainRows = rows;
+    localStorage.setItem(rowsStorageKey(surface), JSON.stringify(rows));
+    if (surface === 'overlay') {
+      ovRenderedStart = -1;
+      if (showOverlay) updateOverlayTimeline(currentTime(), true);
+    } else {
+      renderLanesWindow(true);
+    }
+  }
+  function sortRowsCanonical(rows) {
+    const spkOrder = new Map(model.speakers.map((s, i) => [s, i]));
+    return [...rows].sort((a, b) => {
+      const sa = spkOrder.get(a.spk) ?? 99;
+      const sb = spkOrder.get(b.spk) ?? 99;
+      if (sa !== sb) return sa - sb;
+      return (STREAM_ORDER.get(a.kind) ?? 99) - (STREAM_ORDER.get(b.kind) ?? 99);
+    });
+  }
+  function addRowToSurface(surface, spk, kind) {
+    const rows = getSurfaceRows(surface);
+    if (rows.some(r => r.spk === spk && r.kind === kind)) return;
+    setSurfaceRows(surface, sortRowsCanonical([...rows, {spk, kind}]));
+  }
+  function removeRowFromSurface(surface, spk, kind) {
+    const rows = getSurfaceRows(surface).filter(r => !(r.spk === spk && r.kind === kind));
+    setSurfaceRows(surface, rows);
+  }
+  function toggleKindForAllActive(surface, kind) {
+    const rows = getSurfaceRows(surface);
+    const activeSpks = [...new Set(rows.map(r => r.spk))];
+    const targetSpks = activeSpks.length ? activeSpks : model.speakers;
+    const allHave = targetSpks.every(s => rows.some(r => r.spk === s && r.kind === kind));
+    if (allHave) {
+      setSurfaceRows(surface, rows.filter(r => r.kind !== kind));
+    } else {
+      const next = [...rows];
+      for (const spk of targetSpks) {
+        if (!next.some(r => r.spk === spk && r.kind === kind)) next.push({spk, kind});
+      }
+      setSurfaceRows(surface, sortRowsCanonical(next));
+    }
+  }
+  function toggleSpeakerOnSurface(surface, spk) {
+    const rows = getSurfaceRows(surface);
+    const hasSpk = rows.some(r => r.spk === spk);
+    if (hasSpk) {
+      setSurfaceRows(surface, rows.filter(r => r.spk !== spk));
+    } else {
+      const activeKinds = [...new Set(rows.map(r => r.kind))];
+      const kinds = activeKinds.length ? activeKinds : (hasStudy ? ['ja-furi'] : ['text']);
+      const next = [...rows, ...kinds.map(kind => ({spk, kind}))];
+      setSurfaceRows(surface, sortRowsCanonical(next));
+    }
+  }
+  function closeStreamMenu() {
+    const menu = document.getElementById('stream-ctx-menu');
+    if (menu) { menu.hidden = true; menu.innerHTML = ''; }
+    ctxMenuState = null;
+  }
+  function showStreamMenu(ev, surface) {
+    if (!model) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const menu = document.getElementById('stream-ctx-menu');
+    if (!menu) return;
+    const rowEl = ev.target.closest('[data-row-spk]');
+    const hitSpk = rowEl ? rowEl.dataset.rowSpk : '';
+    const hitKind = rowEl ? rowEl.dataset.rowKind : '';
+    const rows = getSurfaceRows(surface);
+    const activeSpks = [...new Set(rows.map(r => r.spk))];
+    const targetSpks = activeSpks.length ? activeSpks : model.speakers;
+    const surfaceTitle = surface === 'overlay' ? 'Overlay streams' : 'Timeline streams';
+    ctxMenuState = {surface, hitSpk, hitKind};
+
+    let out = '<div class="ctx-head">'
+      + (hitSpk ? avatarHtml(hitSpk, 'av-xs') : '')
+      + '<span>' + html(hitSpk ? hitSpk + ' · ' + (STREAM_MAP.get(hitKind)?.label || surfaceTitle) : surfaceTitle) + '</span></div>';
+
+    if (hitSpk && hitKind) {
+      out += '<button type="button" class="ctx-item ctx-danger" data-act="rm-one" data-spk="'
+        + html(hitSpk) + '" data-kind="' + html(hitKind) + '">'
+        + '<span>Remove this row</span><span class="ctx-act">− Remove</span></button>';
+      if (hasStudy) {
+        const missingForSpk = STUDY_STREAMS.filter(s => !rows.some(r => r.spk === hitSpk && r.kind === s.id));
+        if (missingForSpk.length) {
+          out += '<div class="ctx-sec">Add for ' + html(hitSpk) + '</div>';
+          for (const st of missingForSpk) {
+            out += '<button type="button" class="ctx-item is-off" data-act="add-one" data-spk="'
+              + html(hitSpk) + '" data-kind="' + html(st.id) + '">'
+              + '<span>' + html(st.label) + '</span><span class="ctx-act">+ Add</span></button>';
+          }
+        }
+      }
+      out += '<div class="ctx-sep"></div>';
+    }
+
+    if (hasStudy) {
+      out += '<div class="ctx-sec">All speakers</div>';
+      for (const st of STUDY_STREAMS) {
+        const allHave = targetSpks.length > 0 && targetSpks.every(s => rows.some(r => r.spk === s && r.kind === st.id));
+        out += '<button type="button" class="ctx-item ' + (allHave ? 'is-on' : 'is-off')
+          + '" data-act="toggle-kind" data-kind="' + html(st.id) + '">'
+          + '<span>' + html(st.label) + '</span>'
+          + '<span class="ctx-act">' + (allHave ? '✓ Remove' : '+ Add') + '</span></button>';
+      }
+      out += '<div class="ctx-sep"></div>';
+    }
+
+    out += '<div class="ctx-sec">Voices / Speakers</div>';
+    for (const spk of model.speakers) {
+      const c = model.colorOf(spk);
+      const present = rows.some(r => r.spk === spk);
+      out += '<button type="button" class="ctx-item ' + (present ? 'is-on' : 'is-off')
+        + '" data-act="toggle-spk" data-spk="' + html(spk) + '" style="--spk-color:' + c.fg + '">'
+        + avatarHtml(spk, 'av-xs')
+        + '<span style="color:' + c.fg + ';font-weight:700">' + html(spk) + '</span>'
+        + '<span class="ctx-act">' + (present ? '✓ Remove' : '+ Add') + '</span></button>';
+    }
+    out += '<div class="ctx-sep"></div>'
+      + '<button type="button" class="ctx-item" data-act="reset"><span>Reset default rows</span></button>';
+
+    menu.innerHTML = out;
+    menu.hidden = false;
+    const mw = menu.offsetWidth || 260;
+    const mh = menu.offsetHeight || 320;
+    const x = Math.max(8, Math.min(ev.clientX, window.innerWidth - mw - 10));
+    const y = Math.max(8, Math.min(ev.clientY, window.innerHeight - mh - 10));
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+  }
 
   function rubyHtml(ruby, fallback) {
     if (!ruby || !Array.isArray(ruby) || !ruby.length) return html(fallback || '');
@@ -893,6 +1153,7 @@ APP_JS = r"""(() => {
       upload_date: raw.upload_date,
       duration: Number(raw.duration) || 0,
       chapters: raw.chapters || [],
+      avatars: raw.avatars && typeof raw.avatars === 'object' ? raw.avatars : {},
       segments,
       vocab,
       acousticOverlaps,
@@ -1114,17 +1375,18 @@ APP_JS = r"""(() => {
     return '';
   }
 
-  function buildLaneBlockContent(seg, s0, s1, blockPx, info, ctx) {
+  function buildLaneBlockContent(seg, s0, s1, blockPx, info, ctx, withFuri) {
     const pad = 6;
     const innerPx = blockPx - pad * 2;
     if (!ctx || innerPx < 28) return {cls: '', inner: html(seg.text)};
     const tokens = laneTokensForSpan(seg, s0, s1);
     if (!tokens.length) return {cls: '', inner: ''};
 
+    const useFuri = Boolean(hasStudy && withFuri);
     const spacePx = hasStudy ? 3 : Math.max(4, Math.ceil(ctx.measureText(' ').width));
     const widths = tokens.map(t => {
       const baseW = Math.ceil(ctx.measureText(t.word).width);
-      if (hasStudy && showFurigana && Array.isArray(t.ruby)) {
+      if (useFuri && Array.isArray(t.ruby)) {
         const reading = t.ruby.map(p => p[1] || p[0] || '').join('');
         return Math.max(baseW, Math.ceil(ctx.measureText(reading).width * 0.58));
       }
@@ -1158,7 +1420,7 @@ APP_JS = r"""(() => {
       const leftPct = ((pad + xs[i]) / blockPx) * 100;
       const vAttr = tok.vid >= 0 ? ' data-v="' + tok.vid + '"' : '';
       const tipAttr = tok.gloss ? ' title="' + html(tok.word + ' — ' + tok.gloss) + '"' : '';
-      const innerTxt = hasStudy && tok.ruby ? rubyHtml(tok.ruby, tok.word) : html(tok.word);
+      const innerTxt = useFuri && tok.ruby ? rubyHtml(tok.ruby, tok.word) : html(tok.word);
       spans.push(
         '<span class="lane-word' + (ovColor ? ' lw-ov' : '') + (tok.vid >= 0 ? ' has-vocab' : '') + '"'
         + ' data-t="' + tok.start + '" data-e="' + tok.end + '"' + vAttr + tipAttr
@@ -1302,13 +1564,25 @@ APP_JS = r"""(() => {
     const rowCls = isOverlay ? 'ov-row' : 'lane-row';
     const lblCls = isOverlay ? 'ov-label' : 'lane-label';
     const trkCls = isOverlay ? 'ov-track' : 'lane-track';
-    const multiStream = hasStudy && !isOverlay;
-    body.innerHTML = model.speakers.map(spk => {
+    const rows = getSurfaceRows(isOverlay ? 'overlay' : 'main');
+    if (!rows.length) {
+      body.innerHTML = '<div class="lanes-empty">No streams shown — right-click here to add streams or speakers</div>';
+      return trackPx;
+    }
+    // Count how many rows each speaker has so single-row speakers stay compact and multi-row speakers show clear tags.
+    const spkRowCount = new Map();
+    for (const r of rows) spkRowCount.set(r.spk, (spkRowCount.get(r.spk) || 0) + 1);
+    const seenSpk = new Set();
+
+    body.innerHTML = rows.map((row, ri) => {
+      const spk = row.spk;
+      const kind = row.kind;
       const c = model.colorOf(spk);
       const segs = model.bySpeaker.get(spk) || [];
+      const isFirstForSpk = !seenSpk.has(spk);
+      seenSpk.add(spk);
+      const isGroupEnd = ri < rows.length - 1 && rows[ri + 1].spk !== spk;
       const blocks = [];
-      const wwBlocks = [];
-      const enBlocks = [];
       for (const seg of segs) {
         if (seg.end <= winStart) continue;
         if (seg.start >= winEnd) break;
@@ -1321,32 +1595,37 @@ APP_JS = r"""(() => {
         const hasOv = Boolean(info && (info.partners.length || info.hasAcousticOv));
         const title = spk + ' (' + clockPrecise(seg.start) + '–' + clockPrecise(seg.end) + '): '
           + seg.text + (seg.en ? ' — ' + seg.en : '');
-        const content = buildLaneBlockContent(seg, s0, s1, blockPx, info, measurer);
         const posStyle = 'left:' + left.toFixed(3) + '%;width:' + width.toFixed(3) + '%;'
           + '--spk-color:' + c.fg + ';--spk-bg:' + c.bg + ';--spk-bg-hi:' + c.bgHi;
-        blocks.push(
-          '<div class="lane-block' + (multiStream ? ' ja-blk' : '') + (hasOv ? ' has-ov' : '') + content.cls + '"'
-          + ' data-index="' + seg.index + '" style="' + posStyle + '"'
-          + ' title="' + html(title) + '">' + content.inner + '</div>'
-        );
-        if (multiStream && showGloss) {
+        if (kind === 'literal') {
           const gc = buildGlossBlockContent(seg, s0, s1, blockPx, glossMeasurer);
           if (gc.inner) {
-            wwBlocks.push(
-              '<div class="lane-block lb-ww' + gc.cls + '" data-index="' + seg.index + '"'
+            blocks.push(
+              '<div class="lane-block lb-ww' + (hasOv ? ' has-ov' : '') + gc.cls + '" data-index="' + seg.index + '"'
               + ' style="' + posStyle + '" title="' + html(title) + '">' + gc.inner + '</div>'
             );
           }
-        }
-        if (multiStream && showEnglish && seg.en) {
-          enBlocks.push(
-            '<div class="lane-block lb-en" data-index="' + seg.index + '"'
-            + ' style="' + posStyle + '" title="' + html(spk + ': ' + seg.en) + '">'
-            + html(seg.en) + '</div>'
+        } else if (kind === 'en') {
+          if (seg.en) {
+            blocks.push(
+              '<div class="lane-block lb-en' + (hasOv ? ' has-ov' : '') + '" data-index="' + seg.index + '"'
+              + ' style="' + posStyle + '" title="' + html(spk + ': ' + seg.en) + '">'
+              + html(seg.en) + '</div>'
+            );
+          }
+        } else {
+          const withFuri = kind === 'ja-furi';
+          const content = buildLaneBlockContent(seg, s0, s1, blockPx, info, measurer, withFuri);
+          const extraBlkCls = kind === 'ja-furi' ? ' ja-furi-blk' : kind === 'ja' ? ' ja-plain-blk' : '';
+          blocks.push(
+            '<div class="lane-block' + extraBlkCls + (hasOv ? ' has-ov' : '') + content.cls + '"'
+            + ' data-index="' + seg.index + '" style="' + posStyle + '"'
+            + ' title="' + html(title) + '">' + content.inner + '</div>'
           );
         }
       }
-      const pulses = (model.pulsesBySpeaker?.get(spk) || []).filter(p => p.end > winStart && p.start < winEnd).map(p => {
+      const showPulses = isFirstForSpk && (kind === 'ja-furi' || kind === 'ja' || kind === 'text');
+      const pulses = showPulses ? (model.pulsesBySpeaker?.get(spk) || []).filter(p => p.end > winStart && p.start < winEnd).map(p => {
         const p0 = Math.max(p.start, winStart);
         const p1 = Math.min(p.end, winEnd);
         const left = ((p0 - winStart) / winDur) * 100;
@@ -1355,28 +1634,24 @@ APP_JS = r"""(() => {
         return '<div class="lane-pulse" data-t="' + p.start + '" style="left:' + left.toFixed(3)
           + '%;width:' + width.toFixed(3) + '%;--spk-color:' + c.fg + ';--spk-bg:' + c.bg + '"'
           + ' title="' + html(spk + ' vocal overlap / backchannel (' + dur + 's)') + '"></div>';
-      }).join('');
+      }).join('') : '';
+
+      const av = avatarHtml(spk, isOverlay ? 'av-sm' : (isFirstForSpk ? '' : 'av-sm'));
+      const kindShort = STREAM_MAP.get(kind)?.short || '';
       const isFiltered = !isOverlay && filter === 'spk:' + spk;
-      const mainRow = '<div class="' + rowCls + (multiStream ? ' ja-main' : '') + '">'
-        + '<div class="' + lblCls + (isFiltered ? ' filtered' : '') + '"'
-        + ' data-speaker="' + html(spk) + '" style="--spk-color:' + c.fg + '">' + html(spk) + '</div>'
+      const rowKindCls = hasStudy ? ' row-' + kind : '';
+      const labelHtml = isFirstForSpk
+        ? av + '<span class="lbl-txt">' + html(spk) + '</span>'
+          + (hasStudy && (spkRowCount.get(spk) > 1 || kind !== 'ja-furi') ? '<span class="lbl-kind">' + html(kindShort) + '</span>' : '')
+        : av + '<span class="lbl-txt">' + html(kindShort) + '</span>';
+
+      return '<div class="' + rowCls + rowKindCls + (isGroupEnd ? ' row-grp-end' : '') + '"'
+        + ' data-row-spk="' + html(spk) + '" data-row-kind="' + html(kind) + '">'
+        + '<div class="' + lblCls + (av ? ' has-avatar' : '') + (!isFirstForSpk ? ' sub-lbl' : '') + (isFiltered ? ' filtered' : '') + '"'
+        + ' data-speaker="' + html(spk) + '" style="--spk-color:' + c.fg + '"'
+        + ' title="Right-click to add/remove streams or voices">' + labelHtml + '</div>'
         + '<div class="' + trkCls + '">' + gridHtml + bands + pulses + blocks.join('')
         + '<div class="lane-playhead"></div></div></div>';
-      if (!multiStream) return mainRow;
-      let extra = '';
-      if (showGloss) {
-        extra += '<div class="lane-row lane-sub-ww">'
-          + '<div class="lane-label sub-lbl" style="--spk-color:' + c.fg + '">↳ meaning</div>'
-          + '<div class="lane-track">' + gridHtml + bands + wwBlocks.join('')
-          + '<div class="lane-playhead"></div></div></div>';
-      }
-      if (showEnglish) {
-        extra += '<div class="lane-row lane-sub-en">'
-          + '<div class="lane-label sub-lbl" style="--spk-color:' + c.fg + '">↳ English</div>'
-          + '<div class="lane-track">' + gridHtml + bands + enBlocks.join('')
-          + '<div class="lane-playhead"></div></div></div>';
-      }
-      return '<div class="lane-group">' + mainRow + extra + '</div>';
     }).join('');
     return trackPx;
   }
@@ -1636,7 +1911,7 @@ APP_JS = r"""(() => {
         + ' data-index="' + seg.index + '" data-start="' + seg.start + '" data-end="' + seg.end + '"'
         + (partnerIds ? ' data-partners="' + partnerIds + '"' : '') + '>'
         + '<span class="segment-time">' + clock(seg.start) + ovMark + '</span>'
-        + '<span class="segment-speaker">' + html(seg.speaker || 'Unassigned') + '</span>'
+        + '<span class="segment-speaker">' + avatarHtml(seg.speaker, 'av-xs') + '<span>' + html(seg.speaker || 'Unassigned') + '</span></span>'
         + '<div class="segment-text"><div' + (hasStudy ? ' class="segment-ja" lang="ja"' : '') + '>' + body + '</div>'
         + extraHtml + '</div></div>';
     }).join('');
@@ -2201,6 +2476,8 @@ APP_JS = r"""(() => {
     vocabById = new Map((doc.vocab || []).map(v => [v.id, v]));
     loadKnownVocab();
     model = buildOverlapModel(doc);
+    mainRows = loadSurfaceRows('main');
+    overlayRows = loadSurfaceRows('overlay');
 
     const annUrl = document.querySelector('main')?.dataset.annotations || '';
     if (annUrl) {
@@ -2286,8 +2563,11 @@ APP_JS = r"""(() => {
     if (ovEl) {
       ovEl.addEventListener('click', ev => {
         ev.stopPropagation();
+        closeStreamMenu();
         const pin = ev.target.closest('.ruler-note-pin');
         if (pin) { seekAndPlay(Number(pin.dataset.t)); return; }
+        const lw = ev.target.closest('.lane-word[data-v]');
+        if (lw) showWordInspector(Number(lw.dataset.v));
         const trk = ev.target.closest('.ov-track, .ov-ruler');
         if (!trk || !model) return;
         const rect = trk.getBoundingClientRect();
@@ -2296,7 +2576,32 @@ APP_JS = r"""(() => {
         const winDur = Math.min(OV_WINDOW_SEC, Math.max(4, lanesWindow));
         seekAndPlay(ovWinStart + frac * winDur);
       });
+      ovEl.addEventListener('contextmenu', ev => showStreamMenu(ev, 'overlay'));
     }
+
+    const lanesStageCtx = document.getElementById('lanes-stage');
+    if (lanesStageCtx) {
+      lanesStageCtx.addEventListener('contextmenu', ev => showStreamMenu(ev, 'main'));
+    }
+    const ctxMenu = document.getElementById('stream-ctx-menu');
+    if (ctxMenu) {
+      ctxMenu.addEventListener('click', ev => {
+        ev.stopPropagation();
+        const btn = ev.target.closest('button[data-act]');
+        if (!btn || !ctxMenuState) return;
+        const {surface} = ctxMenuState;
+        const act = btn.dataset.act;
+        if (act === 'rm-one') removeRowFromSurface(surface, btn.dataset.spk, btn.dataset.kind);
+        else if (act === 'add-one') addRowToSurface(surface, btn.dataset.spk, btn.dataset.kind);
+        else if (act === 'toggle-kind') toggleKindForAllActive(surface, btn.dataset.kind);
+        else if (act === 'toggle-spk') toggleSpeakerOnSurface(surface, btn.dataset.spk);
+        else if (act === 'reset') setSurfaceRows(surface, defaultRowsForSurface(surface));
+        closeStreamMenu();
+      });
+      ctxMenu.addEventListener('contextmenu', ev => ev.preventDefault());
+    }
+    document.addEventListener('click', closeStreamMenu);
+    document.addEventListener('keydown', ev => { if (ev.key === 'Escape') closeStreamMenu(); });
 
     document.getElementById('transcript-search').addEventListener('input', paintTranscript);
     filterSel.addEventListener('change', paintTranscript);
@@ -2319,6 +2624,18 @@ APP_JS = r"""(() => {
       furiBtn.onclick = () => {
         showFurigana = !showFurigana;
         localStorage.setItem('ovpub.furigana', String(showFurigana));
+        if (hasStudy && model) {
+          const from = showFurigana ? 'ja' : 'ja-furi';
+          const to = showFurigana ? 'ja-furi' : 'ja';
+          const next = [];
+          const seen = new Set();
+          for (const r of mainRows) {
+            const k = r.kind === from ? to : r.kind;
+            const key = r.spk + '\0' + k;
+            if (!seen.has(key)) { seen.add(key); next.push({spk: r.spk, kind: k}); }
+          }
+          setSurfaceRows('main', sortRowsCanonical(next));
+        }
         applyFuriganaState();
       };
     }
@@ -2327,6 +2644,14 @@ APP_JS = r"""(() => {
       glossBtn.onclick = () => {
         showGloss = !showGloss;
         localStorage.setItem('ovpub.gloss', String(showGloss));
+        if (hasStudy && model) {
+          const activeSpks = [...new Set(mainRows.map(r => r.spk))];
+          const spks = activeSpks.length ? activeSpks : model.speakers;
+          const next = showGloss
+            ? sortRowsCanonical([...mainRows, ...spks.filter(s => !mainRows.some(r => r.spk === s && r.kind === 'literal')).map(spk => ({spk, kind: 'literal'}))])
+            : mainRows.filter(r => r.kind !== 'literal');
+          setSurfaceRows('main', next);
+        }
         applyStudyLayersState();
       };
     }
@@ -2335,6 +2660,14 @@ APP_JS = r"""(() => {
       engBtn.onclick = () => {
         showEnglish = !showEnglish;
         localStorage.setItem('ovpub.english', String(showEnglish));
+        if (hasStudy && model) {
+          const activeSpks = [...new Set(mainRows.map(r => r.spk))];
+          const spks = activeSpks.length ? activeSpks : model.speakers;
+          const next = showEnglish
+            ? sortRowsCanonical([...mainRows, ...spks.filter(s => !mainRows.some(r => r.spk === s && r.kind === 'en')).map(spk => ({spk, kind: 'en'}))])
+            : mainRows.filter(r => r.kind !== 'en');
+          setSurfaceRows('main', next);
+        }
         applyStudyLayersState();
       };
     }
@@ -2801,6 +3134,7 @@ def _index_html(
     <div class="notes-list" id="notes-list"></div>
   </section>
 </main>
+<div class="stream-ctx-menu" id="stream-ctx-menu" hidden></div>
 <script src="app.js?v={js_hash}" defer></script>
 </body>
 </html>
@@ -2887,6 +3221,34 @@ def _merge_study_into_compact(compact: dict, study: dict) -> None:
         ]
 
 
+def _copy_avatars(avatars_src: Path, out_dir: Path) -> dict[str, str]:
+    """Copy speaker avatar images into out_dir/avatars/ and return {speaker: relative_url}."""
+    if avatars_src.is_dir():
+        manifest = avatars_src / "avatars.json"
+        base_dir = avatars_src
+    else:
+        manifest = avatars_src
+        base_dir = avatars_src.parent
+    raw = json.loads(manifest.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError(f"Avatars manifest must be a JSON object mapping speaker -> filename: {manifest}")
+    av_out = out_dir / "avatars"
+    av_out.mkdir(parents=True, exist_ok=True)
+    result: dict[str, str] = {}
+    for spk, rel in raw.items():
+        fname = Path(str(rel)).name
+        if not fname or Path(fname).suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
+            raise ValueError(f"Invalid avatar image filename for {spk!r}: {rel!r}")
+        src_file = base_dir / str(rel)
+        if not src_file.is_file():
+            raise FileNotFoundError(f"Missing avatar image for {spk!r}: {src_file}")
+        data = src_file.read_bytes()
+        h = hashlib.sha256(data).hexdigest()[:10]
+        (av_out / fname).write_bytes(data)
+        result[str(spk)] = f"avatars/{fname}?v={h}"
+    return result
+
+
 def export_page(
     data_dir: Path,
     video_id: str,
@@ -2895,6 +3257,7 @@ def export_page(
     title: str = "",
     annotations: Path | None = None,
     study: Path | None = None,
+    avatars: Path | None = None,
     back_url: str = "",
     back_label: str = "home",
 ) -> dict:
@@ -2909,6 +3272,11 @@ def export_page(
         _merge_study_into_compact(compact, study_doc)
         vocab_count = len(compact.get("vocab") or [])
     out_dir.mkdir(parents=True, exist_ok=True)
+    avatar_count = 0
+    if avatars is not None:
+        av_map = _copy_avatars(avatars, out_dir)
+        compact["avatars"] = av_map
+        avatar_count = len(av_map)
 
     css_bytes = APP_CSS.encode("utf-8")
     js_bytes = APP_JS.encode("utf-8")
@@ -2949,6 +3317,7 @@ def export_page(
         "speakers": compact["speakers"],
         "annotations": ann_count,
         "vocab": vocab_count,
+        "avatars": avatar_count,
         "out_dir": str(out_dir),
     }
 
@@ -2961,6 +3330,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--title", default="", help="Optional custom page title overriding video title")
     ap.add_argument("--annotations", type=Path, default=None, help="Optional JSON file of seed annotations")
     ap.add_argument("--study", type=Path, default=None, help="Optional language-study JSON (furigana, glosses, English, vocab)")
+    ap.add_argument("--avatars", type=Path, default=None, help="Optional directory (with avatars.json) or avatars.json mapping speakers to face icons")
     ap.add_argument("--back-url", default="")
     ap.add_argument("--back-label", default="home")
     args = ap.parse_args(argv)
@@ -2971,6 +3341,7 @@ def main(argv: list[str] | None = None) -> int:
         title=args.title,
         annotations=args.annotations.expanduser().resolve() if args.annotations else None,
         study=args.study.expanduser().resolve() if args.study else None,
+        avatars=args.avatars.expanduser().resolve() if args.avatars else None,
         back_url=args.back_url,
         back_label=args.back_label,
     )
