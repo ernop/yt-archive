@@ -122,6 +122,10 @@ function render(q) {
   if (q.waiting_count) parts.push('<span><strong>' + q.waiting_count + '</strong>waiting</span>');
   if (q.failed.length) parts.push('<span class="failed"><strong>' + q.failed.length + '</strong>failed</span>');
   if (q.waiting_count > 1) parts.push('<button type="button" class="btn" data-act="clear">Remove all waiting</button>');
+  if (q.failed.length > 1) {
+    parts.push('<button type="button" class="btn" data-act="retry-all">Retry all failed</button>');
+    parts.push('<button type="button" class="btn" data-act="dismiss-all">Dismiss all failed</button>');
+  }
   countsEl.innerHTML = parts.join('');
   document.getElementById('queue').hidden = !(q.running.length || q.waiting_count || q.failed.length);
   const rows = [];
@@ -171,6 +175,8 @@ document.getElementById('queue').addEventListener('click', async (e) => {
   const id = line ? encodeURIComponent(line.dataset.job) : '';
   try {
     if (button.dataset.act === 'clear') await post('/api/jobs/clear-waiting');
+    if (button.dataset.act === 'retry-all') await post('/api/jobs/retry-failed');
+    if (button.dataset.act === 'dismiss-all') await post('/api/jobs/dismiss-failed');
     if (button.dataset.act === 'remove') await post('/api/jobs/' + id + '/remove');
     if (button.dataset.act === 'dismiss') await post('/api/jobs/' + id + '/dismiss');
     if (button.dataset.act === 'retry') {

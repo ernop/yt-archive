@@ -194,6 +194,18 @@ class JobQueue:
             self._cv.notify()
         return result
 
+    def retry_failed(self) -> dict:
+        """Re-queue every active failed job in chronological order."""
+        failed = list(reversed(db.queue_overview(self.data_dir)["failed"]))
+        retried: list[str] = []
+        for item in failed:
+            job = self.submit(item["url"] or item["video_id"])
+            if job.get("status") == "complete":
+                db.dismiss_failed_job(self.data_dir, item["job_id"])
+            elif not job.get("existing"):
+                retried.append(item["video_id"])
+        return {"retried": len(retried), "video_ids": retried}
+
     def get(self, job_id: str) -> dict | None:
         return db.get_job(self.data_dir, job_id)
 

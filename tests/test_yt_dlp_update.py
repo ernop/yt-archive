@@ -302,6 +302,59 @@ class ReactiveUpdateDownloadTests(unittest.TestCase):
             "[youtube] chal0000001: This video is DRM protected",
         )
 
+    def test_transient_dns_failure_waits_for_network_and_retries_once(self):
+        dns_fail = [
+            "WARNING: [youtube] HTTPSConnection(host='www.youtube.com', port=443): "
+            "Failed to resolve 'www.youtube.com' ([Errno -3] Temporary failure in name resolution). Retrying (1/3)...",
+            "ERROR: [youtube] net00000001: Unable to download API page: "
+            "HTTPSConnection(host='www.youtube.com', port=443): Failed to resolve 'www.youtube.com' "
+            "([Errno -2] Name or service not known)",
+        ]
+        vid = "net00000001"
+        dest = self.data / vid
+
+        def create_video():
+            (dest / f"Sample-{vid}.mp4").write_bytes(b"video")
+
+        procs = [
+            self._proc(dns_fail, code=1),
+            self._proc(["downloaded 1280x720 136 mp4"], code=0, on_wait=create_video),
+        ]
+        progress_events = []
+        with (
+            patch("yt_archive.download.budget.wait_and_take") as wait,
+            patch("yt_archive.download.subprocess.Popen", side_effect=procs) as popen,
+            patch("yt_archive.download._can_resolve_host", side_effect=[False, True]) as resolve,
+            patch("yt_archive.download.time.sleep"),
+            patch("yt_archive.download._log_resolution"),
+            patch("yt_archive.download._probe_duration", return_value=12.0),
+        ):
+            video = download.download(
+                vid, self.data, log=lambda *_: None, progress=lambda f, m: progress_events.append((f, m))
+            )
+        self.assertEqual(video.name, f"Sample-{vid}.mp4")
+        self.assertEqual(popen.call_count, 2)
+        self.assertEqual(resolve.call_count, 2)
+        self.assertEqual([call.args[1] for call in wait.call_args_list], ["download", "download"])
+        self.assertIn((None, "waiting for network to reach YouTube"), progress_events)
+
+    def test_persistent_dns_failure_raises_without_retry_after_timeout(self):
+        dns_fail = [
+            "ERROR: [youtube] net00000002: Unable to download API page: "
+            "Failed to resolve 'www.youtube.com' ([Errno -2] Name or service not known)",
+        ]
+        with (
+            patch("yt_archive.download.budget.wait_and_take") as wait,
+            patch("yt_archive.download.subprocess.Popen", side_effect=[self._proc(dns_fail, code=1)]) as popen,
+            patch("yt_archive.download._wait_for_network", return_value=False) as wait_net,
+            self.assertRaises(RuntimeError) as failed,
+        ):
+            download.download("net00000002", self.data, log=lambda *_: None)
+        wait_net.assert_called_once()
+        self.assertEqual(popen.call_count, 1)
+        self.assertEqual([call.args[1] for call in wait.call_args_list], ["download"])
+        self.assertIn("Failed to resolve 'www.youtube.com'", str(failed.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

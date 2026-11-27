@@ -50,6 +50,14 @@ self-updates with `yt-dlp -U`). Distro packages lag.
   `vcodec`, `acodec` for the video page.
 - yt-dlp's unmerged single-format files (`<title>-<id>.f399.mp4`) are never
   taken for the finished video, so a job that stopped mid-merge downloads again.
+- **Transient network/DNS drops (2026-11-27):** when yt-dlp fails with a local
+  name-resolution or routing error (`Failed to resolve`, `Temporary failure in
+  name resolution`, `Name or service not known`, `Network is unreachable`, `No
+  route to host`), `start_download` waits up to 2 minutes
+  (`NETWORK_RECOVERY_WAIT_SECONDS`, polling DNS every 5 seconds) for the target
+  host (`www.youtube.com` or `x.com`) to resolve again before retrying once.
+  This holds the single download worker during a brief router or DNS blip so it
+  does not burn through every queued video in a few seconds each.
 
 ## Hourly budget (settled 2026-10-20)
 

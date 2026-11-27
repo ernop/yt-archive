@@ -24,9 +24,10 @@ detail, time, actions.
   than one waits. The first 8 are listed; **Show all** lists the rest, so a
   long update never pushes the archive off the page.
 - **Failed** — the error text; click it to see all of it. **Retry** queues the
-  video again (a plain job, which works out what is missing); **Dismiss**
-  hides it. A failure also disappears once a later job for the same video
-  exists.
+  video again (a plain job, which works out what is missing and keeps any known
+  title from the failed job); **Dismiss** hides it. When more than one job has
+  failed, **Retry all failed** and **Dismiss all failed** act on all of them at
+  once. A failure also disappears once a later job for the same video exists.
 
 A finished job keeps a summary of what it did (`downloaded · 65 shots · MP3
 audio`, `framesheet in 2 sheets`, `list thumbnail`, `no audio track`) in the

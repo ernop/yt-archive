@@ -88,6 +88,17 @@ def insert_job(
     now = _now()
     conn = connect(data_dir)
     try:
+        if not title:
+            prev = conn.execute(
+                "SELECT title FROM jobs WHERE video_id=? AND title != '' ORDER BY created_at DESC LIMIT 1",
+                (video_id,),
+            ).fetchone()
+            if prev:
+                title = prev[0]
+        conn.execute(
+            "UPDATE jobs SET status='dismissed', updated_at=? WHERE video_id=? AND status='error'",
+            (now, video_id),
+        )
         conn.execute(
             """
             INSERT INTO jobs (
@@ -134,6 +145,10 @@ def enqueue_missing_videos(
             if video_id in open_ids or find_video_file(data_dir, video_id):
                 skipped.append(video_id)
                 continue
+            conn.execute(
+                "UPDATE jobs SET status='dismissed', updated_at=? WHERE video_id=? AND status='error'",
+                (now, video_id),
+            )
             conn.execute(
                 """INSERT INTO jobs (id, url, video_id, status, download, shots,
                    force_video, force_shots, error, log, title, created_at, updated_at)
@@ -260,6 +275,24 @@ def dismiss_failed_job(data_dir: Path, job_id: str) -> bool:
         ).rowcount
         conn.commit()
         return bool(changed)
+    finally:
+        conn.close()
+
+
+def dismiss_all_failed_jobs(data_dir: Path) -> int:
+    conn = connect(data_dir)
+    try:
+        changed = conn.execute(
+            """
+            UPDATE jobs SET status='dismissed', updated_at=?
+            WHERE status='error' AND NOT EXISTS (
+              SELECT 1 FROM jobs k WHERE k.video_id=jobs.video_id AND k.created_at > jobs.created_at
+                AND k.status IN ('queued', 'running', 'done', 'error', 'dismissed'))
+            """,
+            (_now(),),
+        ).rowcount
+        conn.commit()
+        return changed
     finally:
         conn.close()
 

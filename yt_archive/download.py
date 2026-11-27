@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import tempfile
 import threading
@@ -51,6 +52,19 @@ _UPCOMING_RE = re.compile(r"This live event will begin|Premieres in|Live stream 
 # or an extractor ERROR asking the user to check `yt-dlp -U`.
 _CHALLENGE_FAILED_RE = re.compile(r"(?:n challenge|Signature) solving failed", re.IGNORECASE)
 _CONFIRM_LATEST_RE = re.compile(r"Confirm you are on the latest version using\s+yt-dlp -U", re.IGNORECASE)
+# Transient local DNS or network transport failures (e.g. brief router/DNS drop).
+_NETWORK_FAILURE_RE = re.compile(
+    r"Failed to resolve |"
+    r"Temporary failure in name resolution|"
+    r"Name or service not known|"
+    r"nodename nor servname provided|"
+    r"Network is unreachable|"
+    r"No route to host",
+    re.IGNORECASE,
+)
+
+NETWORK_RECOVERY_WAIT_SECONDS = 120.0
+NETWORK_RECOVERY_POLL_SECONDS = 5.0
 
 
 class UpcomingStreamError(RuntimeError):
@@ -379,6 +393,14 @@ def start_download(
     if isinstance(code_or_session, LiveClipSession):
         return code_or_session
     code = code_or_session
+    if code != 0 and _is_network_failure(lines):
+        if _wait_for_network(site, log=log, progress=progress):
+            log("network recovered; trying download again")
+            outcome, value, lines = _attempt(video_id, dest, data_dir, site, signed_in, False, log, progress)
+            code_or_session = finish_or_session(outcome, value, lines)
+            if isinstance(code_or_session, LiveClipSession):
+                return code_or_session
+            code = code_or_session
     if code != 0 and site == "X" and not signed_in and _HIDDEN_FROM_GUESTS_RE.search("\n".join(lines)):
         db.mark_x_hidden(data_dir, [video_id])
         log("X hides this tweet from readers without an account; asking again with your X login from Firefox")
@@ -676,6 +698,58 @@ def _is_drm_failure(lines: list[str]) -> bool:
         line.startswith("ERROR:") and "this video is drm protected" in line.lower()
         for line in lines
     )
+
+
+def _is_network_failure(lines: list[str]) -> bool:
+    return any(
+        (line.startswith("WARNING:") or line.startswith("ERROR:"))
+        and _NETWORK_FAILURE_RE.search(line)
+        for line in lines
+    )
+
+
+def _site_host(site: str) -> str:
+    return "x.com" if site == "X" else "www.youtube.com"
+
+
+def _can_resolve_host(host: str) -> bool:
+    try:
+        socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+        return True
+    except OSError:
+        return False
+
+
+def _wait_for_network(
+    site: str,
+    *,
+    log=print,
+    progress=None,
+    timeout: float = NETWORK_RECOVERY_WAIT_SECONDS,
+    interval: float = NETWORK_RECOVERY_POLL_SECONDS,
+) -> bool:
+    """Wait up to timeout seconds for DNS resolution to site's host to recover.
+
+    Holds the single download worker during a brief local DNS/network drop so a
+    1-minute blip does not burn through every queued video in a few seconds each.
+    """
+    host = _site_host(site)
+    label = format_cap(timeout)
+    log(f"network error reaching {site} ({host}); waiting up to {label} for DNS/connection")
+    if progress:
+        progress(None, f"waiting for network to reach {site}")
+    deadline = time.monotonic() + max(0.0, timeout)
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(max(0.01, interval), remaining))
+        if _can_resolve_host(host):
+            return True
+    if _can_resolve_host(host):
+        return True
+    log(f"network still unreachable for {site} ({host}) after {label}")
+    return False
 
 
 def _has_challenge_failure(lines: list[str]) -> bool:

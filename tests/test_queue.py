@@ -258,6 +258,29 @@ class QueueTests(unittest.TestCase):
         q = db.queue_overview(self.data)
         self.assertEqual((q["waiting"], q["failed"]), ([], []))
 
+    def test_retrying_failed_job_inherits_previous_title_and_bulk_retry_dismiss_work(self):
+        first = db.insert_job(self.data, "https://www.youtube.com/watch?v=videoa00001", "videoa00001", title="First Title")
+        db.finish_job(self.data, first["job_id"], error="DNS error")
+        second = db.insert_job(self.data, "https://www.youtube.com/watch?v=videob00001", "videob00001", title="Second Title")
+        db.finish_job(self.data, second["job_id"], error="DNS error")
+
+        result = self.queue.retry_failed()
+        self.assertEqual(result, {"retried": 2, "video_ids": ["videoa00001", "videob00001"]})
+        q = db.queue_overview(self.data)
+        self.assertEqual(q["failed"], [])
+        self.assertEqual([(j["video_id"], j["title"]) for j in q["waiting"]], [
+            ("videoa00001", "First Title"),
+            ("videob00001", "Second Title"),
+        ])
+
+        db.remove_all_waiting_jobs(self.data)
+        f1 = db.insert_job(self.data, "a", "videoa00001")
+        db.finish_job(self.data, f1["job_id"], error="boom 1")
+        f2 = db.insert_job(self.data, "b", "videob00001")
+        db.finish_job(self.data, f2["job_id"], error="boom 2")
+        self.assertEqual(db.dismiss_all_failed_jobs(self.data), 2)
+        self.assertEqual(db.queue_overview(self.data)["failed"], [])
+
 
 class HttpTests(unittest.TestCase):
     def setUp(self):
@@ -302,6 +325,19 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(code, 200)
         code, raw = self.request("/api/jobs", method="GET")
         self.assertEqual(json.loads(raw)["waiting_count"], 0)
+
+        f1 = db.insert_job(self.data, "https://www.youtube.com/watch?v=fail0000001", "fail0000001", title="Fail 1")
+        db.finish_job(self.data, f1["job_id"], error="err 1")
+        f2 = db.insert_job(self.data, "https://www.youtube.com/watch?v=fail0000002", "fail0000002", title="Fail 2")
+        db.finish_job(self.data, f2["job_id"], error="err 2")
+        code, raw = self.request("/api/jobs/retry-failed")
+        self.assertEqual((code, json.loads(raw)), (202, {"retried": 2, "video_ids": ["fail0000001", "fail0000002"]}))
+        self.request("/api/jobs/clear-waiting")
+
+        f3 = db.insert_job(self.data, "https://www.youtube.com/watch?v=fail0000003", "fail0000003")
+        db.finish_job(self.data, f3["job_id"], error="err 3")
+        code, raw = self.request("/api/jobs/dismiss-failed")
+        self.assertEqual((code, json.loads(raw)), (200, {"dismissed": 1}))
 
     def test_update_archive_queues_only_videos_that_need_work(self):
         make_video(self.data, "complete001", shots=10)

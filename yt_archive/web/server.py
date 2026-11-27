@@ -99,6 +99,12 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
         def log_message(self, fmt, *args):
             print(f"{self.address_string()} {fmt % args}", flush=True)
 
+        def handle(self):
+            try:
+                super().handle()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
         def do_GET(self):
             # A DNS-rebinding page reaches us under its own Host name; it gets nothing.
             if not _is_local_host(self.headers.get("Host") or ""):
@@ -285,6 +291,15 @@ def make_handler(data_dir: Path, queue: JobQueue, work_queue: DerivedWorkQueue):
                 if self._read_json() is None:
                     return
                 return self._json({"removed": db.remove_all_waiting_jobs(data_dir)})
+            if parsed.path == "/api/jobs/retry-failed":
+                if self._read_json() is None:
+                    return
+                result = queue.retry_failed()
+                return self._json(result, 202 if result["retried"] else 200)
+            if parsed.path == "/api/jobs/dismiss-failed":
+                if self._read_json() is None:
+                    return
+                return self._json({"dismissed": db.dismiss_all_failed_jobs(data_dir)})
             match = re.fullmatch(r"/api/jobs/([0-9a-f]{1,64})/(remove|dismiss)", parsed.path)
             if match:
                 if self._read_json() is None:

@@ -34,7 +34,7 @@ The picker lists the videos of a YouTube creator, a playlist or an X profile. No
 
 ## The archive page
 
-- **Download queue**, updated live. The video being worked on shows its steps (download, shots, MP3), percent done, download speed and time left. Waiting videos can be removed one at a time or all at once. Failed ones show their error, with **Retry** and **Dismiss**. Videos are worked on one at a time; the queue keeps going with the page closed and continues after the program restarts.
+- **Download queue**, updated live. The video being worked on shows its steps (download, shots, MP3), percent done, download speed and time left. Waiting videos can be removed one at a time or all at once. Failed ones show their error, with **Retry** and **Dismiss** (or **Retry all failed** and **Dismiss all failed** when more than one has failed). Videos are worked on one at a time; the queue keeps going with the page closed and continues after the program restarts.
 - **Archive list**, one line per video: thumbnail, title, creator, length, number of shots, upload date, download date, and where the first request for it came from (paste box, bookmark button, picker, command line, or another program).
 - **Search** finds videos whose title, channel, description, video ID, transcript, English translation or speaker names contain the words typed.
 - **Sort** by download date (newest or oldest first), upload date, title, or channel.
