@@ -352,6 +352,70 @@ class ExportOverlapPageTests(unittest.TestCase):
             self.assertRegex(pr_html, r'data-prosody="prosody\.json\?v=[0-9a-f]{10}"')
             self.assertIn('id="toggle-tone" aria-pressed="true" title=', pr_html)
             self.assertIn('id="tone-legend" hidden', pr_html)
+            self.assertIn('id="open-rows-menu"', pr_html)
+
+            # With --clip-start / --clip-end and --overlaps + Spanish study mode (es-std).
+            es_study = Path(tmp) / "es_study.json"
+            es_study.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "language": "es",
+                        "dialect": "ar",
+                        "segments": [
+                            {
+                                "i": 0,
+                                "es": "Vos sabés cómo es.",
+                                "std": "Tú sabes cómo es.",
+                                "en": "You know how it is.",
+                                "tokens": [
+                                    {"s": 0.5, "e": 1.0, "w": "Vos", "g": "you(vos)", "v": 0},
+                                    {"s": 1.1, "e": 1.8, "w": "sabés", "g": "know", "v": 0},
+                                ],
+                            }
+                        ],
+                        "vocab": [
+                            {"id": 0, "base": "sabés", "kana": "sabes", "diff": "ar", "gloss": "you know", "role": "voseo verb", "note": "Rioplatense voseo", "count": 1, "times": [0.5]},
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            ov_file = Path(tmp) / "overlaps.json"
+            ov_file.write_text(
+                json.dumps({"acoustic_overlaps": [{"start": 2.4, "end": 3.5, "speakers": ["Speaker A", "Speaker B"]}]}),
+                encoding="utf-8",
+            )
+            out_dir_es = Path(tmp) / "out_es"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    vid,
+                    str(out_dir_es),
+                    "--data",
+                    str(data_dir),
+                    "--study",
+                    str(es_study),
+                    "--overlaps",
+                    str(ov_file),
+                    "--clip-start",
+                    "1.0",
+                    "--clip-end",
+                    "10.0",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            es_tr = json.loads((out_dir_es / "transcript.json").read_text(encoding="utf-8"))
+            self.assertEqual(es_tr["language"], "es")
+            self.assertEqual(es_tr["dialect"], "ar")
+            self.assertEqual(es_tr["clip_start"], 1.0)
+            self.assertEqual(es_tr["clip_end"], 10.0)
+            self.assertEqual(es_tr["segments"][0]["std"], "Tú sabes cómo es.")
+            self.assertEqual(len(es_tr["overlaps"]), 1)
 
     def test_extract_prosody_yin_tracks_pitch_and_loudness(self):
         import importlib.util

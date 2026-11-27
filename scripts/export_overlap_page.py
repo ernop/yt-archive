@@ -132,20 +132,20 @@ rt { font-size: .56em; font-weight: 600; color: #dbeafe; user-select: none; }
 html.no-furigana rt { display: none; }
 
 header.top {
-  padding: .55rem 1rem .45rem; border-bottom: 1px solid #1d2129; background: #0a0b0e;
+  padding: .36rem .9rem .3rem; border-bottom: 1px solid #1d2129; background: #0a0b0e;
 }
 .top-row {
   display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
-  gap: .35rem 1rem;
+  gap: .3rem .9rem;
 }
-header.top h1 { margin: 0; font-size: 1.12rem; line-height: 1.25; font-weight: 700; }
-.top-nav { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .85rem; font-size: .84rem; }
+header.top h1 { margin: 0; font-size: 1.06rem; line-height: 1.25; font-weight: 700; }
+.top-nav { display: flex; flex-wrap: wrap; align-items: center; gap: .38rem .75rem; font-size: .82rem; }
 .top-nav .sep { opacity: .45; }
-.top-nav button { font-size: .8rem; padding: .16rem .46rem; }
-.chapters { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin-top: .38rem; }
-.chapters button { font-size: .78rem; padding: .14rem .45rem; background: #111419; border-color: #2d333e; }
+.top-nav button { font-size: .78rem; padding: .14rem .44rem; }
+.chapters { display: flex; flex-wrap: wrap; align-items: center; gap: .26rem; margin-top: .28rem; }
+.chapters button { font-size: .75rem; padding: .1rem .4rem; background: #111419; border-color: #2d333e; }
 
-main { padding: .6rem 1rem 2rem; width: 100%; max-width: none; margin: 0 auto; }
+main { padding: .42rem .9rem 1.4rem; width: 100%; max-width: none; margin: 0 auto; }
 main.split-view { display: block; }
 
 .player-wrap {
@@ -189,10 +189,10 @@ main.split-view { display: block; }
 .ov-gutter:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
 .ov-grip { display: inline-flex; align-items: center; gap: .22rem; font-weight: 700; white-space: nowrap; }
 .ov-fs-btn {
-  padding: 0 .28rem; height: calc(1.08rem * var(--ov-scale)); min-height: 14px;
-  font-size: calc(.68rem * var(--ov-scale)); line-height: 1;
-  border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(20, 24, 32, 0.9); color: #e2e8f0; cursor: pointer;
+  padding: 0 .34rem; height: calc(1.08rem * var(--ov-scale)); min-height: 15px;
+  font-size: calc(.68rem * var(--ov-scale)); font-weight: 700; line-height: 1;
+  border-radius: 3px; border: 1px solid rgba(124, 196, 255, 0.5);
+  background: rgba(20, 28, 42, 0.94); color: #fff; cursor: pointer;
 }
 .ov-fs-btn:hover { background: #263143; border-color: #7cc4ff; color: #fff; }
 .ov-ruler { position: relative; overflow: hidden; cursor: pointer; }
@@ -205,10 +205,12 @@ main.split-view { display: block; }
 }
 .ov-row { height: calc(2.55rem * var(--ov-scale)); border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
 .ov-overlay.has-tone .ov-row { height: calc(3.35rem * var(--ov-scale)); }
-.ov-row.row-ja { height: calc(2.5rem * var(--ov-scale)); }
-.ov-overlay.has-tone .ov-row.row-ja { height: calc(3.3rem * var(--ov-scale)); }
+.ov-row.row-ja, .ov-row.row-es { height: calc(2.5rem * var(--ov-scale)); }
+.ov-overlay.has-tone .ov-row.row-ja,
+.ov-overlay.has-tone .ov-row.row-es { height: calc(3.3rem * var(--ov-scale)); }
 .ov-row.row-ja-furi { height: calc(3.15rem * var(--ov-scale)); }
 .ov-overlay.has-tone .ov-row.row-ja-furi { height: calc(3.95rem * var(--ov-scale)); }
+.ov-row.row-es-std { height: calc(2.0rem * var(--ov-scale)); }
 .ov-row.row-literal { height: calc(1.95rem * var(--ov-scale)); }
 .ov-row.row-en { height: calc(2.0rem * var(--ov-scale)); }
 .ov-row.row-grp-end { border-bottom: 2px solid rgba(255, 255, 255, 0.28); }
@@ -320,11 +322,13 @@ main.split-view { display: block; }
 .ann-live-note { color: #fff; flex: 1 1 18rem; }
 .ann-live button { font-size: .76rem; padding: .12rem .4rem; margin-left: auto; }
 .lane-row { border-bottom: 1px solid #1b1f27; height: 3.05rem; }
-.lanes-stage.has-tone .lane-row { height: 4.35rem; }
-.lane-row.row-ja { height: 3.05rem; }
-.lanes-stage.has-tone .lane-row.row-ja { height: 4.35rem; }
+.lanes-stage.has-tone .lane-row { height: 3.95rem; }
+.lane-row.row-ja, .lane-row.row-es { height: 3.05rem; }
+.lanes-stage.has-tone .lane-row.row-ja,
+.lanes-stage.has-tone .lane-row.row-es { height: 3.95rem; }
 .lane-row.row-ja-furi { height: 3.6rem; }
 .lanes-stage.has-tone .lane-row.row-ja-furi { height: 4.9rem; }
+.lane-row.row-es-std { height: 2.15rem; }
 .lane-row.row-literal { height: 2.1rem; }
 .lane-row.row-en { height: 2.2rem; }
 .lane-row.row-grp-end { border-bottom: 2px solid #2e3748; }
@@ -371,6 +375,17 @@ main.split-view { display: block; }
   font-size: .82rem; font-weight: 500; line-height: calc(2.2rem - 8px); padding: 0 .45rem;
 }
 .lane-block.lb-en.now { border-color: #fff; background: var(--spk-bg-hi, rgba(124, 196, 255, 0.38)); }
+.lane-block.lb-std {
+  top: 3px; bottom: 3px; border: 1px dotted var(--spk-color, #7cc4ff);
+  border-left: 3px solid var(--spk-color, #7cc4ff);
+  background: rgba(20, 26, 38, 0.72); color: #e2e8f0;
+  font-size: .8rem; font-weight: 500; line-height: calc(2.15rem - 8px); padding: 0 .45rem;
+}
+.lane-block.lb-std.now { border-style: solid; border-color: #fff; background: var(--spk-bg-hi, rgba(124, 196, 255, 0.36)); color: #fff; }
+.ov-overlay .lane-block.lb-std {
+  line-height: calc(2.0rem * var(--ov-scale) - 6px);
+  font-size: calc(.76rem * var(--ov-scale));
+}
 .lanes-empty {
   padding: .65rem .9rem; font-size: .84rem; color: #cbd5e1; text-align: center;
   background: rgba(12, 15, 21, 0.85); cursor: context-menu;
@@ -475,13 +490,14 @@ main.split-view { display: block; }
 .lanes-stage.has-tone .lane-block.has-tone-blk { line-height: 1.75rem; }
 .lanes-stage.has-tone .lane-block.has-tone-blk .lane-words { height: 52%; line-height: 1.75rem; }
 .tone-svg {
-  position: absolute; left: 0; right: 0; bottom: 1px; height: 48%; width: 100%;
+  position: absolute; left: 0; right: 0; bottom: 0; height: 48%; width: 100%;
+  background: rgba(5, 7, 11, 0.62); border-top: 1px solid rgba(255, 255, 255, 0.14);
   pointer-events: none; z-index: 1; display: block;
 }
 .tone-badge {
-  position: absolute; top: 1px; right: 3px; z-index: 4; padding: 0 .22rem;
+  position: absolute; bottom: 2px; right: 3px; z-index: 4; padding: 0 .24rem;
   border-radius: 3px; font: 800 .62rem/1.25 var(--mono);
-  background: rgba(7, 8, 12, 0.84); border: 1px solid currentColor;
+  background: rgba(7, 8, 12, 0.9); border: 1px solid currentColor;
   pointer-events: none; white-space: nowrap;
 }
 .tone-badge.tb-falsetto { color: #ff5ca8; }
@@ -598,6 +614,7 @@ html.no-furigana .segment-ja { line-height: 1.5; }
 .segment-ww .ww-pair { white-space: nowrap; cursor: pointer; }
 .segment-ww .ww-pair:hover { color: #fff; text-decoration: underline; }
 .segment-ww .ww-ja { color: #90b4e8; margin-right: .15rem; }
+.segment-std { margin-top: .16rem; font-size: .84rem; line-height: 1.4; color: #a9d6ff; }
 .segment-en { margin-top: .2rem; font-size: .88rem; line-height: 1.42; color: #e2e8f0; }
 
 .vocab-panel {
@@ -625,11 +642,11 @@ html.no-furigana .v-ja { line-height: 1.35; }
   font: 800 .72rem/1.3 var(--mono); text-transform: uppercase; border: 1px solid #475569;
   color: #fff; background: #181e29; white-space: nowrap;
 }
-.vd-mtg { border-color: #ffd240; color: #ffd240; background: #241c06; }
-.vd-slang { border-color: #ff85a2; color: #ff85a2; background: #261018; }
-.vd-n1 { border-color: #d2a8ff; color: #d2a8ff; background: #1e132b; }
-.vd-n2 { border-color: #7cc4ff; color: #7cc4ff; background: #102033; }
-.vd-n3 { border-color: #7ee787; color: #7ee787; background: #102414; }
+.vd-mtg, .vd-ar { border-color: #ffd240; color: #ffd240; background: #241c06; }
+.vd-slang, .vd-econ { border-color: #ff85a2; color: #ff85a2; background: #261018; }
+.vd-n1, .vd-c1 { border-color: #d2a8ff; color: #d2a8ff; background: #1e132b; }
+.vd-n2, .vd-b2 { border-color: #7cc4ff; color: #7cc4ff; background: #102033; }
+.vd-n3, .vd-b1 { border-color: #7ee787; color: #7ee787; background: #102414; }
 .vd-basic { border-color: #64748b; color: #cbd5e1; background: #141820; }
 .v-meaning { line-height: 1.42; }
 .v-gloss { font-weight: 700; color: #fff; }
@@ -711,8 +728,8 @@ html.no-furigana .v-ja { line-height: 1.35; }
 @media (min-width: 1040px) {
   main.split-view {
     display: grid;
-    grid-template-columns: minmax(0, min(62vw, calc(66vh * 16 / 9))) minmax(22rem, 1fr);
-    column-gap: .85rem; row-gap: .65rem; align-items: start;
+    grid-template-columns: minmax(22rem, min(62vw, calc(var(--split-vid-h, 54vh) * 16 / 9))) minmax(20rem, 1fr);
+    column-gap: .75rem; row-gap: .5rem; align-items: start;
   }
   main.split-view > .player-wrap { grid-column: 1; grid-row: 1; }
   main.split-view > .transcript {
@@ -777,6 +794,7 @@ APP_JS = r"""(() => {
   let autoScroll = localStorage.getItem('ovpub.autoScroll') !== 'false';
 
   let hasStudy = false;
+  let isCjk = false;
   let showFurigana = localStorage.getItem('ovpub.furigana') !== 'false';
   let showGloss = localStorage.getItem('ovpub.gloss') !== 'false';
   let showEnglish = localStorage.getItem('ovpub.english') !== 'false';
@@ -789,20 +807,51 @@ APP_JS = r"""(() => {
 
   const DIFF_LABELS = {
     mtg: 'MTG', slang: 'Slang', n1: 'N1', n2: 'N2', n3: 'N3', basic: 'Basic',
+    ar: 'AR / Rioplatense', econ: 'Econ / Pol', c1: 'C1–C2', b2: 'B2', b1: 'B1',
   };
-  const DIFF_ORDER = {mtg: 5, slang: 4, n1: 3, n2: 2, n3: 1, basic: 0};
+  const DIFF_ORDER = {
+    mtg: 5, ar: 5, slang: 4, econ: 4, n1: 3, c1: 3, n2: 2, b2: 2, n3: 1, b1: 1, basic: 0,
+  };
 
-  const STUDY_STREAMS = [
+  let STUDY_STREAMS = [
     {id: 'ja', label: 'Native Japanese', short: 'JP'},
     {id: 'ja-furi', label: 'Japanese + Furigana', short: 'JP+furi'},
     {id: 'literal', label: 'English literal (word-by-word)', short: 'literal'},
     {id: 'en', label: 'English translation', short: 'English'},
   ];
-  const STREAM_MAP = new Map(STUDY_STREAMS.map(s => [s.id, s]));
-  const STREAM_ORDER = new Map(STUDY_STREAMS.map((s, i) => [s.id, i]));
+  let STREAM_MAP = new Map(STUDY_STREAMS.map(s => [s.id, s]));
+  let STREAM_ORDER = new Map(STUDY_STREAMS.map((s, i) => [s.id, i]));
   let mainRows = [];
   let overlayRows = [];
   let ctxMenuState = null;
+
+  function configureStudyStreams() {
+    if (!doc) return;
+    if (doc.language === 'es' && hasStudy) {
+      const origLbl = doc.dialect === 'ar' ? 'Original Spanish (AR)' : 'Original Spanish';
+      const origShort = doc.dialect === 'ar' ? 'ES (AR)' : 'ES';
+      const list = [{id: 'es', label: origLbl, short: origShort}];
+      if (doc.segments.some(s => s.std)) {
+        list.push({id: 'es-std', label: 'Neutral Spanish', short: 'Neutral'});
+      }
+      if (doc.segments.some(s => s.tokens.some(t => t.gloss))) {
+        list.push({id: 'literal', label: 'Word-by-word English', short: 'literal'});
+      }
+      if (doc.segments.some(s => s.en)) {
+        list.push({id: 'en', label: 'Natural English', short: 'English'});
+      }
+      STUDY_STREAMS = list;
+    } else {
+      STUDY_STREAMS = [
+        {id: 'ja', label: 'Native Japanese', short: 'JP'},
+        {id: 'ja-furi', label: 'Japanese + Furigana', short: 'JP+furi'},
+        {id: 'literal', label: 'English literal (word-by-word)', short: 'literal'},
+        {id: 'en', label: 'English translation', short: 'English'},
+      ];
+    }
+    STREAM_MAP = new Map(STUDY_STREAMS.map(s => [s.id, s]));
+    STREAM_ORDER = new Map(STUDY_STREAMS.map((s, i) => [s.id, i]));
+  }
 
   let hasProsody = false;
   let prosodyDt = 0.06;
@@ -833,9 +882,10 @@ APP_JS = r"""(() => {
     return isPlayerFullscreen() ? ovBottomFs : ovBottomWin;
   }
   function ovRowRem(kind) {
-    const extra = hasProsody && showTone && (kind === 'text' || kind === 'ja' || kind === 'ja-furi') ? 0.8 : 0;
+    const extra = hasProsody && showTone && (kind === 'text' || kind === 'ja' || kind === 'ja-furi' || kind === 'es') ? 0.8 : 0;
     if (kind === 'ja-furi') return 3.15 + extra;
-    if (kind === 'ja') return 2.5 + extra;
+    if (kind === 'ja' || kind === 'es') return 2.5 + extra;
+    if (kind === 'es-std') return 2.0;
     if (kind === 'literal') return 1.95;
     if (kind === 'en') return 2.0;
     return 2.55 + extra;
@@ -976,11 +1026,32 @@ APP_JS = r"""(() => {
   }
   function defaultRowsForSurface(surface) {
     if (!model) return [];
-    const kinds = !hasStudy
-      ? ['text']
-      : surface === 'overlay'
-        ? ['ja-furi', 'literal', 'en']
-        : ['ja-furi', 'literal', 'en'];
+    if (!hasStudy) return model.speakers.map(spk => ({spk, kind: 'text'}));
+    if (doc && doc.language === 'es') {
+      const hasEn = STUDY_STREAMS.some(s => s.id === 'en');
+      // With 4+ speakers, keep the bottom compact for a single-screen fit:
+      // every speaker's original ES row + English under the primary speaker (other layers 1 click away).
+      if (model.speakers.length >= 4) {
+        let primary = model.speakers[0];
+        let maxCnt = -1;
+        for (const s of model.speakers) {
+          const c = model.speakerCounts.get(s) || 0;
+          if (c > maxCnt) { maxCnt = c; primary = s; }
+        }
+        const ordered = [primary, ...model.speakers.filter(s => s !== primary)];
+        const out = [];
+        for (const spk of ordered) {
+          out.push({spk, kind: 'es'});
+          if (hasEn && spk === primary) out.push({spk, kind: 'en'});
+        }
+        return out;
+      }
+      const kinds = hasEn ? ['es', 'en'] : ['es'];
+      const out = [];
+      for (const spk of model.speakers) for (const kind of kinds) out.push({spk, kind});
+      return out;
+    }
+    const kinds = ['ja-furi', 'literal', 'en'];
     const out = [];
     for (const spk of model.speakers) {
       for (const kind of kinds) out.push({spk, kind});
@@ -1029,6 +1100,7 @@ APP_JS = r"""(() => {
       if (showOverlay) updateOverlayTimeline(currentTime(), true);
     } else {
       renderLanesWindow(true);
+      applySplitLayout();
     }
   }
   function isStreamGrouped(rows) {
@@ -1150,7 +1222,8 @@ APP_JS = r"""(() => {
       setSurfaceRows(surface, rows.filter(r => r.spk !== spk));
     } else {
       const activeKinds = [...new Set(rows.map(r => r.kind))];
-      const kinds = activeKinds.length ? activeKinds : (hasStudy ? ['ja-furi'] : ['text']);
+      const defKind = hasStudy ? (isCjk ? 'ja-furi' : (STUDY_STREAMS[0]?.id || 'text')) : 'text';
+      const kinds = activeKinds.length ? activeKinds : [defKind];
       let next = [...rows];
       for (const kind of kinds) next = insertRowPreservingOrder(next, spk, kind);
       setSurfaceRows(surface, next);
@@ -1437,6 +1510,9 @@ APP_JS = r"""(() => {
 
   function setupYouTube(videoId) {
     iframe = document.getElementById('yt-frame');
+    if (pendingHashSeek == null && model && model.clipStart > 0) {
+      pendingHashSeek = model.clipStart;
+    }
     if (pendingHashSeek != null && pendingHashSeek > 0) {
       ytTime = pendingHashSeek;
     }
@@ -1445,7 +1521,7 @@ APP_JS = r"""(() => {
       : '';
     const startParam = pendingHashSeek != null ? '&start=' + Math.floor(pendingHashSeek) : '';
     iframe.src = YT_ORIGIN + '/embed/' + encodeURIComponent(videoId)
-      + '?enablejsapi=1&rel=0&playsinline=1' + originParam + startParam;
+      + '?enablejsapi=1&rel=0&playsinline=1&cc_load_policy=0&iv_load_policy=3' + originParam + startParam;
 
     let handshakeTries = 0;
     let handshakeTimer = 0;
@@ -1536,6 +1612,7 @@ APP_JS = r"""(() => {
         end: Number(s.e),
         speaker: spks[s.k] || '',
         text: s.t || '',
+        std: String(s.std || ''),
         en: String(s.en || ''),
         words,
         tokens,
@@ -1567,10 +1644,13 @@ APP_JS = r"""(() => {
     return {
       video_id: raw.video_id,
       language: String(raw.language || ''),
+      dialect: String(raw.dialect || ''),
       title: raw.title,
       channel: raw.channel,
       upload_date: raw.upload_date,
       duration: Number(raw.duration) || 0,
+      clip_start: raw.clip_start != null ? Number(raw.clip_start) : null,
+      clip_end: raw.clip_end != null ? Number(raw.clip_end) : null,
       chapters: raw.chapters || [],
       avatars: raw.avatars && typeof raw.avatars === 'object' ? raw.avatars : {},
       segments,
@@ -1696,8 +1776,14 @@ APP_JS = r"""(() => {
         }
       }
     }
+    const clipStart = data.clip_start != null && Number.isFinite(data.clip_start) ? Math.max(0, data.clip_start) : 0;
+    const clipEnd = data.clip_end != null && Number.isFinite(data.clip_end) && data.clip_end > clipStart
+      ? data.clip_end
+      : Math.max(clipStart + 1, maxEnd);
     return {
       duration: Math.max(1, maxEnd),
+      clipStart,
+      clipEnd,
       speakers, speakerCounts, colorOf, byIndex, infoByIndex, overlapSpans, sorted, bySpeaker, pulsesBySpeaker,
     };
   }
@@ -1724,7 +1810,7 @@ APP_JS = r"""(() => {
       for (const w of rawWords) {
         const txt = String(w.word || '').trim();
         if (!txt) continue;
-        if (!hasStudy && tokens.length && /^[,.;:!?)]/.test(txt)) {
+        if (!isCjk && tokens.length && /^[,.;:!?)]/.test(txt)) {
           const prev = tokens[tokens.length - 1];
           prev.word += txt;
           if (w.end > prev.end) prev.end = w.end;
@@ -1801,8 +1887,8 @@ APP_JS = r"""(() => {
     const tokens = laneTokensForSpan(seg, s0, s1);
     if (!tokens.length) return {cls: '', inner: ''};
 
-    const useFuri = Boolean(hasStudy && withFuri);
-    const spacePx = hasStudy ? 3 : Math.max(4, Math.ceil(ctx.measureText(' ').width));
+    const useFuri = Boolean(isCjk && withFuri);
+    const spacePx = isCjk ? 3 : Math.max(4, Math.ceil(ctx.measureText(' ').width));
     const widths = tokens.map(t => {
       const baseW = Math.ceil(ctx.measureText(t.word).width);
       if (useFuri && Array.isArray(t.ruby)) {
@@ -1848,9 +1934,10 @@ APP_JS = r"""(() => {
         + innerTxt + '</span>'
       );
     }
+    const langAttr = doc && doc.language ? ' lang="' + html(doc.language) + '"' : '';
     return {
       cls: ' has-words' + (clipped ? ' is-clipped' : ''),
-      inner: '<div class="lane-words"' + (hasStudy ? ' lang="ja"' : '') + '>' + spans.join('') + '</div>',
+      inner: '<div class="lane-words"' + langAttr + '>' + spans.join('') + '</div>',
     };
   }
 
@@ -1955,7 +2042,7 @@ APP_JS = r"""(() => {
 
     const stToY = st => Math.max(5, Math.min(95, 65 - st * 3.333));
     const pitchClr = st => (st >= 9.5 ? '#ff5ca8' : st >= 5.0 ? '#ffd240' : st <= -3.5 ? '#9aa7ff' : spkColor);
-    const dbStyle = db => (db >= 4.5 ? {w: 4.0, o: 0.98} : db <= -5.0 ? {w: 1.6, o: 0.68} : {w: 2.6, o: 0.9});
+    const dbStyle = db => (db >= 4.5 ? {w: 4.8, o: 1.0} : db <= -5.0 ? {w: 2.2, o: 0.78} : {w: 3.2, o: 0.96});
 
     // Group adjacent voiced segments sharing (color, stroke-width) into minimal SVG paths
     const paths = [];
@@ -2001,8 +2088,9 @@ APP_JS = r"""(() => {
     flush();
 
     const svg = '<svg class="tone-svg" viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">'
-      + '<line x1="0" y1="65" x2="1000" y2="65" stroke="rgba(255,255,255,0.22)" stroke-dasharray="14,10" stroke-width="1"/>'
-      + '<polygon points="' + polyPts.join(' ') + '" fill="' + spkColor + '" fill-opacity="0.16"/>'
+      + '<line x1="0" y1="31.7" x2="1000" y2="31.7" stroke="rgba(255,92,168,0.18)" stroke-dasharray="10,12" stroke-width="1"/>'
+      + '<line x1="0" y1="65" x2="1000" y2="65" stroke="rgba(255,255,255,0.28)" stroke-dasharray="14,10" stroke-width="1"/>'
+      + '<polygon points="' + polyPts.join(' ') + '" fill="' + spkColor + '" fill-opacity="0.26"/>'
       + paths.join('') + '</svg>';
 
     let badge = '';
@@ -2053,6 +2141,7 @@ APP_JS = r"""(() => {
     if (model) {
       fitOverlayLayout();
       renderLanesWindow(true);
+      applySplitLayout();
       if (showOverlay) {
         ovRenderedStart = -1;
         updateOverlayTimeline(currentTime(), true);
@@ -2062,7 +2151,9 @@ APP_JS = r"""(() => {
 
   function clampWinStart(start) {
     if (!model) return 0;
-    return Math.max(0, Math.min(start, Math.max(0, model.duration - lanesWindow)));
+    const lo = model.clipStart || 0;
+    const hi = Math.max(lo, (model.clipEnd || model.duration) - lanesWindow);
+    return Math.max(lo, Math.min(start, hi));
   }
 
   function renderTimelineInto(ruler, body, winStart, winDur, isOverlay) {
@@ -2173,6 +2264,14 @@ APP_JS = r"""(() => {
               + ' style="' + posStyle + '" title="' + html(title) + '">' + gc.inner + '</div>'
             );
           }
+        } else if (kind === 'es-std') {
+          if (seg.std) {
+            blocks.push(
+              '<div class="lane-block lb-std' + (hasOv ? ' has-ov' : '') + '" data-index="' + seg.index + '"'
+              + ' style="' + posStyle + '" title="' + html(spk + ' (neutral ES): ' + seg.std) + '">'
+              + html(seg.std) + '</div>'
+            );
+          }
         } else if (kind === 'en') {
           if (seg.en) {
             blocks.push(
@@ -2195,7 +2294,7 @@ APP_JS = r"""(() => {
           );
         }
       }
-      const showPulses = !seenPulseSpk.has(spk) && (kind === 'ja-furi' || kind === 'ja' || kind === 'text');
+      const showPulses = !seenPulseSpk.has(spk) && (kind === 'ja-furi' || kind === 'ja' || kind === 'es' || kind === 'text');
       if (showPulses) seenPulseSpk.add(spk);
       const pulses = showPulses ? (model.pulsesBySpeaker?.get(spk) || []).filter(p => p.end > winStart && p.start < winEnd).map(p => {
         const p0 = Math.max(p.start, winStart);
@@ -2213,9 +2312,10 @@ APP_JS = r"""(() => {
       const isFiltered = !isOverlay && filter === 'spk:' + spk;
       const rowKindCls = hasStudy ? ' row-' + kind : '';
       const grip = '<span class="lbl-grip" aria-hidden="true">⋮</span>';
+      const primaryKind = isCjk ? 'ja-furi' : (STUDY_STREAMS[0]?.id || 'text');
       const labelHtml = !sameAsPrev
         ? grip + av + '<span class="lbl-txt">' + html(spk) + '</span>'
-          + (hasStudy && (spkRowCount.get(spk) > 1 || kind !== 'ja-furi' || streamGrouped)
+          + (hasStudy && (spkRowCount.get(spk) > 1 || kind !== primaryKind || streamGrouped)
             ? '<span class="lbl-kind">' + html(kindShort) + '</span>' : '')
         : grip + av + '<span class="lbl-txt">' + html(kindShort) + '</span>';
 
@@ -2299,11 +2399,13 @@ APP_JS = r"""(() => {
     if (showMinimap) {
       const vp = document.getElementById('minimap-viewport');
       const mp = document.getElementById('minimap-playhead');
+      const c0 = model.clipStart || 0;
+      const cSpan = Math.max(1, (model.clipEnd || model.duration) - c0);
       if (vp) {
-        vp.style.left = ((lanesWinStart / model.duration) * 100).toFixed(3) + '%';
-        vp.style.width = Math.min(100, (lanesWindow / model.duration) * 100).toFixed(3) + '%';
+        vp.style.left = Math.max(0, Math.min(100, ((lanesWinStart - c0) / cSpan) * 100)).toFixed(3) + '%';
+        vp.style.width = Math.min(100, (lanesWindow / cSpan) * 100).toFixed(3) + '%';
       }
-      if (mp) mp.style.left = Math.min(100, (time / model.duration) * 100).toFixed(3) + '%';
+      if (mp) mp.style.left = Math.max(0, Math.min(100, ((time - c0) / cSpan) * 100)).toFixed(3) + '%';
     }
     if (!hoveredIndices) paintLanesStatus(time);
   }
@@ -2355,6 +2457,7 @@ APP_JS = r"""(() => {
         updateLanesPlayhead(currentTime());
       });
     }
+    if (model) applySplitLayout();
   }
 
   function applyBadgesState() {
@@ -2373,13 +2476,14 @@ APP_JS = r"""(() => {
     if (!ruler || !body) return;
     fitOverlayLayout();
     const winDur = Math.min(OV_WINDOW_SEC, Math.max(4, lanesWindow));
-    const maxStart = Math.max(0, model.duration - winDur);
+    const minStart = model.clipStart || 0;
+    const maxStart = Math.max(minStart, (model.clipEnd || model.duration) - winDur);
     const trackPx = ruler.getBoundingClientRect().width || 0;
     const outOfView = ovRenderedStart < 0 || time < ovWinStart + winDur * 0.05 || time > ovWinStart + winDur * 0.84;
     if (force || outOfView || Math.abs(trackPx - ovRenderedTrackPx) >= 2) {
       ovWinStart = outOfView || ovRenderedStart < 0
-        ? Math.max(0, Math.min(maxStart, time - winDur * 0.14))
-        : Math.max(0, Math.min(maxStart, ovWinStart));
+        ? Math.max(minStart, Math.min(maxStart, time - winDur * 0.14))
+        : Math.max(minStart, Math.min(maxStart, ovWinStart));
       ovRenderedStart = ovWinStart;
       ovRenderedTrackPx = renderTimelineInto(ruler, body, ovWinStart, winDur, true);
       ovPlayheadEls = [...ovEl.querySelectorAll('.lane-playhead')];
@@ -2400,25 +2504,27 @@ APP_JS = r"""(() => {
     ctx.fillStyle = '#050608';
     ctx.fillRect(0, 0, width, height);
     const rowH = height / Math.max(1, model.speakers.length);
+    const c0 = model.clipStart || 0;
+    const cSpan = Math.max(1, (model.clipEnd || model.duration) - c0);
     model.speakers.forEach((spk, i) => {
       ctx.fillStyle = model.colorOf(spk).fg;
       const y = Math.floor(i * rowH) + 1;
       const h = Math.max(2, Math.floor(rowH) - 2);
       for (const seg of (model.bySpeaker.get(spk) || [])) {
-        ctx.fillRect((seg.start / model.duration) * width, y, Math.max(1.5, ((seg.end - seg.start) / model.duration) * width), h);
+        ctx.fillRect(((seg.start - c0) / cSpan) * width, y, Math.max(1.5, ((seg.end - seg.start) / cSpan) * width), h);
       }
     });
     ctx.fillStyle = '#ffd240';
     for (const ov of model.overlapSpans) {
-      const x0 = (ov.start / model.duration) * width;
-      const w = Math.max(2, ((ov.end - ov.start) / model.duration) * width);
+      const x0 = ((ov.start - c0) / cSpan) * width;
+      const w = Math.max(2, ((ov.end - ov.start) / cSpan) * width);
       ctx.fillRect(x0, 0, w, Math.max(3, Math.round(height * 0.22)));
       ctx.fillRect(x0, height - Math.max(3, Math.round(height * 0.22)), w, Math.max(3, Math.round(height * 0.22)));
     }
     if (showAnnotations) {
       for (const a of visibleTimelineAnnotations()) {
-        const x0 = (a.t / model.duration) * width;
-        const w = Math.max(3, (((a.end && a.end > a.t ? a.end : a.t) - a.t) / model.duration) * width);
+        const x0 = ((a.t - c0) / cSpan) * width;
+        const w = Math.max(3, (((a.end && a.end > a.t ? a.end : a.t) - a.t) / cSpan) * width);
         ctx.fillStyle = catInfo(a.cat).color;
         ctx.fillRect(x0, 0, w, Math.max(4, Math.round(height * 0.32)));
       }
@@ -2458,14 +2564,14 @@ APP_JS = r"""(() => {
       let body = '';
       if (seg.words.length) {
         body = seg.words.map((w, wi) => {
-          const gap = !hasStudy && wi && !/^[,.;:!?)]/.test(w.word) ? ' ' : '';
+          const gap = !isCjk && wi && !/^[,.;:!?)]/.test(w.word) ? ' ' : '';
           const ovColor = wordOverlapColor(w, info);
           const vAttr = w.vid >= 0 ? ' data-v="' + w.vid + '"' : '';
           const tipAttr = w.gloss ? ' title="' + html(w.word + ' — ' + w.gloss) + '"' : '';
           let span = '<span class="word' + (ovColor ? ' word-ov' : '') + (w.vid >= 0 ? ' has-vocab' : '') + '"'
             + ' data-t="' + w.start + '" data-e="' + w.end + '"' + vAttr + tipAttr;
           if (ovColor) span += ' style="--ov-color:' + ovColor + '"';
-          span += '>' + (hasStudy && w.ruby ? rubyHtml(w.ruby, w.word) : html(w.word)) + '</span>';
+          span += '>' + (isCjk && w.ruby ? rubyHtml(w.ruby, w.word) : html(w.word)) + '</span>';
           const chips = info && info.chipsByWord.get(wi);
           if (chips) span += chips.map(chipHtml).join('');
           return gap + span;
@@ -2474,10 +2580,13 @@ APP_JS = r"""(() => {
         body = html(seg.text);
       }
       let extraHtml = '';
+      if (hasStudy && seg.std && seg.std !== seg.text) {
+        extraHtml += '<div class="segment-std" title="Neutral Spanish equivalent">→ ' + html(seg.std) + '</div>';
+      }
       if (hasStudy && showGloss && seg.tokens.length) {
         const pairs = seg.tokens.filter(tk => tk.gloss).map(tk =>
           '<span class="ww-pair" data-t="' + tk.start + '"' + (tk.vid >= 0 ? ' data-v="' + tk.vid + '"' : '') + '>'
-          + '<span class="ww-ja" lang="ja">' + html(tk.word) + '</span>' + html(tk.gloss) + '</span>'
+          + '<span class="ww-ja"' + (doc.language ? ' lang="' + html(doc.language) + '"' : '') + '>' + html(tk.word) + '</span>' + html(tk.gloss) + '</span>'
         ).join('');
         if (pairs) extraHtml += '<div class="segment-ww">' + pairs + '</div>';
       }
@@ -2485,13 +2594,14 @@ APP_JS = r"""(() => {
         extraHtml += '<div class="segment-en">' + html(seg.en) + '</div>';
       }
       const ovMark = hasOv ? '<span class="ov-mark">∥</span>' : '';
+      const segLang = doc.language ? ' lang="' + html(doc.language) + '"' : '';
       return '<div class="segment' + (query && vis ? ' match' : '') + (info && info.overlapsPrev ? ' ov-child' : '') + '"'
         + (vis ? '' : ' hidden') + ' style="--spk-color:' + color.fg + '"'
         + ' data-index="' + seg.index + '" data-start="' + seg.start + '" data-end="' + seg.end + '"'
         + (partnerIds ? ' data-partners="' + partnerIds + '"' : '') + '>'
         + '<span class="segment-time">' + clock(seg.start) + ovMark + '</span>'
         + '<span class="segment-speaker">' + avatarHtml(seg.speaker, 'av-xs') + '<span>' + html(seg.speaker || 'Unassigned') + '</span></span>'
-        + '<div class="segment-text"><div' + (hasStudy ? ' class="segment-ja" lang="ja"' : '') + '>' + body + '</div>'
+        + '<div class="segment-text"><div' + (isCjk ? ' class="segment-ja"' : '') + segLang + '>' + body + '</div>'
         + extraHtml + '</div></div>';
     }).join('');
     rowByIndex = new Map();
@@ -2592,8 +2702,17 @@ APP_JS = r"""(() => {
     main.classList.toggle('split-view', active);
     btn.setAttribute('aria-pressed', String(splitView));
     btn.textContent = splitView ? 'Split' : 'Stacked';
-    if (!active) panel.style.height = '';
-    else {
+    if (!active) {
+      main.style.removeProperty('--split-vid-h');
+      panel.style.height = '';
+    } else {
+      const hdr = document.querySelector('header.top');
+      const viz = document.getElementById('viz-stage');
+      const hdrH = hdr ? Math.ceil(hdr.getBoundingClientRect().height) : 52;
+      const vizH = viz ? Math.ceil(viz.getBoundingClientRect().height) : 220;
+      const budgetH = window.innerHeight - hdrH - vizH - 28;
+      const vidH = Math.max(240, Math.min(Math.round(window.innerHeight * 0.64), budgetH));
+      main.style.setProperty('--split-vid-h', vidH + 'px');
       const h = Math.round(pw.getBoundingClientRect().height);
       if (h >= 200) panel.style.height = h + 'px';
     }
@@ -2971,9 +3090,10 @@ APP_JS = r"""(() => {
     const isKnown = knownVocab.has(vocabKey(v));
     const reading = [v.kana && v.kana !== v.base ? v.kana : '', v.romaji].filter(Boolean).join(' · ');
     const diffLbl = DIFF_LABELS[v.diff] || v.diff;
+    const langAttr = doc && doc.language ? ' lang="' + html(doc.language) + '"' : '';
     el.hidden = false;
     el.innerHTML =
-      '<span class="wi-ja" lang="ja">' + (v.ruby ? rubyHtml(v.ruby, v.base) : html(v.base)) + '</span>'
+      '<span class="wi-ja"' + langAttr + '>' + (isCjk && v.ruby ? rubyHtml(v.ruby, v.base) : html(v.base)) + '</span>'
       + (reading ? '<span class="wi-read">' + html(reading) + '</span>' : '')
       + '<span class="v-diff vd-' + html(v.diff) + '">' + html(diffLbl) + '</span>'
       + '<span class="wi-gloss">' + html(v.gloss) + '</span>'
@@ -2989,9 +3109,13 @@ APP_JS = r"""(() => {
     if (filter === 'all') return true;
     if (filter === 'mtg') return diff === 'mtg';
     if (filter === 'slang') return diff === 'slang';
+    if (filter === 'ar') return diff === 'ar';
+    if (filter === 'econ') return diff === 'econ';
+    if (filter === 'c1+') return diff === 'c1' || diff === 'econ' || diff === 'ar';
+    if (filter === 'b2+') return diff === 'b2' || diff === 'c1' || diff === 'econ' || diff === 'ar';
     if (filter === 'n1+') return diff === 'n1' || diff === 'slang' || diff === 'mtg';
     if (filter === 'n2+') return diff === 'n2' || diff === 'n1' || diff === 'slang' || diff === 'mtg';
-    return diff !== 'basic'; // n3+ default
+    return diff !== 'basic'; // n3+ / b1+ default
   }
   function paintVocab() {
     const panel = document.getElementById('vocab-panel');
@@ -3040,9 +3164,10 @@ APP_JS = r"""(() => {
       const jumps = v.times.slice(0, 5).map(t =>
         '<button type="button" class="v-time" data-t="' + t + '" title="Jump to ' + clock(t) + '">' + clock(t) + '</button>'
       ).join('') + (v.times.length > 5 ? '<span class="v-read">+' + (v.times.length - 5) + '</span>' : '');
+      const vLangAttr = doc && doc.language ? ' lang="' + html(doc.language) + '"' : '';
       return '<div class="vocab-row' + (isKnown ? ' is-known' : '') + '" data-vid="' + v.id + '">'
-        + '<div class="v-word"><span class="v-ja" lang="ja">'
-        + (v.ruby ? rubyHtml(v.ruby, v.base) : html(v.base)) + '</span>'
+        + '<div class="v-word"><span class="v-ja"' + vLangAttr + '>'
+        + (isCjk && v.ruby ? rubyHtml(v.ruby, v.base) : html(v.base)) + '</span>'
         + (reading ? '<span class="v-read">' + html(reading) + '</span>' : '')
         + '</div>'
         + '<span class="v-diff vd-' + html(v.diff) + '">' + html(diffLbl) + '</span>'
@@ -3061,10 +3186,13 @@ APP_JS = r"""(() => {
     const res = await fetch('transcript.json');
     if (!res.ok) throw new Error('Could not load transcript.json');
     doc = expandCompact(await res.json());
-    hasStudy = Boolean(doc.language === 'ja' || (doc.vocab && doc.vocab.length) || doc.segments.some(s => s.en || s.tokens.length));
+    isCjk = doc.language === 'ja' || doc.language === 'zh';
+    hasStudy = Boolean(isCjk || (doc.vocab && doc.vocab.length) || doc.segments.some(s => s.en || s.std || s.tokens.length));
+    configureStudyStreams();
     vocabById = new Map((doc.vocab || []).map(v => [v.id, v]));
     loadKnownVocab();
     model = buildOverlapModel(doc);
+    lanesWinStart = model.clipStart || 0;
     mainRows = loadSurfaceRows('main');
     overlayRows = loadSurfaceRows('overlay');
 
@@ -3115,15 +3243,22 @@ APP_JS = r"""(() => {
     ytLink.href = 'https://www.youtube.com/watch?v=' + encodeURIComponent(doc.video_id);
 
     if (doc.chapters.length) {
-      const chEl = document.getElementById('chapters');
-      chEl.hidden = false;
-      chEl.innerHTML = doc.chapters.map(c =>
-        '<button type="button" data-t="' + c.s + '">' + clock(c.s) + ' ' + html(c.t) + '</button>'
-      ).join('');
-      chEl.addEventListener('click', ev => {
-        const b = ev.target.closest('button[data-t]');
-        if (b) seekAndPlay(Number(b.dataset.t));
-      });
+      const c0 = model.clipStart || 0;
+      const c1 = model.clipEnd || model.duration;
+      const chs = c0 > 0 || (doc.clip_end != null)
+        ? doc.chapters.filter(c => c.e > c0 && c.s < c1)
+        : doc.chapters;
+      if (chs.length) {
+        const chEl = document.getElementById('chapters');
+        chEl.hidden = false;
+        chEl.innerHTML = chs.map(c =>
+          '<button type="button" data-t="' + c.s + '">' + clock(c.s) + ' ' + html(c.t) + '</button>'
+        ).join('');
+        chEl.addEventListener('click', ev => {
+          const b = ev.target.closest('button[data-t]');
+          if (b) seekAndPlay(Number(b.dataset.t));
+        });
+      }
     }
 
     const filterSel = document.getElementById('transcript-filter');
@@ -3132,23 +3267,49 @@ APP_JS = r"""(() => {
       + model.speakers.map(s => '<option value="spk:' + html(s) + '">' + html(s) + ' (' + model.speakerCounts.get(s) + ')</option>').join('');
 
     const winSel = document.getElementById('lanes-window');
-    if (hasStudy && !localStorage.getItem('ovpub.window')) lanesWindow = 10;
-    if (![...winSel.options].some(o => Number(o.value) === lanesWindow)) lanesWindow = hasStudy ? 10 : 20;
+    if (hasStudy && !localStorage.getItem('ovpub.window')) lanesWindow = isCjk ? 10 : 12;
+    if (![...winSel.options].some(o => Number(o.value) === lanesWindow)) lanesWindow = isCjk ? 10 : 20;
     winSel.value = String(lanesWindow);
     document.getElementById('toggle-autoscroll').setAttribute('aria-pressed', String(autoScroll));
 
     if (hasStudy) {
-      for (const id of ['toggle-furigana', 'toggle-gloss', 'toggle-english']) {
-        const b = document.getElementById(id);
-        if (b) b.hidden = false;
-      }
-      const vDiffSel = document.getElementById('vocab-diff');
-      if (vDiffSel) vDiffSel.value = vocabDiff;
-      applyFuriganaState();
+      const fBtn = document.getElementById('toggle-furigana');
+      if (fBtn) fBtn.hidden = !isCjk;
+      const stdBtn = document.getElementById('toggle-std');
       const gBtn = document.getElementById('toggle-gloss');
       const eBtn = document.getElementById('toggle-english');
-      if (gBtn) gBtn.setAttribute('aria-pressed', String(showGloss));
-      if (eBtn) eBtn.setAttribute('aria-pressed', String(showEnglish));
+      const hasStd = STUDY_STREAMS.some(s => s.id === 'es-std');
+      const hasGloss = STUDY_STREAMS.some(s => s.id === 'literal');
+      const hasEn = STUDY_STREAMS.some(s => s.id === 'en');
+      if (stdBtn) {
+        stdBtn.hidden = !hasStd;
+        stdBtn.setAttribute('aria-pressed', String(mainRows.some(r => r.kind === 'es-std')));
+      }
+      if (gBtn) {
+        gBtn.hidden = !hasGloss;
+        showGloss = mainRows.some(r => r.kind === 'literal');
+        gBtn.setAttribute('aria-pressed', String(showGloss));
+      }
+      if (eBtn) {
+        eBtn.hidden = !hasEn;
+        showEnglish = mainRows.some(r => r.kind === 'en');
+        eBtn.setAttribute('aria-pressed', String(showEnglish));
+      }
+      const vDiffSel = document.getElementById('vocab-diff');
+      if (vDiffSel) {
+        if (doc.language === 'es') {
+          vDiffSel.innerHTML =
+            '<option value="b2+">AR slang · Econ · C1–B2 (hide basic)</option>'
+            + '<option value="c1+">AR slang · Econ · C1 only</option>'
+            + '<option value="ar">Rioplatense / Argentinian idioms</option>'
+            + '<option value="econ">Politics &amp; economics jargon</option>'
+            + '<option value="all">All words (incl. basic)</option>';
+          const saved = localStorage.getItem('ovpub.vocabDiff.' + doc.language);
+          vocabDiff = saved && [...vDiffSel.options].some(o => o.value === saved) ? saved : 'b2+';
+        }
+        vDiffSel.value = vocabDiff;
+      }
+      if (isCjk) applyFuriganaState();
     }
 
     loadAnnState();
@@ -3454,6 +3615,14 @@ APP_JS = r"""(() => {
         applyFuriganaState();
       };
     }
+    const stdBtn = document.getElementById('toggle-std');
+    if (stdBtn) {
+      stdBtn.onclick = () => {
+        if (!hasStudy || !model) return;
+        toggleKindForAllActive('main', 'es-std');
+        stdBtn.setAttribute('aria-pressed', String(mainRows.some(r => r.kind === 'es-std')));
+      };
+    }
     const glossBtn = document.getElementById('toggle-gloss');
     if (glossBtn) {
       glossBtn.onclick = () => {
@@ -3476,6 +3645,15 @@ APP_JS = r"""(() => {
           else setSurfaceRows('main', mainRows.filter(r => r.kind !== 'en'));
         }
         applyStudyLayersState();
+      };
+    }
+    const rowsMenuBtn = document.getElementById('open-rows-menu');
+    if (rowsMenuBtn) {
+      rowsMenuBtn.onclick = ev => {
+        ev.stopPropagation();
+        const r = rowsMenuBtn.getBoundingClientRect();
+        ctxMenuState = {surface: 'main', hitSpk: '', hitKind: '', hitIdx: -1, x: r.left, y: Math.max(12, r.top - 320)};
+        renderStreamMenu(r.left, Math.max(12, r.top - 320));
       };
     }
     const toneBtn = document.getElementById('toggle-tone');
@@ -3550,8 +3728,8 @@ APP_JS = r"""(() => {
     const vDiffEl = document.getElementById('vocab-diff');
     if (vDiffEl) {
       vDiffEl.addEventListener('change', () => {
-        vocabDiff = vDiffEl.value || 'n3+';
-        localStorage.setItem('ovpub.vocabDiff', vocabDiff);
+        vocabDiff = vDiffEl.value || (doc && doc.language === 'es' ? 'b2+' : 'n3+');
+        localStorage.setItem(doc && doc.language === 'es' ? 'ovpub.vocabDiff.es' : 'ovpub.vocabDiff', vocabDiff);
         paintVocab();
       });
     }
@@ -3748,7 +3926,9 @@ APP_JS = r"""(() => {
     const jumpMini = ev => {
       const rect = minimapWrap.getBoundingClientRect();
       if (rect.width <= 0) return;
-      const t = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width)) * model.duration;
+      const c0 = model.clipStart || 0;
+      const cSpan = Math.max(1, (model.clipEnd || model.duration) - c0);
+      const t = c0 + Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width)) * cSpan;
       lanesFollow = true;
       document.getElementById('lanes-follow').setAttribute('aria-pressed', 'true');
       lanesWinStart = clampWinStart(t - lanesWindow * 0.25);
@@ -3891,14 +4071,17 @@ def _index_html(
             <select id="lanes-window">
               <option value="6">6s</option>
               <option value="10"{sel10}>10s</option>
+              <option value="12">12s</option>
               <option value="20"{sel20}>20s</option>
               <option value="30">30s</option>
               <option value="60">60s</option>
             </select>
           </label>
           <button type="button" id="lanes-follow" aria-pressed="true" title="Keep timeline synced to playback">Follow</button>
+          <button type="button" id="open-rows-menu" title="Pick, add, remove, or group rows &amp; translation layers">Layers</button>
           <button type="button" id="toggle-tone" aria-pressed="true"{tone_btn_hidden} title="Show or hide live pitch & loudness tone contour inside each speaker's lane (T)">Tone</button>
           <button type="button" id="toggle-furigana" aria-pressed="true"{study_hidden} title="Show or hide furigana readings over kanji">Furigana</button>
+          <button type="button" id="toggle-std" aria-pressed="false" hidden title="Show or hide neutral Spanish rewrite layer">Neutral ES</button>
           <button type="button" id="toggle-gloss" aria-pressed="true"{study_hidden} title="Show or hide word-by-word meaning stream">Word-by-word</button>
           <button type="button" id="toggle-english" aria-pressed="true"{study_hidden} title="Show or hide per-speaker English stream">English</button>
           <button type="button" id="toggle-overlay" aria-pressed="false" title="Show compact red-playhead swimlane over the video (O)">Overlay</button>
@@ -3999,16 +4182,21 @@ def _load_prosody(path: Path) -> dict:
 
 
 def _merge_study_into_compact(compact: dict, study: dict) -> None:
-    """Attach language-study streams (furigana tokens, word glosses, English, vocab, overlaps) to compact payload."""
+    """Attach language-study streams (tokens, word glosses, neutral rewrite, English, vocab, overlaps)."""
     compact["language"] = str(study.get("language") or "ja")
+    if study.get("dialect"):
+        compact["dialect"] = str(study["dialect"])
     spk_idx = {s: i for i, s in enumerate(compact["speakers"])}
     by_i = {int(s["i"]): s for s in study["segments"]}
     for seg in compact["segments"]:
         st = by_i.get(int(seg["i"]))
         if not st:
             continue
-        if st.get("ja"):
-            seg["t"] = str(st["ja"]).strip()
+        orig_txt = st.get("ja") or st.get("es") or st.get("text")
+        if orig_txt:
+            seg["t"] = str(orig_txt).strip()
+        if st.get("std"):
+            seg["std"] = str(st["std"]).strip()
         if st.get("en"):
             seg["en"] = str(st["en"]).strip()
         toks = st.get("tokens") or []
@@ -4017,7 +4205,7 @@ def _merge_study_into_compact(compact: dict, study: dict) -> None:
                 [
                     round(float(tk["s"]), 2),
                     round(float(tk["e"]), 2),
-                    str(tk["ja"]),
+                    str(tk.get("ja") or tk.get("w") or tk.get("es") or ""),
                     tk.get("ruby") or "",
                     str(tk.get("g") or ""),
                     int(tk["v"]) if tk.get("v") is not None else -1,
@@ -4087,6 +4275,25 @@ def _copy_avatars(avatars_src: Path, out_dir: Path) -> dict[str, str]:
     return result
 
 
+def _merge_overlaps_into_compact(compact: dict, ov_doc: dict) -> None:
+    spk_idx = {s: i for i, s in enumerate(compact["speakers"])}
+    if ov_doc.get("acoustic_overlaps"):
+        compact["overlaps"] = [
+            [
+                round(float(ov["start"]), 2),
+                round(float(ov["end"]), 2),
+                [spk_idx[s] for s in (ov.get("speakers") or []) if s in spk_idx],
+            ]
+            for ov in ov_doc["acoustic_overlaps"]
+        ]
+    if ov_doc.get("vocal_pulses"):
+        compact["pulses"] = [
+            [round(float(p["start"]), 2), round(float(p["end"]), 2), spk_idx[p["speaker"]]]
+            for p in ov_doc["vocal_pulses"]
+            if p.get("speaker") in spk_idx
+        ]
+
+
 def export_page(
     data_dir: Path,
     video_id: str,
@@ -4095,8 +4302,11 @@ def export_page(
     title: str = "",
     annotations: Path | None = None,
     study: Path | None = None,
+    overlaps: Path | None = None,
     prosody: Path | None = None,
     avatars: Path | None = None,
+    clip_start: float | None = None,
+    clip_end: float | None = None,
     back_url: str = "",
     back_label: str = "home",
 ) -> dict:
@@ -4105,11 +4315,18 @@ def export_page(
     if title.strip():
         compact["video_title"] = compact["title"]
         compact["title"] = title.strip()
+    if clip_start is not None and clip_start > 0:
+        compact["clip_start"] = round(float(clip_start), 2)
+    if clip_end is not None and clip_end > 0:
+        compact["clip_end"] = round(float(clip_end), 2)
     vocab_count = 0
     if study is not None:
         study_doc = _load_study(study)
         _merge_study_into_compact(compact, study_doc)
         vocab_count = len(compact.get("vocab") or [])
+    if overlaps is not None:
+        ov_doc = json.loads(overlaps.read_text(encoding="utf-8"))
+        _merge_overlaps_into_compact(compact, ov_doc)
     out_dir.mkdir(parents=True, exist_ok=True)
     avatar_count = 0
     if avatars is not None:
@@ -4181,8 +4398,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--title", default="", help="Optional custom page title overriding video title")
     ap.add_argument("--annotations", type=Path, default=None, help="Optional JSON file of seed annotations")
     ap.add_argument("--study", type=Path, default=None, help="Optional language-study JSON (furigana, glosses, English, vocab)")
+    ap.add_argument("--overlaps", type=Path, default=None, help="Optional acoustic overlaps & vocal pulses JSON")
     ap.add_argument("--prosody", type=Path, default=None, help="Optional prosody JSON (per-segment pitch & loudness contours)")
     ap.add_argument("--avatars", type=Path, default=None, help="Optional directory (with avatars.json) or avatars.json mapping speakers to face icons")
+    ap.add_argument("--clip-start", type=float, default=None, help="Optional focus start timestamp in seconds")
+    ap.add_argument("--clip-end", type=float, default=None, help="Optional focus end timestamp in seconds")
     ap.add_argument("--back-url", default="")
     ap.add_argument("--back-label", default="home")
     args = ap.parse_args(argv)
@@ -4193,8 +4413,11 @@ def main(argv: list[str] | None = None) -> int:
         title=args.title,
         annotations=args.annotations.expanduser().resolve() if args.annotations else None,
         study=args.study.expanduser().resolve() if args.study else None,
+        overlaps=args.overlaps.expanduser().resolve() if args.overlaps else None,
         prosody=args.prosody.expanduser().resolve() if args.prosody else None,
         avatars=args.avatars.expanduser().resolve() if args.avatars else None,
+        clip_start=args.clip_start,
+        clip_end=args.clip_end,
         back_url=args.back_url,
         back_label=args.back_label,
     )
