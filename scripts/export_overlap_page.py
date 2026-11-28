@@ -517,6 +517,9 @@ html.handles-hover .spk-float-card.is-moving .fc-rz-se { opacity: .9; }
 .spk-deck.is-dragging { opacity: .45; }
 .spk-deck.drag-over-top { box-shadow: inset 0 2.5px 0 var(--gold); }
 .spk-deck.drag-over-bot { box-shadow: inset 0 -2.5px 0 var(--gold); }
+.lane-row.is-row-dragging { opacity: .45; }
+.lane-row.row-over-top { box-shadow: inset 0 2px 0 var(--accent); }
+.lane-row.row-over-bot { box-shadow: inset 0 -2px 0 var(--accent); }
 
 .spk-avatar {
   width: 24px; height: 24px; border-radius: 999px; object-fit: cover; flex: 0 0 auto;
@@ -544,11 +547,44 @@ html.handles-hover .spk-float-card.is-moving .fc-rz-se { opacity: .9; }
 }
 .lane-block.has-words { padding: 0; text-overflow: clip; }
 .lane-words { position: relative; width: 100%; height: 100%; overflow: hidden; z-index: 2; }
+.lane-txt-top {
+  position: relative; z-index: 2; display: block; height: 52%;
+  line-height: calc(1.55rem * var(--spk-scale, 1));
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .lane-block.has-tone-blk {
-  line-height: calc(1.7rem * var(--spk-scale, 1));
+  line-height: calc(1.68rem * var(--spk-scale, 1));
 }
 .lane-block.has-tone-blk .lane-words {
-  height: 52%; line-height: calc(1.7rem * var(--spk-scale, 1));
+  height: 52%; line-height: calc(1.68rem * var(--spk-scale, 1));
+}
+.lane-block.lb-tone-only {
+  padding: 0; background: rgba(5, 7, 11, 0.88); border-width: 1px;
+}
+.lane-block.lb-tone-only .tone-svg {
+  height: 100%; border-top: 0; background: transparent;
+}
+.bg-meter-strip {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 28%;
+  pointer-events: none; z-index: 1; background: rgba(6, 9, 14, 0.55);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+.bg-tag-pill {
+  position: absolute; left: 3px; bottom: 2px; z-index: 4;
+  padding: 0 .24rem; border-radius: 3px; font: 700 .62rem/1.25 var(--mono);
+  background: rgba(8, 11, 18, 0.9); border: 1px solid var(--trk-color, #ff85a2);
+  color: var(--trk-color, #fff); pointer-events: none; white-space: nowrap;
+}
+.bg-ann-band {
+  position: absolute; top: 1px; bottom: 1px; pointer-events: none; z-index: 1;
+  background: rgba(124, 196, 255, 0.12);
+  border-top: 2px solid var(--cat-color, #7cc4ff);
+  border-bottom: 2px solid var(--cat-color, #7cc4ff);
+}
+.bg-ann-tag {
+  position: absolute; left: 3px; top: 1px; font: 700 .6rem/1.2 var(--mono);
+  color: var(--cat-color, #7cc4ff); background: rgba(7, 9, 14, 0.86);
+  padding: 0 .22rem; border-radius: 2px; white-space: nowrap;
 }
 .lane-block.ja-furi-blk { line-height: 1.24; font-size: calc(.9rem * var(--spk-scale, 1)); }
 .lane-block.ja-furi-blk .lane-word { top: auto; bottom: 3px; line-height: 1.24; }
@@ -777,6 +813,42 @@ html.handles-hover .spk-float-card.is-moving .fc-rz-se { opacity: .9; }
 .ctx-check-row:hover { background: #182030; }
 .ctx-check-row input[type="checkbox"] { margin: 0; width: 14px; height: 14px; cursor: pointer; }
 .ctx-check-hint { margin-left: auto; font-size: .7rem; color: #94a3b8; font-family: var(--mono); }
+.ctx-tabs {
+  display: flex; flex-wrap: wrap; gap: .22rem; padding: .3rem .65rem;
+  border-bottom: 1px solid #232a36; background: #0c1017;
+}
+.ctx-tab {
+  display: inline-flex; align-items: center; gap: .26rem;
+  padding: .16rem .46rem; font-size: .75rem; font-weight: 700;
+  border-radius: 5px; border: 1px solid #323c4e; background: #141a24; color: #cbd5e1;
+}
+.ctx-tab:hover { border-color: #7cc4ff; color: #fff; }
+.ctx-tab.is-on { border-color: var(--spk-color, #7cc4ff); background: #182538; color: #fff; }
+.rc-list { display: flex; flex-direction: column; gap: .32rem; padding: .24rem .65rem .32rem; }
+.rc-card {
+  border: 1px solid #283244; border-left: 3px solid var(--spk-color, #7cc4ff);
+  border-radius: 5px; background: #131823; padding: .26rem .38rem;
+}
+.rc-head { display: flex; align-items: center; gap: .24rem; }
+.rc-idx { font: 700 .68rem/1 var(--mono); color: #94a3b8; min-width: 1.1rem; }
+.rc-name { font-size: .8rem; font-weight: 800; color: #fff; margin-right: auto; }
+.rc-mini-btn {
+  padding: .05rem .3rem; font-size: .7rem; font-weight: 700; line-height: 1.25;
+  border-radius: 3px; border: 1px solid #394558; background: #18202e; color: #e2e8f0;
+}
+.rc-mini-btn:hover:not(:disabled) { border-color: #7cc4ff; color: #fff; background: #223047; }
+.rc-mini-btn.rc-del { color: #fca5a5; }
+.rc-bgs {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .2rem;
+  margin-top: .22rem; padding-top: .2rem; border-top: 1px dashed #252f40;
+}
+.rc-bg-lbl { font-size: .67rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-right: .1rem; }
+.rc-bg-chip {
+  padding: .06rem .32rem; font-size: .69rem; font-weight: 700; border-radius: 3px;
+  border: 1px solid #354154; background: #10151f; color: #94a3b8;
+}
+.rc-bg-chip:hover { border-color: #7cc4ff; color: #fff; }
+.rc-bg-chip.is-on { border-color: #68c77b; background: #132818; color: #7ee787; }
 
 .lane-pulse {
   position: absolute; top: 8px; bottom: 8px; min-width: 6px; border-radius: 4px;
@@ -976,7 +1048,7 @@ html.no-furigana .v-ja { line-height: 1.35; }
     display: flex; flex-direction: column; overflow: hidden;
   }
   main.split-view > .transcript .caption-box { flex: 1 1 0; max-height: none; min-height: 0; }
-  main.split-view > .viz-stage,
+  main.split-view > .viz-stage { grid-column: 1 / -1; grid-row: 2; margin-top: 0; }
   main.split-view > .vocab-panel,
   main.split-view > .notes-panel { grid-column: 1 / -1; margin-top: 0; }
 }
@@ -1234,7 +1306,13 @@ APP_JS = r"""(() => {
       });
     }
 
-    // Built-in analytical subcomponent rows when annotations or prosody are present
+    // Built-in analytical & acoustic subcomponent rows when annotations or prosody are present
+    if (hasProsody) {
+      list.push({
+        id: 'tone', label: 'Pitch & Loudness Wave (own row)', short: 'Tone',
+        group: 'analysis', baseRem: 2.55,
+      });
+    }
     if (seedAnnotations.length || (annState.added && annState.added.length)) {
       list.push({
         id: 'analysis', label: 'Analysis / Annotations', short: 'Analysis',
@@ -1251,6 +1329,61 @@ APP_JS = r"""(() => {
     AVAILABLE_STREAMS = list;
     STREAM_MAP = new Map(list.map(s => [s.id, s]));
     STREAM_ORDER = new Map(list.map((s, i) => [s.id, i]));
+  }
+
+  function combinableBgLayers(spk) {
+    const out = [];
+    if (hasProsody) {
+      out.push({id: 'tone', label: 'Tone wave', short: 'Tone'});
+      out.push({id: 'badges', label: 'Meta-labels', short: 'Labels'});
+    }
+    if (spk && (model?.pulsesBySpeaker?.get(spk) || []).length) {
+      out.push({id: 'pulses', label: 'Vocal pulses', short: 'Pulses'});
+    }
+    if (seedAnnotations.length || (annState.added && annState.added.length)) {
+      out.push({id: 'analysis', label: 'Analysis bands', short: 'Analysis'});
+    }
+    for (const trk of CUSTOM_TRACKS) {
+      out.push({id: 'track:' + trk.id, label: trk.label, short: trk.short});
+    }
+    return out;
+  }
+  function canMergeAsBg(kind) {
+    return kind === 'tone' || kind === 'analysis' || kind.startsWith('track:');
+  }
+  function defaultBgForPrimary(spk) {
+    const bg = [];
+    if (hasProsody) { bg.push('tone'); bg.push('badges'); }
+    if (spk && (model?.pulsesBySpeaker?.get(spk) || []).length) bg.push('pulses');
+    return bg;
+  }
+  function normRowEntry(entry, spk, legacyFlags) {
+    if (typeof entry === 'string') {
+      if (!STREAM_MAP.has(entry)) return null;
+      const bg = [];
+      if (isPrimaryStreamKind(entry)) {
+        if (hasProsody && (!legacyFlags || legacyFlags.showTone !== false)) bg.push('tone');
+        if (hasProsody && (!legacyFlags || legacyFlags.showBadges !== false)) bg.push('badges');
+        if ((!legacyFlags || legacyFlags.showPulses !== false) && spk && (model?.pulsesBySpeaker?.get(spk) || []).length) {
+          bg.push('pulses');
+        }
+      } else if (entry === 'tone' && hasProsody && (!legacyFlags || legacyFlags.showBadges !== false)) {
+        bg.push('badges');
+      }
+      return {kind: entry, bg};
+    }
+    if (!entry || typeof entry !== 'object' || !STREAM_MAP.has(entry.kind)) return null;
+    const validBgs = new Set(combinableBgLayers(spk).map(b => b.id));
+    const bg = Array.isArray(entry.bg)
+      ? [...new Set(entry.bg.filter(b => validBgs.has(b) && b !== entry.kind))]
+      : [];
+    return {kind: entry.kind, bg};
+  }
+  function speakerHasKind(cfg, kind) {
+    return Boolean(cfg && Array.isArray(cfg.rows) && cfg.rows.some(r => r.kind === kind));
+  }
+  function rowHasBg(rowObj, bgId) {
+    return Boolean(rowObj && Array.isArray(rowObj.bg) && rowObj.bg.includes(bgId));
   }
 
   function defaultFloatSlot(idx, total) {
@@ -1270,6 +1403,7 @@ APP_JS = r"""(() => {
   }
 
   function defaultSpeakerRows(spk, spkIndex) {
+    const pBg = defaultBgForPrimary(spk);
     const out = [];
     if (hasStudy && doc && doc.language === 'es') {
       const hasEn = STREAM_MAP.has('en');
@@ -1280,21 +1414,21 @@ APP_JS = r"""(() => {
           const c = model.speakerCounts.get(s) || 0;
           if (c > maxCnt) { maxCnt = c; primary = s; }
         }
-        out.push('es');
-        if (hasEn && spk === primary) out.push('en');
+        out.push({kind: 'es', bg: [...pBg]});
+        if (hasEn && spk === primary) out.push({kind: 'en', bg: []});
       } else {
-        out.push('es');
-        if (hasEn) out.push('en');
+        out.push({kind: 'es', bg: [...pBg]});
+        if (hasEn) out.push({kind: 'en', bg: []});
       }
     } else if (hasStudy && isCjk) {
-      out.push('ja-furi');
-      if (STREAM_MAP.has('literal')) out.push('literal');
-      if (STREAM_MAP.has('en')) out.push('en');
+      out.push({kind: 'ja-furi', bg: [...pBg]});
+      if (STREAM_MAP.has('literal')) out.push({kind: 'literal', bg: []});
+      if (STREAM_MAP.has('en')) out.push({kind: 'en', bg: []});
     } else {
-      out.push('text');
+      out.push({kind: 'text', bg: [...pBg]});
     }
     for (const trk of CUSTOM_TRACKS) {
-      if (trk.defaultOn) out.push('track:' + trk.id);
+      if (trk.defaultOn) out.push({kind: 'track:' + trk.id, bg: []});
     }
     return out;
   }
@@ -1319,9 +1453,6 @@ APP_JS = r"""(() => {
       visible: true,
       placement: 'dock', // 'dock' | 'float'
       rows: defaultSpeakerRows(spk, idx),
-      showTone: true,
-      showBadges: true,
-      showPulses: true,
       showLabel: true,
       timerPos: 'inherit', // 'inherit' | 'bottom' | 'top' | 'hidden'
       dockScale: 1.0,
@@ -1337,7 +1468,7 @@ APP_JS = r"""(() => {
   }
 
   function spkStorageKey() {
-    return 'ovpub.spkCfg.v2.' + doc.video_id;
+    return 'ovpub.spkCfg.v3.' + doc.video_id;
   }
   function loadSpeakerConfigs() {
     const order = defaultSpeakerOrder();
@@ -1345,7 +1476,11 @@ APP_JS = r"""(() => {
     const cfgs = {};
     order.forEach((spk, idx) => { cfgs[spk] = makeDefaultSpeakerCfg(spk, idx, total); });
     try {
-      const raw = JSON.parse(localStorage.getItem(spkStorageKey()) || 'null');
+      const raw = JSON.parse(
+        localStorage.getItem(spkStorageKey())
+        || localStorage.getItem('ovpub.spkCfg.v2.' + doc.video_id)
+        || 'null'
+      );
       if (raw && typeof raw === 'object') {
         if (Array.isArray(raw.order)) {
           const valid = new Set(order);
@@ -1360,17 +1495,19 @@ APP_JS = r"""(() => {
           const sc = saved[spk];
           if (!sc || typeof sc !== 'object') continue;
           const base = cfgs[spk];
-          const rows = Array.isArray(sc.rows)
-            ? [...new Set(sc.rows.filter(r => STREAM_MAP.has(r)))]
-            : base.rows;
+          const seenK = new Set();
+          const rows = [];
+          if (Array.isArray(sc.rows)) {
+            for (const entry of sc.rows) {
+              const nr = normRowEntry(entry, spk, sc);
+              if (nr && !seenK.has(nr.kind)) { seenK.add(nr.kind); rows.push(nr); }
+            }
+          }
           cfgs[spk] = {
             ...base,
             visible: sc.visible !== false,
             placement: sc.placement === 'float' ? 'float' : 'dock',
             rows: rows.length ? rows : base.rows,
-            showTone: sc.showTone !== false,
-            showBadges: sc.showBadges !== false,
-            showPulses: sc.showPulses !== false,
             showLabel: sc.showLabel !== false,
             timerPos: ['inherit', 'bottom', 'top', 'hidden'].includes(sc.timerPos) ? sc.timerPos : 'inherit',
             dockScale: clampNum(sc.dockScale, 0.65, 2.0, base.dockScale),
@@ -1404,11 +1541,15 @@ APP_JS = r"""(() => {
   function anyDockedSpeakers() {
     return speakerOrder.some(s => speakerConfigs[s]?.visible && speakerConfigs[s]?.placement === 'dock');
   }
-  function rowBaseRem(kind, withTone) {
+  function rowBaseRem(rowObj, withToneBg) {
+    const kind = typeof rowObj === 'string' ? rowObj : rowObj.kind;
     const st = STREAM_MAP.get(kind);
     const base = st ? st.baseRem : 2.9;
-    const toneExtra = withTone && isPrimaryStreamKind(kind) ? 0.95 : 0;
-    return base + toneExtra;
+    if (kind === 'tone') return base;
+    const toneExtra = withToneBg ? 1.0 : 0;
+    const extraBg = !withToneBg && typeof rowObj === 'object' && Array.isArray(rowObj.bg)
+      && rowObj.bg.some(b => b.startsWith('track:') || b === 'analysis') ? 0.45 : 0;
+    return base + toneExtra + extraBg;
   }
   function effectiveTimerPos(spkCfg) {
     if (spkCfg && spkCfg.timerPos && spkCfg.timerPos !== 'inherit') return spkCfg.timerPos;
@@ -1548,17 +1689,17 @@ APP_JS = r"""(() => {
 
   function syncStudyToolbarButtons() {
     if (!hasStudy) return;
-    const allRows = speakerOrder.flatMap(s => (speakerConfigs[s]?.visible ? speakerConfigs[s].rows : []));
+    const allKinds = speakerOrder.flatMap(s => (speakerConfigs[s]?.visible ? speakerConfigs[s].rows.map(r => r.kind) : []));
     const stdBtn = document.getElementById('toggle-std');
-    if (stdBtn && !stdBtn.hidden) stdBtn.setAttribute('aria-pressed', String(allRows.includes('es-std')));
+    if (stdBtn && !stdBtn.hidden) stdBtn.setAttribute('aria-pressed', String(allKinds.includes('es-std')));
     const gBtn = document.getElementById('toggle-gloss');
     if (gBtn && !gBtn.hidden) {
-      showGloss = allRows.includes('literal');
+      showGloss = allKinds.includes('literal');
       gBtn.setAttribute('aria-pressed', String(showGloss));
     }
     const eBtn = document.getElementById('toggle-english');
     if (eBtn && !eBtn.hidden) {
-      showEnglish = allRows.includes('en');
+      showEnglish = allKinds.includes('en');
       eBtn.setAttribute('aria-pressed', String(showEnglish));
     }
   }
@@ -1575,46 +1716,84 @@ APP_JS = r"""(() => {
     else fitVideoBox();
   }
 
-  function addRowToSpeaker(spk, kind) {
+  function addRowToSpeaker(spk, kind, bg) {
     const cfg = speakerConfigs[spk];
     if (!cfg || !STREAM_MAP.has(kind)) return;
-    if (cfg.rows.includes(kind)) return;
-    const kOrd = STREAM_ORDER.get(kind) ?? 99;
-    const next = [...cfg.rows];
-    const ins = next.findIndex(r => (STREAM_ORDER.get(r) ?? 99) > kOrd);
-    if (ins >= 0) next.splice(ins, 0, kind);
-    else next.push(kind);
-    cfg.rows = next;
+    if (speakerHasKind(cfg, kind)) return;
+    const initBg = Array.isArray(bg)
+      ? bg
+      : (isPrimaryStreamKind(kind) ? defaultBgForPrimary(spk) : (kind === 'tone' && hasProsody ? ['badges'] : []));
+    cfg.rows = [...cfg.rows, {kind, bg: initBg}];
     cfg.visible = true;
     refreshAllTimelines(true);
   }
-  function removeRowFromSpeaker(spk, kind) {
+  function removeRowFromSpeaker(spk, kindOrIdx) {
     const cfg = speakerConfigs[spk];
     if (!cfg) return;
-    cfg.rows = cfg.rows.filter(r => r !== kind);
+    if (typeof kindOrIdx === 'number') {
+      cfg.rows = cfg.rows.filter((_, i) => i !== kindOrIdx);
+    } else {
+      cfg.rows = cfg.rows.filter(r => r.kind !== kindOrIdx);
+    }
     if (!cfg.rows.length) cfg.visible = false;
     refreshAllTimelines(true);
   }
-  function toggleRowOnSpeaker(spk, kind) {
+  function moveRowWithinSpeaker(spk, fromIdx, toIdx) {
     const cfg = speakerConfigs[spk];
-    if (!cfg) return;
-    if (cfg.rows.includes(kind)) removeRowFromSpeaker(spk, kind);
-    else addRowToSpeaker(spk, kind);
+    if (!cfg || fromIdx < 0 || fromIdx >= cfg.rows.length) return;
+    toIdx = Math.max(0, Math.min(cfg.rows.length - 1, toIdx));
+    if (fromIdx === toIdx) return;
+    const next = [...cfg.rows];
+    const [item] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, item);
+    cfg.rows = next;
+    refreshAllTimelines(false);
+  }
+  function toggleBgOnRow(spk, rowIdx, bgId) {
+    const cfg = speakerConfigs[spk];
+    if (!cfg || !cfg.rows[rowIdx]) return;
+    const row = cfg.rows[rowIdx];
+    if (row.kind === bgId) return;
+    const nextBg = row.bg.includes(bgId) ? row.bg.filter(b => b !== bgId) : [...row.bg, bgId];
+    cfg.rows[rowIdx] = {...row, bg: nextBg};
+    refreshAllTimelines(true);
+  }
+  function mergeRowIntoAbove(spk, rowIdx) {
+    const cfg = speakerConfigs[spk];
+    if (!cfg || rowIdx <= 0 || rowIdx >= cfg.rows.length) return;
+    const src = cfg.rows[rowIdx];
+    const dst = cfg.rows[rowIdx - 1];
+    if (!canMergeAsBg(src.kind) || src.kind === dst.kind) return;
+    const validBgs = new Set(combinableBgLayers(spk).map(b => b.id));
+    const mergedBg = [...new Set([...dst.bg, src.kind, ...src.bg])].filter(b => validBgs.has(b) && b !== dst.kind);
+    cfg.rows[rowIdx - 1] = {...dst, bg: mergedBg};
+    cfg.rows.splice(rowIdx, 1);
+    refreshAllTimelines(true);
+  }
+  function splitBgToOwnRow(spk, rowIdx, bgId) {
+    const cfg = speakerConfigs[spk];
+    if (!cfg || !cfg.rows[rowIdx] || !STREAM_MAP.has(bgId)) return;
+    const row = cfg.rows[rowIdx];
+    cfg.rows[rowIdx] = {...row, bg: row.bg.filter(b => b !== bgId)};
+    if (!speakerHasKind(cfg, bgId)) {
+      const carryBadges = bgId === 'tone' && row.bg.includes('badges');
+      if (carryBadges) cfg.rows[rowIdx].bg = cfg.rows[rowIdx].bg.filter(b => b !== 'badges');
+      cfg.rows.splice(rowIdx + 1, 0, {kind: bgId, bg: carryBadges ? ['badges'] : []});
+    }
+    refreshAllTimelines(true);
   }
   function toggleRowForAllSpeakers(kind) {
     const visSpks = speakerOrder.filter(s => speakerConfigs[s]?.visible);
     const targets = visSpks.length ? visSpks : speakerOrder;
-    const allHave = targets.length > 0 && targets.every(s => speakerConfigs[s].rows.includes(kind));
+    const allHave = targets.length > 0 && targets.every(s => speakerHasKind(speakerConfigs[s], kind));
     for (const s of targets) {
       const cfg = speakerConfigs[s];
       if (allHave) {
-        cfg.rows = cfg.rows.filter(r => r !== kind);
-        if (!cfg.rows.length) cfg.rows = [defaultPrimaryKind()];
-      } else if (!cfg.rows.includes(kind)) {
-        const kOrd = STREAM_ORDER.get(kind) ?? 99;
-        const ins = cfg.rows.findIndex(r => (STREAM_ORDER.get(r) ?? 99) > kOrd);
-        if (ins >= 0) cfg.rows.splice(ins, 0, kind);
-        else cfg.rows.push(kind);
+        cfg.rows = cfg.rows.filter(r => r.kind !== kind);
+        if (!cfg.rows.length) cfg.rows = [{kind: defaultPrimaryKind(), bg: defaultBgForPrimary(s)}];
+      } else if (!speakerHasKind(cfg, kind)) {
+        const bg = isPrimaryStreamKind(kind) ? defaultBgForPrimary(s) : (kind === 'tone' && hasProsody ? ['badges'] : []);
+        cfg.rows = [...cfg.rows, {kind, bg}];
       }
     }
     refreshAllTimelines(true);
@@ -1667,7 +1846,68 @@ APP_JS = r"""(() => {
     return {x, y};
   }
 
-  // Per-speaker config popover (also opened from right-click on any speaker or its ⚙ button)
+  function buildSpeakerTabsHtml(activeTab) {
+    return '<div class="ctx-tabs">'
+      + speakerOrder.map(s => {
+        const c = model.colorOf(s);
+        return '<button type="button" class="ctx-tab' + (activeTab === s ? ' is-on' : '')
+          + '" style="--spk-color:' + c.fg + '" data-tab-spk="' + html(s) + '">'
+          + avatarHtml(s, 'av-xs') + '<span style="color:' + c.fg + '">' + html(s) + '</span></button>';
+      }).join('')
+      + '<button type="button" class="ctx-tab' + (activeTab === '__all__' ? ' is-on' : '')
+      + '" data-tab-spk="__all__">All</button></div>';
+  }
+
+  // Tabbed All-Speakers overview (shared with Per-Speaker Row Composer!)
+  function renderAllSpeakersPopover(anchorX, anchorY) {
+    const pop = document.getElementById('cfg-popover');
+    if (!pop || !model) return;
+    closeStreamMenu();
+    openPopoverKind = 'all-speakers';
+    const visSpks = speakerOrder.filter(s => speakerConfigs[s]?.visible);
+    const targets = visSpks.length ? visSpks : speakerOrder;
+
+    let out = '<div class="ctx-head"><span>Speakers &amp; Layers</span>'
+      + '<button type="button" class="ctx-head-close" data-pop-close="1">×</button></div>'
+      + buildSpeakerTabsHtml('__all__');
+
+    out += '<div class="ctx-sec">Speakers (order, visibility &amp; mode)</div>';
+    speakerOrder.forEach((spk, i) => {
+      const sc = speakerConfigs[spk];
+      const c = model.colorOf(spk);
+      out += '<div class="ctx-inline-bar" style="padding:.16rem .65rem">'
+        + avatarHtml(spk, 'av-xs')
+        + '<span style="color:' + c.fg + ';font-weight:800;margin-right:auto">' + html(spk) + '</span>'
+        + '<button type="button" class="rc-mini-btn" data-sc="order-up" data-spk="' + html(spk) + '" data-stay="all"' + (i <= 0 ? ' disabled' : '') + '>↑</button>'
+        + '<button type="button" class="rc-mini-btn" data-sc="order-dn" data-spk="' + html(spk) + '" data-stay="all"' + (i >= speakerOrder.length - 1 ? ' disabled' : '') + '>↓</button>'
+        + '<button type="button" class="ctx-chip-btn' + (sc.visible ? ' is-on' : ' is-off') + '" data-all-act="vis" data-spk="' + html(spk) + '">'
+        + (sc.visible ? 'On' : 'Off') + '</button>'
+        + '<button type="button" class="ctx-chip-btn' + (sc.placement === 'float' ? ' is-on' : '') + '" data-all-act="float" data-spk="' + html(spk) + '">'
+        + (sc.placement === 'float' ? 'Float' : 'Dock') + '</button>'
+        + '<button type="button" class="ctx-chip-btn" data-tab-spk="' + html(spk) + '" title="Edit rows, order &amp; combined BG for ' + html(spk) + '">Rows ▸</button>'
+        + '</div>';
+    });
+
+    out += '<div class="ctx-sep"></div><div class="ctx-sec">Bulk add/remove row for all active speakers</div>';
+    for (const st of AVAILABLE_STREAMS) {
+      const allHave = targets.length > 0 && targets.every(s => speakerHasKind(speakerConfigs[s], st.id));
+      out += '<button type="button" class="ctx-item ' + (allHave ? 'is-on' : 'is-off')
+        + '" data-all-kind="' + html(st.id) + '">'
+        + '<span>' + html(st.label) + '</span>'
+        + '<span class="ctx-act">' + (allHave ? '✓ Remove' : '+ Add all') + '</span></button>';
+    }
+
+    out += '<div class="ctx-sep"></div><div class="ctx-inline-bar">'
+      + '<button type="button" class="ctx-chip-btn" data-all-act="reset-all">Reset all speakers</button>'
+      + '</div>';
+
+    pop.innerHTML = out;
+    pop.dataset.anchorX = String(anchorX);
+    pop.dataset.anchorY = String(anchorY);
+    positionFixedPopover(pop, anchorX, anchorY);
+  }
+
+  // Per-speaker Row Composer & Config Popover (free row ordering + combining BG layers + independent sizing!)
   function renderSpeakerConfigPopover(spk, anchorX, anchorY) {
     const pop = document.getElementById('cfg-popover');
     const cfg = speakerConfigs[spk];
@@ -1677,23 +1917,70 @@ APP_JS = r"""(() => {
     const c = model.colorOf(spk);
     const idx = speakerOrder.indexOf(spk);
     const isFloat = cfg.placement === 'float';
+    const bgOpts = combinableBgLayers(spk);
 
     let out = '<div class="ctx-head">'
       + avatarHtml(spk, 'av-xs')
-      + '<span style="color:' + c.fg + '">' + html(spk) + ' — Scroller</span>'
-      + '<button type="button" class="ctx-head-close" data-pop-close="1">×</button></div>';
+      + '<span style="color:' + c.fg + '">' + html(spk) + ' — Rows &amp; Style</span>'
+      + '<button type="button" class="ctx-head-close" data-pop-close="1">×</button></div>'
+      + buildSpeakerTabsHtml(spk);
 
-    // Placement: Dock below vs Float independently
-    out += '<div class="ctx-sec">Position &amp; Mode</div>'
+    // 1) Ordered rows for THIS speaker + per-row BG combine chips
+    out += '<div class="ctx-sec">Rows for ' + html(spk) + ' (free order · combine as BG)</div>'
+      + '<div class="rc-list" style="--spk-color:' + c.fg + '">';
+    cfg.rows.forEach((row, ri) => {
+      const st = STREAM_MAP.get(row.kind);
+      const lbl = st ? st.label : row.kind;
+      const canMerge = ri > 0 && canMergeAsBg(row.kind) && row.kind !== cfg.rows[ri - 1].kind;
+      const availBgs = bgOpts.filter(b => b.id !== row.kind);
+      out += '<div class="rc-card"><div class="rc-head">'
+        + '<span class="rc-idx">' + (ri + 1) + '.</span>'
+        + '<span class="rc-name">' + html(lbl) + '</span>'
+        + '<button type="button" class="rc-mini-btn" data-rc="up" data-spk="' + html(spk) + '" data-ri="' + ri + '"' + (ri <= 0 ? ' disabled' : '') + ' title="Move row up">↑</button>'
+        + '<button type="button" class="rc-mini-btn" data-rc="dn" data-spk="' + html(spk) + '" data-ri="' + ri + '"' + (ri >= cfg.rows.length - 1 ? ' disabled' : '') + ' title="Move row down">↓</button>'
+        + (canMerge
+          ? '<button type="button" class="rc-mini-btn" data-rc="merge" data-spk="' + html(spk) + '" data-ri="' + ri + '" title="Combine onto row above as background">Merge ↑</button>'
+          : '')
+        + '<button type="button" class="rc-mini-btn rc-del" data-rc="rm" data-spk="' + html(spk) + '" data-ri="' + ri + '" title="Remove row">×</button>'
+        + '</div>';
+      if (availBgs.length) {
+        out += '<div class="rc-bgs"><span class="rc-bg-lbl">BG:</span>'
+          + availBgs.map(b => {
+            const on = row.bg.includes(b.id);
+            const canSplit = on && STREAM_MAP.has(b.id) && !speakerHasKind(cfg, b.id);
+            return '<button type="button" class="rc-bg-chip' + (on ? ' is-on' : '') + '" data-rc="bg" data-spk="'
+              + html(spk) + '" data-ri="' + ri + '" data-bg="' + html(b.id) + '" title="'
+              + html((on ? 'Remove ' : 'Combine ') + b.label + ' as background on this row') + '">'
+              + (on ? '✓ ' : '+ ') + html(b.short) + '</button>'
+              + (canSplit
+                ? '<button type="button" class="rc-mini-btn" data-rc="split" data-spk="' + html(spk)
+                  + '" data-ri="' + ri + '" data-bg="' + html(b.id) + '" title="Pop ' + html(b.short) + ' out into its own row">↗</button>'
+                : '');
+          }).join('') + '</div>';
+      }
+      out += '</div>';
+    });
+    out += '</div>';
+
+    // Add missing rows to THIS speaker
+    const missing = AVAILABLE_STREAMS.filter(s => !speakerHasKind(cfg, s.id));
+    if (missing.length) {
+      out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">+ Row</span>'
+        + missing.map(st =>
+          '<button type="button" class="ctx-chip-btn is-off" data-rc="add" data-spk="' + html(spk)
+          + '" data-kind="' + html(st.id) + '" title="Add ' + html(st.label) + ' to ' + html(spk) + '">+ ' + html(st.short) + '</button>'
+        ).join('') + '</div>';
+    }
+
+    // 2) Placement & Speaker order
+    out += '<div class="ctx-sep"></div><div class="ctx-sec">Position &amp; Size (' + (isFloat ? 'Floating' : 'Docked') + ')</div>'
       + '<div class="ctx-inline-bar">'
       + '<button type="button" class="ctx-chip-btn' + (!isFloat ? ' is-on' : '') + '" data-sc="place" data-spk="' + html(spk) + '" data-val="dock">Dock below</button>'
       + '<button type="button" class="ctx-chip-btn' + (isFloat ? ' is-on' : '') + '" data-sc="place" data-spk="' + html(spk) + '" data-val="float">Float separate</button>'
-      + '<button type="button" class="ctx-chip-btn" data-sc="order-up" data-spk="' + html(spk) + '"' + (idx <= 0 ? ' disabled' : '') + '>↑</button>'
-      + '<button type="button" class="ctx-chip-btn" data-sc="order-dn" data-spk="' + html(spk) + '"' + (idx >= speakerOrder.length - 1 ? ' disabled' : '') + '>↓</button>'
+      + '<button type="button" class="ctx-chip-btn" data-sc="order-up" data-spk="' + html(spk) + '"' + (idx <= 0 ? ' disabled' : '') + ' title="Move speaker deck up">Spk ↑</button>'
+      + '<button type="button" class="ctx-chip-btn" data-sc="order-dn" data-spk="' + html(spk) + '"' + (idx >= speakerOrder.length - 1 ? ' disabled' : '') + ' title="Move speaker deck down">Spk ↓</button>'
       + '</div>';
 
-    // Independent Size controls
-    out += '<div class="ctx-sec">Size (' + (isFloat ? 'Floating card' : 'Docked deck') + ')</div>';
     if (isFloat) {
       out += '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Width</span>'
         + '<input type="range" min="18" max="100" step="1" value="' + Math.round(cfg.w) + '" data-sc-rng="w" data-spk="' + html(spk) + '">'
@@ -1719,28 +2006,6 @@ APP_JS = r"""(() => {
       }
     }
 
-    // Independent Subcomponents (rows + inline elements)
-    out += '<div class="ctx-sep"></div><div class="ctx-sec">Subcomponents for ' + html(spk) + '</div>';
-    for (const st of AVAILABLE_STREAMS) {
-      const on = cfg.rows.includes(st.id);
-      out += '<label class="ctx-check-row">'
-        + '<input type="checkbox"' + (on ? ' checked' : '') + ' data-sc-row="' + html(st.id) + '" data-spk="' + html(spk) + '">'
-        + '<span>' + html(st.label) + '</span>'
-        + '<span class="ctx-check-hint">' + html(st.short) + '</span></label>';
-    }
-    if (hasProsody) {
-      out += '<label class="ctx-check-row">'
-        + '<input type="checkbox"' + (cfg.showTone ? ' checked' : '') + ' data-sc-flag="showTone" data-spk="' + html(spk) + '">'
-        + '<span>Pitch &amp; loudness curve</span><span class="ctx-check-hint">SVG</span></label>';
-      out += '<label class="ctx-check-row">'
-        + '<input type="checkbox"' + (cfg.showBadges ? ' checked' : '') + ' data-sc-flag="showBadges" data-spk="' + html(spk) + '">'
-        + '<span>Meta-labels (loud, falsetto…)</span><span class="ctx-check-hint">badges</span></label>';
-    }
-    if ((model.pulsesBySpeaker?.get(spk) || []).length) {
-      out += '<label class="ctx-check-row">'
-        + '<input type="checkbox"' + (cfg.showPulses ? ' checked' : '') + ' data-sc-flag="showPulses" data-spk="' + html(spk) + '">'
-        + '<span>Vocal overlap pulses</span><span class="ctx-check-hint">pulses</span></label>';
-    }
     out += '<label class="ctx-check-row">'
       + '<input type="checkbox"' + (cfg.showLabel ? ' checked' : '') + ' data-sc-flag="showLabel" data-spk="' + html(spk) + '">'
       + '<span>Speaker name &amp; avatar column</span><span class="ctx-check-hint">gutter</span></label>';
@@ -1888,62 +2153,67 @@ APP_JS = r"""(() => {
     positionFixedPopover(pop, anchorX, anchorY);
   }
 
-  // Global Layers / Speakers menu (also right-click anywhere on swimlane)
+  // Right-click menu on any specific row or speaker
   function renderStreamMenu(anchorX, anchorY) {
     const menu = document.getElementById('stream-ctx-menu');
     if (!menu || !ctxMenuState || !model) return;
     closeCfgPopover();
     const {hitSpk, hitKind} = ctxMenuState;
-    const visSpks = speakerOrder.filter(s => speakerConfigs[s]?.visible);
-    const targets = visSpks.length ? visSpks : speakerOrder;
+    const sc = hitSpk ? speakerConfigs[hitSpk] : null;
+    const hitRi = sc && hitKind ? sc.rows.findIndex(r => r.kind === hitKind) : -1;
+    ctxMenuState.hitRi = hitRi;
 
     let out = '<div class="ctx-head">'
       + (hitSpk ? avatarHtml(hitSpk, 'av-xs') : '')
-      + '<span>' + html(hitSpk ? hitSpk + ' · Layers' : 'Speakers &amp; Data Layers') + '</span></div>';
+      + '<span>' + html(hitSpk && hitRi >= 0
+        ? hitSpk + ' · ' + (STREAM_MAP.get(hitKind)?.short || hitKind)
+        : (hitSpk || 'Speakers & Layers')) + '</span></div>';
 
-    if (hitSpk && speakerConfigs[hitSpk]) {
-      const sc = speakerConfigs[hitSpk];
-      out += '<button type="button" class="ctx-item" data-act="open-spk-cfg" data-spk="' + html(hitSpk) + '">'
-        + '<span>⚙ Configure ' + html(hitSpk) + ' (size, position, parts)…</span></button>';
-      out += '<button type="button" class="ctx-item" data-act="toggle-spk-float" data-spk="' + html(hitSpk) + '">'
-        + '<span>' + (sc.placement === 'float' ? 'Dock ' + html(hitSpk) + ' below video' : 'Float ' + html(hitSpk) + ' independently') + '</span></button>';
-      if (hitKind && sc.rows.includes(hitKind) && sc.rows.length > 1) {
+    if (sc && hitRi >= 0) {
+      const row = sc.rows[hitRi];
+      const bgOpts = combinableBgLayers(hitSpk).filter(b => b.id !== row.kind);
+      const canMerge = hitRi > 0 && canMergeAsBg(row.kind) && row.kind !== sc.rows[hitRi - 1].kind;
+      out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Row</span>'
+        + '<button type="button" class="ctx-chip-btn" data-act="row-up" data-spk="' + html(hitSpk) + '" data-ri="' + hitRi + '"' + (hitRi <= 0 ? ' disabled' : '') + '>↑ Up</button>'
+        + '<button type="button" class="ctx-chip-btn" data-act="row-dn" data-spk="' + html(hitSpk) + '" data-ri="' + hitRi + '"' + (hitRi >= sc.rows.length - 1 ? ' disabled' : '') + '>↓ Down</button>'
+        + (canMerge ? '<button type="button" class="ctx-chip-btn" data-act="row-merge" data-spk="' + html(hitSpk) + '" data-ri="' + hitRi + '">Merge ↑</button>' : '')
+        + '</div>';
+      if (bgOpts.length) {
+        out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">BG</span>'
+          + bgOpts.map(b => {
+            const on = row.bg.includes(b.id);
+            return '<button type="button" class="ctx-chip-btn' + (on ? ' is-on' : '') + '" data-act="row-bg" data-spk="'
+              + html(hitSpk) + '" data-ri="' + hitRi + '" data-bg="' + html(b.id) + '">'
+              + (on ? '✓ ' : '+ ') + html(b.short) + '</button>';
+          }).join('') + '</div>';
+      }
+      if (sc.rows.length > 1) {
         out += '<button type="button" class="ctx-item ctx-danger" data-act="rm-one" data-spk="'
-          + html(hitSpk) + '" data-kind="' + html(hitKind) + '">'
-          + '<span>Remove “' + html(STREAM_MAP.get(hitKind)?.short || hitKind) + '” from ' + html(hitSpk) + '</span></button>';
+          + html(hitSpk) + '" data-ri="' + hitRi + '"><span>Remove this row from ' + html(hitSpk) + '</span></button>';
       }
       out += '<div class="ctx-sep"></div>';
     }
 
-    out += '<div class="ctx-sec">Data &amp; Subtitle Layers (all active speakers)</div>';
-    for (const st of AVAILABLE_STREAMS) {
-      const allHave = targets.length > 0 && targets.every(s => speakerConfigs[s].rows.includes(st.id));
-      out += '<button type="button" class="ctx-item ' + (allHave ? 'is-on' : 'is-off')
-        + '" data-act="toggle-kind" data-kind="' + html(st.id) + '">'
-        + '<span>' + html(st.label) + '</span>'
-        + '<span class="ctx-act">' + (allHave ? '✓ On' : '+ Add') + '</span></button>';
+    if (sc) {
+      const missing = AVAILABLE_STREAMS.filter(s => !speakerHasKind(sc, s.id));
+      if (missing.length) {
+        out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">+ Row</span>'
+          + missing.map(st =>
+            '<button type="button" class="ctx-chip-btn is-off" data-act="add-one" data-spk="'
+            + html(hitSpk) + '" data-kind="' + html(st.id) + '">+ ' + html(st.short) + '</button>'
+          ).join('') + '</div>';
+      }
+      out += '<button type="button" class="ctx-item" data-act="open-spk-cfg" data-spk="' + html(hitSpk) + '">'
+        + '<span>⚙ ' + html(hitSpk) + ' Row Composer &amp; Size…</span></button>';
+      out += '<button type="button" class="ctx-item" data-act="toggle-spk-float" data-spk="' + html(hitSpk) + '">'
+        + '<span>' + (sc.placement === 'float' ? 'Dock ' + html(hitSpk) + ' below video' : 'Float ' + html(hitSpk) + ' independently') + '</span></button>';
+      out += '<div class="ctx-sep"></div>';
     }
 
-    out += '<div class="ctx-sep"></div><div class="ctx-sec">Speakers (click ⚙ for per-speaker settings)</div>';
-    for (const spk of speakerOrder) {
-      const sc = speakerConfigs[spk];
-      const c = model.colorOf(spk);
-      out += '<div class="ctx-inline-bar" style="padding:.16rem .75rem">'
-        + avatarHtml(spk, 'av-xs')
-        + '<span style="color:' + c.fg + ';font-weight:800;margin-right:auto">' + html(spk) + '</span>'
-        + '<button type="button" class="ctx-chip-btn' + (sc.visible ? ' is-on' : ' is-off') + '" data-act="toggle-spk" data-spk="' + html(spk) + '">'
-        + (sc.visible ? 'Shown' : 'Hidden') + '</button>'
-        + '<button type="button" class="ctx-chip-btn' + (sc.placement === 'float' ? ' is-on' : '') + '" data-act="toggle-spk-float" data-spk="' + html(spk) + '" title="Toggle docked below vs floating card">'
-        + (sc.placement === 'float' ? 'Float' : 'Dock') + '</button>'
-        + '<button type="button" class="ctx-chip-btn" data-act="open-spk-cfg" data-spk="' + html(spk) + '" title="Independent size &amp; subcomponents">⚙</button>'
-        + '</div>';
-    }
-
-    out += '<div class="ctx-sep"></div>'
-      + '<div class="ctx-inline-bar">'
-      + '<button type="button" class="ctx-chip-btn" data-act="open-layout">Monitor Layout…</button>'
-      + (hasProsody ? '<button type="button" class="ctx-chip-btn" data-act="open-labels">Meta-Labels…</button>' : '')
-      + '<button type="button" class="ctx-chip-btn" data-act="reset-all">Reset</button>'
+    out += '<div class="ctx-inline-bar">'
+      + '<button type="button" class="ctx-chip-btn" data-act="open-all">All Speakers…</button>'
+      + '<button type="button" class="ctx-chip-btn" data-act="open-layout">Layout…</button>'
+      + (hasProsody ? '<button type="button" class="ctx-chip-btn" data-act="open-labels">Labels…</button>' : '')
       + '</div>';
 
     menu.innerHTML = out;
@@ -2565,8 +2835,8 @@ APP_JS = r"""(() => {
     const v = Number(n) || 0;
     return (v >= 0 ? '+' : '') + v.toFixed(1);
   }
-  function buildMetaBadgesHtml(pr, blockPx, spkCfg) {
-    if (!pr || !metaLabels.enabled || (spkCfg && !spkCfg.showBadges) || blockPx < 64) return '';
+  function buildMetaBadgesHtml(pr, blockPx, allowBadges) {
+    if (!pr || !metaLabels.enabled || !allowBadges || blockPx < 64) return '';
     const sens = metaLabels.sensitivity || 'normal';
     const th = sens === 'strict'
       ? {fal: 13.0, hiPk: 8.5, hiSl: 4.0, lo: -5.0, loud: 10.5, quiet: -8.5, fast: 1.65, slow: 0.52}
@@ -2626,12 +2896,11 @@ APP_JS = r"""(() => {
     return '<span class="tone-badges-wrap pos-' + html(pos) + '">' + badges + '</span>';
   }
 
-  function buildToneOverlay(seg, s0, s1, blockPx, spkColor, spkCfg) {
+  function buildToneOverlay(seg, s0, s1, blockPx, spkColor, wantCurve, wantBadges) {
     if (!hasProsody) return null;
     const pr = prosodyByIndex.get(seg.index);
     if (!pr || !Array.isArray(pr.p) || !pr.p.length) return null;
-    const wantCurve = showTone && (!spkCfg || spkCfg.showTone);
-    const badgeHtml = buildMetaBadgesHtml(pr, blockPx, spkCfg);
+    const badgeHtml = buildMetaBadgesHtml(pr, blockPx, wantBadges);
     const tags = Array.isArray(pr.tg) && pr.tg.length ? ' [' + pr.tg.join(', ') + ']' : '';
     const tip = ' | pitch ' + fmtSigned(pr.md) + 'st (peak ' + fmtSigned(pr.pk) + 'st) · vol '
       + fmtSigned(pr.db) + 'dB · ' + (Number(pr.rt) || 1).toFixed(2) + '× pace' + tags;
@@ -2865,6 +3134,43 @@ APP_JS = r"""(() => {
     };
   }
 
+  function buildCustomTrackBgHtml(seg, bgIds) {
+    if (!seg.fields || !bgIds || !bgIds.length) return '';
+    let out = '';
+    for (const bgId of bgIds) {
+      if (!bgId.startsWith('track:')) continue;
+      const trk = CUSTOM_TRACK_MAP.get(bgId.slice(6));
+      if (!trk) continue;
+      const raw = seg.fields[trk.id];
+      if (raw == null || raw === '') continue;
+      const isObj = typeof raw === 'object' && !Array.isArray(raw);
+      const clr = (isObj && raw.color) || trk.color || '#a9d6ff';
+      if (trk.type === 'meter') {
+        const val = isObj ? Number(raw.value ?? raw.score ?? 0) : Number(raw);
+        if (!Number.isFinite(val)) continue;
+        let fill = '';
+        if (trk.unsigned) {
+          const pct = Math.max(0, Math.min(100, val * 100));
+          fill = '<span class="meter-fill" style="left:0;width:' + pct.toFixed(1) + '%;background:' + clr + '"></span>';
+        } else {
+          const clamped = Math.max(-1, Math.min(1, val));
+          const pct = Math.abs(clamped) * 50;
+          const left = clamped >= 0 ? 50 : 50 - pct;
+          fill = '<span class="meter-mid"></span><span class="meter-fill" style="left:'
+            + left.toFixed(1) + '%;width:' + pct.toFixed(1) + '%;background:' + (clamped >= 0 ? '#ffd240' : '#7cc4ff') + '"></span>';
+        }
+        out += '<span class="bg-meter-strip" title="' + html(trk.label + ': ' + (isObj && raw.label ? raw.label : val)) + '">' + fill + '</span>';
+      } else {
+        const lbl = isObj ? String(raw.label ?? raw.text ?? raw.value ?? '') : String(raw);
+        if (lbl) {
+          out += '<span class="bg-tag-pill" style="--trk-color:' + html(clr) + '" title="' + html(trk.label + ': ' + lbl) + '">'
+            + html(trk.short + ': ' + lbl) + '</span>';
+        }
+      }
+    }
+    return out;
+  }
+
   function buildSpeakerRowsHtml(spk, spkCfg, winStart, winDur, trackPx, gridHtml, bandsHtml, isFloat) {
     const winEnd = winStart + winDur;
     const c = model.colorOf(spk);
@@ -2881,14 +3187,16 @@ APP_JS = r"""(() => {
     const rowCls = isFloat ? 'fc-row' : 'lane-row';
     const lblCls = isFloat ? 'fc-label' : 'lane-label';
     const trkCls = isFloat ? 'fc-track' : 'lane-track';
-    const rows = spkCfg.rows || [defaultPrimaryKind()];
-    let renderedPulses = false;
+    const rows = spkCfg.rows && spkCfg.rows.length ? spkCfg.rows : [{kind: defaultPrimaryKind(), bg: defaultBgForPrimary(spk)}];
     const allAnns = mergedAnnotations(true);
 
-    return rows.map((kind, ri) => {
+    return rows.map((rowObj, ri) => {
+      const kind = rowObj.kind;
+      const bg = rowObj.bg || [];
       const sameAsPrev = ri > 0;
-      const hasToneCurve = hasProsody && showTone && spkCfg.showTone && isPrimaryStreamKind(kind);
-      const baseRem = rowBaseRem(kind, hasToneCurve);
+      const wantToneBg = hasProsody && showTone && bg.includes('tone') && kind !== 'tone';
+      const wantBadges = hasProsody && bg.includes('badges');
+      const baseRem = rowBaseRem(rowObj, wantToneBg);
       const blocks = [];
 
       if (kind === 'analysis') {
@@ -2923,29 +3231,45 @@ APP_JS = r"""(() => {
             + seg.text + (seg.en ? ' — ' + seg.en : '');
           const posStyle = 'left:' + left.toFixed(3) + '%;width:' + width.toFixed(3) + '%;'
             + '--spk-color:' + c.fg + ';--spk-bg:' + c.bg + ';--spk-bg-hi:' + c.bgHi;
+          const tone = (kind === 'tone')
+            ? buildToneOverlay(seg, s0, s1, blockPx, c.fg, hasProsody && showTone, wantBadges)
+            : buildToneOverlay(seg, s0, s1, blockPx, c.fg, wantToneBg, wantBadges);
+          const toneBgHtml = tone ? tone.svg + tone.badge : '';
+          const toneCls = tone && tone.hasCurve && kind !== 'tone' ? ' has-tone-blk' : '';
+          const customBgHtml = buildCustomTrackBgHtml(seg, bg);
+          const fullTitle = title + (tone ? tone.tip : '');
 
-          if (kind === 'literal') {
+          if (kind === 'tone') {
+            if (tone && (tone.svg || tone.badge)) {
+              blocks.push(
+                '<div class="lane-block lb-tone-only' + (hasOv ? ' has-ov' : '') + '" data-index="' + seg.index + '"'
+                + ' style="' + posStyle + '" title="' + html(fullTitle) + '">' + toneBgHtml + customBgHtml + '</div>'
+              );
+            }
+          } else if (kind === 'literal') {
             const gc = buildGlossBlockContent(seg, s0, s1, blockPx, glossMeasurer);
             if (gc.inner) {
               blocks.push(
-                '<div class="lane-block lb-ww' + (hasOv ? ' has-ov' : '') + gc.cls + '" data-index="' + seg.index + '"'
-                + ' style="' + posStyle + '" title="' + html(title) + '">' + gc.inner + '</div>'
+                '<div class="lane-block lb-ww' + toneCls + (hasOv ? ' has-ov' : '') + gc.cls + '" data-index="' + seg.index + '"'
+                + ' style="' + posStyle + '" title="' + html(fullTitle) + '">' + toneBgHtml + customBgHtml + gc.inner + '</div>'
               );
             }
           } else if (kind === 'es-std') {
             if (seg.std) {
+              const inner = toneCls ? '<span class="lane-txt-top">' + html(seg.std) + '</span>' : html(seg.std);
               blocks.push(
-                '<div class="lane-block lb-std' + (hasOv ? ' has-ov' : '') + '" data-index="' + seg.index + '"'
-                + ' style="' + posStyle + '" title="' + html(spk + ' (neutral ES): ' + seg.std) + '">'
-                + html(seg.std) + '</div>'
+                '<div class="lane-block lb-std' + toneCls + (hasOv ? ' has-ov' : '') + '" data-index="' + seg.index + '"'
+                + ' style="' + posStyle + '" title="' + html(spk + ' (neutral ES): ' + seg.std + (tone ? tone.tip : '')) + '">'
+                + toneBgHtml + customBgHtml + inner + '</div>'
               );
             }
           } else if (kind === 'en') {
             if (seg.en) {
+              const inner = toneCls ? '<span class="lane-txt-top">' + html(seg.en) + '</span>' : html(seg.en);
               blocks.push(
-                '<div class="lane-block lb-en' + (hasOv ? ' has-ov' : '') + '" data-index="' + seg.index + '"'
-                + ' style="' + posStyle + '" title="' + html(spk + ': ' + seg.en) + '">'
-                + html(seg.en) + '</div>'
+                '<div class="lane-block lb-en' + toneCls + (hasOv ? ' has-ov' : '') + '" data-index="' + seg.index + '"'
+                + ' style="' + posStyle + '" title="' + html(spk + ': ' + seg.en + (tone ? tone.tip : '')) + '">'
+                + toneBgHtml + customBgHtml + inner + '</div>'
               );
             }
           } else if (kind === 'delivery') {
@@ -2960,34 +3284,44 @@ APP_JS = r"""(() => {
               blocks.push(
                 '<div class="lane-block lb-delivery' + (hasOv ? ' has-ov' : '') + '" data-index="' + seg.index + '"'
                 + ' style="' + posStyle + '" title="' + html(parts.join(' · ')) + '">'
-                + html(parts.join(' · ')) + '</div>'
+                + customBgHtml + html(parts.join(' · ')) + '</div>'
               );
             }
           } else if (kind.startsWith('track:')) {
             const trk = CUSTOM_TRACK_MAP.get(kind.slice(6));
             if (trk) {
-              const b = buildCustomTrackBlock(seg, trk, posStyle, hasOv);
+              let b = buildCustomTrackBlock(seg, trk, posStyle, hasOv);
+              if (b && (toneBgHtml || customBgHtml)) {
+                b = b.replace('</div>', toneBgHtml + customBgHtml + '</div>');
+                if (toneCls) b = b.replace('class="lane-block ', 'class="lane-block' + toneCls + ' ');
+              }
               if (b) blocks.push(b);
             }
           } else {
             const withFuri = kind === 'ja-furi';
             const content = buildLaneBlockContent(seg, s0, s1, blockPx, info, measurer, withFuri);
             const extraBlkCls = kind === 'ja-furi' ? ' ja-furi-blk' : kind === 'ja' ? ' ja-plain-blk' : '';
-            const tone = buildToneOverlay(seg, s0, s1, blockPx, c.fg, spkCfg);
-            const toneCls = tone && tone.hasCurve ? ' has-tone-blk' : '';
-            const fullTitle = title + (tone ? tone.tip : '');
             blocks.push(
               '<div class="lane-block' + extraBlkCls + toneCls + (hasOv ? ' has-ov' : '') + content.cls + '"'
               + ' data-index="' + seg.index + '" style="' + posStyle + '"'
-              + ' title="' + html(fullTitle) + '">' + (tone ? tone.svg + tone.badge : '') + content.inner + '</div>'
+              + ' title="' + html(fullTitle) + '">' + toneBgHtml + customBgHtml + content.inner + '</div>'
             );
           }
         }
       }
 
-      const showPulses = !renderedPulses && spkCfg.showPulses && isPrimaryStreamKind(kind);
-      if (showPulses) renderedPulses = true;
-      const pulses = showPulses ? (model.pulsesBySpeaker?.get(spk) || []).filter(p => p.end > winStart && p.start < winEnd).map(p => {
+      const bgAnnHtml = bg.includes('analysis') && kind !== 'analysis'
+        ? allAnns.filter(a => Math.max(a.end || 0, a.t + 3.0) > winStart && a.t < winEnd).map(a => {
+            const aEnd = Math.max(a.end || 0, a.t + 3.0);
+            const left = ((Math.max(a.t, winStart) - winStart) / winDur) * 100;
+            const width = Math.max(0.8, ((Math.min(aEnd, winEnd) - Math.max(a.t, winStart)) / winDur) * 100);
+            const ci = catInfo(a.cat);
+            return '<div class="bg-ann-band" style="left:' + left.toFixed(3) + '%;width:' + width.toFixed(3)
+              + '%;--cat-color:' + ci.color + '"><span class="bg-ann-tag">' + html(a.title || ci.label) + '</span></div>';
+          }).join('')
+        : '';
+
+      const pulses = bg.includes('pulses') ? (model.pulsesBySpeaker?.get(spk) || []).filter(p => p.end > winStart && p.start < winEnd).map(p => {
         const p0 = Math.max(p.start, winStart);
         const p1 = Math.min(p.end, winEnd);
         const left = ((p0 - winStart) / winDur) * 100;
@@ -3000,23 +3334,25 @@ APP_JS = r"""(() => {
 
       const av = avatarHtml(spk, isFloat ? 'av-sm' : (sameAsPrev ? 'av-sm' : ''));
       const kindShort = STREAM_MAP.get(kind)?.short || kind;
-      const grip = !isFloat && !sameAsPrev ? '<span class="lbl-grip" aria-hidden="true">⋮</span>' : '';
+      const bgExtras = bg.filter(b => b !== 'pulses' && !(isPrimaryStreamKind(kind) && (b === 'tone' || b === 'badges')));
+      const kindBadge = kindShort + (bgExtras.length ? '+' + bgExtras.map(b => b === 'tone' ? 'tone' : b === 'badges' ? 'lbl' : b.replace(/^track:/, '')).join('+') : '');
+      const grip = !isFloat ? '<span class="lbl-grip" aria-hidden="true">⋮</span>' : '';
       const cfgBtn = !sameAsPrev
-        ? '<button type="button" class="lbl-cfg-btn" data-cfg-spk="' + html(spk) + '" title="Configure ' + html(spk) + ' size, position &amp; subcomponents">⚙</button>'
+        ? '<button type="button" class="lbl-cfg-btn" data-cfg-spk="' + html(spk) + '" title="Configure ' + html(spk) + ' rows, order, BG layers &amp; size">⚙</button>'
         : '';
       const labelHtml = !sameAsPrev
         ? grip + av + '<span class="lbl-txt">' + html(spk) + '</span>'
-          + (rows.length > 1 || !isPrimaryStreamKind(kind) ? '<span class="lbl-kind">' + html(kindShort) + '</span>' : '')
+          + (rows.length > 1 || !isPrimaryStreamKind(kind) || bgExtras.length ? '<span class="lbl-kind">' + html(kindBadge) + '</span>' : '')
           + cfgBtn
-        : av + '<span class="lbl-txt">' + html(kindShort) + '</span>';
+        : grip + av + '<span class="lbl-txt">' + html(kindBadge) + '</span>';
 
       return '<div class="' + rowCls + '" style="--row-base-rem:' + baseRem.toFixed(2) + 'rem"'
-        + ' data-row-spk="' + html(spk) + '" data-row-kind="' + html(kind) + '">'
+        + ' data-row-spk="' + html(spk) + '" data-row-kind="' + html(kind) + '" data-row-idx="' + ri + '">'
         + '<div class="' + lblCls + (av ? ' has-avatar' : '') + (sameAsPrev ? ' sub-lbl' : '') + (isFiltered ? ' filtered' : '') + '"'
         + ' data-speaker="' + html(spk) + '" style="--spk-color:' + c.fg + '"'
-        + ' title="' + (isFloat ? 'Right-click or ⚙ to configure' : 'Drag up/down to reorder · Click to filter · Right-click or ⚙ to configure') + '">'
+        + ' title="' + (isFloat ? 'Right-click or ⚙ to reorder rows / combine BG' : 'Drag up/down to reorder row or speaker · Right-click or ⚙ to combine BG') + '">'
         + labelHtml + '</div>'
-        + '<div class="' + trkCls + '">' + gridHtml + bandsHtml + pulses + blocks.join('')
+        + '<div class="' + trkCls + '">' + gridHtml + bandsHtml + bgAnnHtml + pulses + blocks.join('')
         + '<div class="lane-playhead"></div></div></div>';
     }).join('');
   }
@@ -3346,7 +3682,10 @@ APP_JS = r"""(() => {
       const sc = speakerConfigs[s];
       if (!sc || !sc.visible) continue;
       for (const r of sc.rows) {
-        if (r.startsWith('track:')) out.add(r.slice(6));
+        if (r.kind.startsWith('track:')) out.add(r.kind.slice(6));
+        for (const b of (r.bg || [])) {
+          if (b.startsWith('track:')) out.add(b.slice(6));
+        }
       }
     }
     return [...out];
@@ -4106,6 +4445,59 @@ APP_JS = r"""(() => {
         return;
       }
 
+      // Tab switch inside Per-Speaker / All-Speakers Composer
+      const tabBtn = ev.target.closest('button[data-tab-spk]');
+      if (tabBtn) {
+        const target = tabBtn.dataset.tabSpk;
+        if (target === '__all__') renderAllSpeakersPopover(ax, ay);
+        else if (speakerConfigs[target]) renderSpeakerConfigPopover(target, ax, ay);
+        return;
+      }
+
+      // All-Speakers overview actions
+      const allKindBtn = ev.target.closest('button[data-all-kind]');
+      if (allKindBtn) {
+        toggleRowForAllSpeakers(allKindBtn.dataset.allKind);
+        renderAllSpeakersPopover(ax, ay);
+        return;
+      }
+      const allActBtn = ev.target.closest('button[data-all-act]');
+      if (allActBtn) {
+        const act = allActBtn.dataset.allAct;
+        const spk = allActBtn.dataset.spk;
+        if (act === 'vis' && spk && speakerConfigs[spk]) {
+          speakerConfigs[spk].visible = !speakerConfigs[spk].visible;
+          refreshAllTimelines(true);
+        } else if (act === 'float' && spk && speakerConfigs[spk]) {
+          speakerConfigs[spk].placement = speakerConfigs[spk].placement === 'float' ? 'dock' : 'float';
+          speakerConfigs[spk].visible = true;
+          refreshAllTimelines(true);
+        } else if (act === 'reset-all') {
+          localStorage.removeItem(spkStorageKey());
+          loadSpeakerConfigs();
+          refreshAllTimelines(true);
+        }
+        renderAllSpeakersPopover(ax, ay);
+        return;
+      }
+
+      // Per-speaker Row Composer actions (free order ↑/↓, combine BG, merge ↑, split ↗, add/remove row)
+      const rcBtn = ev.target.closest('button[data-rc]');
+      if (rcBtn && !rcBtn.disabled) {
+        const act = rcBtn.dataset.rc;
+        const spk = rcBtn.dataset.spk;
+        const ri = Number(rcBtn.dataset.ri);
+        if (act === 'up') moveRowWithinSpeaker(spk, ri, ri - 1);
+        else if (act === 'dn') moveRowWithinSpeaker(spk, ri, ri + 1);
+        else if (act === 'merge') mergeRowIntoAbove(spk, ri);
+        else if (act === 'bg') toggleBgOnRow(spk, ri, rcBtn.dataset.bg);
+        else if (act === 'split') splitBgToOwnRow(spk, ri, rcBtn.dataset.bg);
+        else if (act === 'add') addRowToSpeaker(spk, rcBtn.dataset.kind);
+        else if (act === 'rm') removeRowFromSpeaker(spk, ri);
+        renderSpeakerConfigPopover(spk, ax, ay);
+        return;
+      }
+
       // Per-speaker config buttons
       const scBtn = ev.target.closest('button[data-sc]');
       if (scBtn) {
@@ -4138,7 +4530,8 @@ APP_JS = r"""(() => {
           speakerConfigs[spk] = makeDefaultSpeakerCfg(spk, idx, speakerOrder.length);
           refreshAllTimelines(true);
         }
-        renderSpeakerConfigPopover(spk, ax, ay);
+        if (scBtn.dataset.stay === 'all') renderAllSpeakersPopover(ax, ay);
+        else renderSpeakerConfigPopover(spk, ax, ay);
       }
     });
 
@@ -4607,21 +5000,25 @@ APP_JS = r"""(() => {
       window.addEventListener('pointerup', finishDeckRz);
       window.addEventListener('pointercancel', finishDeckRz);
 
-      // Drag speaker label to reorder decks, or click to filter speaker
+      // Drag row label vertically: within same speaker reorders rows freely; across speakers reorders speaker decks
       let rd = null;
       lanesStage.addEventListener('pointerdown', ev => {
         if (ev.button !== 0 || ev.target.closest('button')) return;
         const lbl = ev.target.closest('.lane-label');
         if (!lbl) return;
+        const rowEl = lbl.closest('.lane-row');
         const deckEl = lbl.closest('.spk-deck');
-        if (!deckEl) return;
+        if (!deckEl || !rowEl) return;
         const spk = deckEl.dataset.spk;
         const fromIdx = speakerOrder.indexOf(spk);
+        const fromRowIdx = Number(rowEl.dataset.rowIdx);
         if (fromIdx < 0) return;
         ev.stopPropagation();
         rd = {
-          spk, fromIdx, targetSpk: spk, placeAfter: false, startY: ev.clientY, moved: false,
-          deckEl, canDrag: stageCfg.handlesMode !== 'hidden',
+          spk, fromIdx, fromRowIdx, mode: 'deck',
+          targetSpk: spk, targetRowIdx: fromRowIdx, placeAfter: false,
+          startY: ev.clientY, moved: false,
+          deckEl, rowEl, canDrag: stageCfg.handlesMode !== 'hidden',
         };
         try { lbl.setPointerCapture(ev.pointerId); } catch {}
       });
@@ -4629,12 +5026,37 @@ APP_JS = r"""(() => {
         if (!rd || !rd.canDrag) return;
         if (!rd.moved && Math.abs(ev.clientY - rd.startY) >= 6) {
           rd.moved = true;
-          rd.deckEl.classList.add('is-dragging');
           closeAllPopovers();
         }
         if (!rd.moved) return;
+        lanesStage.querySelectorAll('.is-dragging, .drag-over-top, .drag-over-bot, .is-row-dragging, .row-over-top, .row-over-bot')
+          .forEach(el => el.classList.remove('is-dragging', 'drag-over-top', 'drag-over-bot', 'is-row-dragging', 'row-over-top', 'row-over-bot'));
+
+        const deckRect = rd.deckEl.getBoundingClientRect();
+        const rowEls = [...rd.deckEl.querySelectorAll('.lane-row')];
+        if (rowEls.length > 1 && ev.clientY >= deckRect.top - 4 && ev.clientY <= deckRect.bottom + 4) {
+          rd.mode = 'row';
+          rd.rowEl.classList.add('is-row-dragging');
+          let overRow = rowEls[0];
+          let placeAfter = false;
+          for (const el of rowEls) {
+            const r = el.getBoundingClientRect();
+            if (ev.clientY < r.top + r.height / 2) { overRow = el; placeAfter = false; break; }
+            overRow = el;
+            placeAfter = true;
+          }
+          if (overRow) {
+            rd.targetRowIdx = Number(overRow.dataset.rowIdx);
+            rd.placeAfter = placeAfter;
+            if (rd.targetRowIdx !== rd.fromRowIdx) {
+              overRow.classList.add(placeAfter ? 'row-over-bot' : 'row-over-top');
+            }
+          }
+          return;
+        }
+        rd.mode = 'deck';
+        rd.deckEl.classList.add('is-dragging');
         const decks = [...lanesStage.querySelectorAll('.spk-deck')];
-        for (const el of decks) el.classList.remove('drag-over-top', 'drag-over-bot');
         let overEl = decks[0];
         let placeAfter = false;
         for (const el of decks) {
@@ -4655,9 +5077,13 @@ APP_JS = r"""(() => {
         if (!rd) return;
         const d = rd;
         rd = null;
-        lanesStage.querySelectorAll('.is-dragging, .drag-over-top, .drag-over-bot')
-          .forEach(el => el.classList.remove('is-dragging', 'drag-over-top', 'drag-over-bot'));
-        if (d.moved && d.targetSpk && d.targetSpk !== d.spk) {
+        lanesStage.querySelectorAll('.is-dragging, .drag-over-top, .drag-over-bot, .is-row-dragging, .row-over-top, .row-over-bot')
+          .forEach(el => el.classList.remove('is-dragging', 'drag-over-top', 'drag-over-bot', 'is-row-dragging', 'row-over-top', 'row-over-bot'));
+        if (d.moved && d.mode === 'row' && Number.isInteger(d.targetRowIdx) && d.targetRowIdx !== d.fromRowIdx) {
+          const ins = d.placeAfter ? d.targetRowIdx + 1 : d.targetRowIdx;
+          const toIdx = ins > d.fromRowIdx ? ins - 1 : ins;
+          moveRowWithinSpeaker(d.spk, d.fromRowIdx, toIdx);
+        } else if (d.moved && d.mode === 'deck' && d.targetSpk && d.targetSpk !== d.spk) {
           const targetIdx = speakerOrder.indexOf(d.targetSpk);
           const ins = d.placeAfter ? targetIdx + 1 : targetIdx;
           const toIdx = ins > d.fromIdx ? ins - 1 : ins;
@@ -4745,31 +5171,44 @@ APP_JS = r"""(() => {
       }, {passive: false});
     }
 
-    // Stream / Layers context menu actions
+    // Right-click row/speaker context menu actions
     const ctxMenu = document.getElementById('stream-ctx-menu');
     if (ctxMenu) {
       ctxMenu.addEventListener('click', ev => {
         ev.stopPropagation();
         const btn = ev.target.closest('button[data-act]');
-        if (!btn || !ctxMenuState) return;
+        if (!btn || btn.disabled || !ctxMenuState) return;
         const act = btn.dataset.act;
         const spk = btn.dataset.spk;
+        const ri = Number(btn.dataset.ri);
         const x = ctxMenuState.x;
         const y = ctxMenuState.y;
-        if (act === 'open-spk-cfg' && spk) {
-          renderSpeakerConfigPopover(spk, x, y);
-          return;
-        }
+        if (act === 'open-spk-cfg' && spk) { renderSpeakerConfigPopover(spk, x, y); return; }
+        if (act === 'open-all') { renderAllSpeakersPopover(x, y); return; }
         if (act === 'open-layout') { renderLayoutPopover(x, y); return; }
         if (act === 'open-labels') { renderLabelsPopover(x, y); return; }
-        if (act === 'toggle-kind') {
-          toggleRowForAllSpeakers(btn.dataset.kind);
+        if (act === 'row-up' && spk) {
+          moveRowWithinSpeaker(spk, ri, ri - 1);
           renderStreamMenu(x, y);
           return;
         }
-        if (act === 'toggle-spk' && spk && speakerConfigs[spk]) {
-          speakerConfigs[spk].visible = !speakerConfigs[spk].visible;
-          refreshAllTimelines(true);
+        if (act === 'row-dn' && spk) {
+          moveRowWithinSpeaker(spk, ri, ri + 1);
+          renderStreamMenu(x, y);
+          return;
+        }
+        if (act === 'row-merge' && spk) {
+          mergeRowIntoAbove(spk, ri);
+          closeStreamMenu();
+          return;
+        }
+        if (act === 'row-bg' && spk) {
+          toggleBgOnRow(spk, ri, btn.dataset.bg);
+          renderStreamMenu(x, y);
+          return;
+        }
+        if (act === 'add-one' && spk) {
+          addRowToSpeaker(spk, btn.dataset.kind);
           renderStreamMenu(x, y);
           return;
         }
@@ -4781,14 +5220,7 @@ APP_JS = r"""(() => {
           return;
         }
         if (act === 'rm-one' && spk) {
-          removeRowFromSpeaker(spk, btn.dataset.kind);
-          renderStreamMenu(x, y);
-          return;
-        }
-        if (act === 'reset-all') {
-          localStorage.removeItem(spkStorageKey());
-          loadSpeakerConfigs();
-          refreshAllTimelines(true);
+          removeRowFromSpeaker(spk, Number.isInteger(ri) ? ri : btn.dataset.kind);
           closeStreamMenu();
         }
       });
@@ -4850,7 +5282,13 @@ APP_JS = r"""(() => {
           for (const s of speakerOrder) {
             const cfg = speakerConfigs[s];
             if (!cfg) continue;
-            cfg.rows = [...new Set(cfg.rows.map(r => (r === from ? to : r)))];
+            const seen = new Set();
+            const next = [];
+            for (const r of cfg.rows) {
+              const nk = r.kind === from ? to : r.kind;
+              if (!seen.has(nk)) { seen.add(nk); next.push({kind: nk, bg: [...r.bg]}); }
+            }
+            cfg.rows = next;
           }
           saveSpeakerConfigs();
         }
@@ -4868,9 +5306,14 @@ APP_JS = r"""(() => {
     if (rowsMenuBtn) {
       rowsMenuBtn.onclick = ev => {
         ev.stopPropagation();
+        if (openPopoverKind.startsWith('speaker:') || openPopoverKind === 'all-speakers') {
+          closeCfgPopover();
+          return;
+        }
         const r = rowsMenuBtn.getBoundingClientRect();
-        ctxMenuState = {hitSpk: '', hitKind: '', x: r.left, y: Math.max(12, r.top - 340)};
-        renderStreamMenu(r.left, Math.max(12, r.top - 340));
+        const firstSpk = speakerOrder.find(s => speakerConfigs[s]?.visible) || speakerOrder[0];
+        if (firstSpk) renderSpeakerConfigPopover(firstSpk, r.left, Math.max(12, r.top - 420));
+        else renderAllSpeakersPopover(r.left, Math.max(12, r.top - 360));
       };
     }
     const layoutBtn = document.getElementById('open-layout-menu');
@@ -5204,18 +5647,6 @@ def _index_html(
     </div>
   </div>
 
-  <section class="transcript" id="transcript-panel">
-    <div class="transcript-controls">
-      <input class="transcript-search" id="transcript-search" type="search"
-        placeholder="search words…" autocomplete="off">
-      <label>Filter
-        <select id="transcript-filter"><option value="all">all</option></select>
-      </label>
-      <button type="button" id="toggle-autoscroll" aria-pressed="true">Auto-scroll</button>
-    </div>
-    <div class="caption-box" id="caption-box"></div>
-  </section>
-
   <section class="viz-stage" id="viz-stage">
     <div class="speaker-lanes" id="speaker-lanes">
       <div class="lanes-stage timer-bottom" id="lanes-stage">
@@ -5251,7 +5682,7 @@ def _index_html(
             </select>
           </label>
           <button type="button" id="lanes-follow" aria-pressed="true" title="Keep timeline synced to playback">Follow</button>
-          <button type="button" id="open-rows-menu" title="Speakers, subcomponents, translations &amp; analysis tracks">Layers</button>
+          <button type="button" id="open-rows-menu" title="Per-speaker rows, free row order, combined BG layers &amp; all-speaker presets">Layers</button>
           <button type="button" id="open-layout-menu" title="Video aspect fit, placement below/over, separate speakers, timer &amp; handles">Layout</button>
           <button type="button" id="toggle-tone" aria-pressed="true"{tone_btn_hidden} title="Show or hide live pitch &amp; loudness tone curve (T)">Tone</button>
           <button type="button" id="open-labels-menu" aria-pressed="true"{tone_btn_hidden} title="Configure or hide meta-labels (loud, falsetto, pitch, pace)">Labels</button>
@@ -5268,6 +5699,18 @@ def _index_html(
         </div>
       </div>
     </div>
+  </section>
+
+  <section class="transcript" id="transcript-panel">
+    <div class="transcript-controls">
+      <input class="transcript-search" id="transcript-search" type="search"
+        placeholder="search words…" autocomplete="off">
+      <label>Filter
+        <select id="transcript-filter"><option value="all">all</option></select>
+      </label>
+      <button type="button" id="toggle-autoscroll" aria-pressed="true">Auto-scroll</button>
+    </div>
+    <div class="caption-box" id="caption-box"></div>
   </section>
 
   <section class="vocab-panel" id="vocab-panel" hidden>
