@@ -111,6 +111,8 @@ html, body {
   margin: 0; padding: 0; background: var(--bg); color: var(--fg);
   font: 15px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
+body.is-dragging-layout { user-select: none; }
+body.is-dragging-layout #yt-frame { pointer-events: none !important; }
 a { color: #7cc4ff; text-decoration: none; }
 a:hover { text-decoration: underline; }
 button, select, input {
@@ -118,10 +120,11 @@ button, select, input {
   border-radius: 5px; padding: .26rem .52rem; cursor: pointer;
 }
 button:hover, select:hover { background: #1e232c; border-color: #637083; }
-button:disabled { opacity: 1; border-color: #252a32; background: #101216; cursor: not-allowed; }
+button:disabled { opacity: .45; border-color: #252a32; background: #101216; cursor: not-allowed; }
 button[aria-pressed="true"] { border-color: #68c77b; background: #142618; }
 input[type="search"], input[type="text"] { cursor: text; }
-input::placeholder { color: #fff; opacity: 1; }
+input[type="range"] { padding: 0; accent-color: #7cc4ff; cursor: pointer; }
+input::placeholder { color: #94a3b8; opacity: 1; }
 [hidden] { display: none !important; }
 [lang="ja"], [lang="ja"] * {
   font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN",
@@ -132,159 +135,276 @@ rt { font-size: .56em; font-weight: 600; color: #dbeafe; user-select: none; }
 html.no-furigana rt { display: none; }
 
 header.top {
-  padding: .36rem .9rem .3rem; border-bottom: 1px solid #1d2129; background: #0a0b0e;
+  padding: .34rem .85rem .28rem; border-bottom: 1px solid #1d2129; background: #0a0b0e;
 }
 .top-row {
   display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
   gap: .3rem .9rem;
 }
-header.top h1 { margin: 0; font-size: 1.06rem; line-height: 1.25; font-weight: 700; }
-.top-nav { display: flex; flex-wrap: wrap; align-items: center; gap: .38rem .75rem; font-size: .82rem; }
+header.top h1 { margin: 0; font-size: 1.04rem; line-height: 1.25; font-weight: 700; }
+.top-nav { display: flex; flex-wrap: wrap; align-items: center; gap: .38rem .72rem; font-size: .82rem; }
 .top-nav .sep { opacity: .45; }
 .top-nav button { font-size: .78rem; padding: .14rem .44rem; }
-.chapters { display: flex; flex-wrap: wrap; align-items: center; gap: .26rem; margin-top: .28rem; }
-.chapters button { font-size: .75rem; padding: .1rem .4rem; background: #111419; border-color: #2d333e; }
+.chapters { display: flex; flex-wrap: wrap; align-items: center; gap: .24rem; margin-top: .25rem; }
+.chapters button { font-size: .74rem; padding: .1rem .38rem; background: #111419; border-color: #2d333e; }
 
-main { padding: .42rem .9rem 1.4rem; width: 100%; max-width: none; margin: 0 auto; }
+main { padding: .4rem .85rem 1.2rem; width: 100%; max-width: none; margin: 0 auto; }
 main.split-view { display: block; }
 
+/* Monitor Stage: strictly aspect-contained video + optional below/top dock + floating speaker layer */
 .player-wrap {
-  position: relative; background: #000; border: 1px solid var(--border);
+  position: relative; display: flex; flex-direction: column;
+  background: #000; border: 1px solid var(--border);
   border-radius: 7px; overflow: hidden;
+  width: 100%;
 }
 .player-wrap:fullscreen,
 .player-wrap:-webkit-full-screen {
-  width: 100vw; height: 100vh; max-width: none; max-height: none;
+  width: 100vw !important; height: 100vh !important;
+  max-width: none !important; max-height: none !important;
   border: 0; border-radius: 0; background: #000;
 }
-.video-box { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; }
-.player-wrap:fullscreen .video-box,
-.player-wrap:-webkit-full-screen .video-box {
-  width: 100%; height: 100%; aspect-ratio: auto;
+.stage-video-area {
+  position: relative; flex: 1 1 0; min-height: 0; min-width: 0;
+  width: 100%; display: flex;
+  align-items: center; justify-content: center;
+  background: #000; overflow: hidden; order: 2;
+}
+.video-box {
+  position: relative; background: #000; flex: 0 0 auto;
+  width: 100%; height: 100%; max-width: 100%; max-height: 100%;
 }
 .video-box iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 
-/* Overlay timeline over the bottom of the YouTube player (opt-in via Overlay button) */
-.ov-overlay {
-  --ov-scale: 1;
-  --ov-bottom: 62px;
-  --ov-alpha: 0.88;
-  position: absolute; left: .7rem; right: .7rem; bottom: var(--ov-bottom); z-index: 20;
-  overflow: visible;
-  background: rgba(7, 8, 10, var(--ov-alpha)); border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 7px; pointer-events: auto; backdrop-filter: blur(5px);
-  user-select: none;
+/* Draggable splitter between video and docked scrollers inside Fullscreen */
+.stage-splitter {
+  flex: 0 0 8px; height: 8px; background: #141923;
+  border-top: 1px solid #2b3444; border-bottom: 1px solid #2b3444;
+  cursor: ns-resize; position: relative; z-index: 15; order: 3; touch-action: none;
 }
-.ov-ruler-row, .ov-row { display: grid; grid-template-columns: 9.8rem minmax(0, 1fr); }
-.ov-ruler-row {
-  height: calc(1.35rem * var(--ov-scale)); background: rgba(14, 16, 20, 0.96);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px 6px 0 0;
+.stage-splitter::after {
+  content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 48px; height: 3px; border-radius: 99px; background: #5b6980;
 }
-.ov-gutter {
-  display: flex; align-items: center; justify-content: space-between; gap: .25rem;
-  padding: 0 .32rem; border-right: 1px solid rgba(255, 255, 255, 0.14);
-  cursor: ns-resize; color: #94a3b8; font-size: calc(.72rem * var(--ov-scale));
-  line-height: 1; touch-action: none;
-}
-.ov-gutter:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
-.ov-grip { display: inline-flex; align-items: center; gap: .22rem; font-weight: 700; white-space: nowrap; }
-.ov-fs-btn {
-  padding: 0 .34rem; height: calc(1.08rem * var(--ov-scale)); min-height: 15px;
-  font-size: calc(.68rem * var(--ov-scale)); font-weight: 700; line-height: 1;
-  border-radius: 3px; border: 1px solid rgba(124, 196, 255, 0.5);
-  background: rgba(20, 28, 42, 0.94); color: #fff; cursor: pointer;
-}
-.ov-fs-btn:hover { background: #263143; border-color: #7cc4ff; color: #fff; }
-.ov-ruler { position: relative; overflow: hidden; cursor: pointer; }
-.ov-overlay .ruler-tick {
-  font-size: calc(.72rem * var(--ov-scale)); line-height: calc(1.35rem * var(--ov-scale));
-}
-.ov-overlay .ruler-ov-pill,
-.ov-overlay .ruler-note-pin {
-  font-size: calc(.65rem * var(--ov-scale)); line-height: calc(1.35rem * var(--ov-scale) - 4px);
-}
-.ov-row { height: calc(2.55rem * var(--ov-scale)); border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
-.ov-overlay.has-tone .ov-row { height: calc(3.35rem * var(--ov-scale)); }
-.ov-row.row-ja, .ov-row.row-es { height: calc(2.5rem * var(--ov-scale)); }
-.ov-overlay.has-tone .ov-row.row-ja,
-.ov-overlay.has-tone .ov-row.row-es { height: calc(3.3rem * var(--ov-scale)); }
-.ov-row.row-ja-furi { height: calc(3.15rem * var(--ov-scale)); }
-.ov-overlay.has-tone .ov-row.row-ja-furi { height: calc(3.95rem * var(--ov-scale)); }
-.ov-row.row-es-std { height: calc(2.0rem * var(--ov-scale)); }
-.ov-row.row-literal { height: calc(1.95rem * var(--ov-scale)); }
-.ov-row.row-en { height: calc(2.0rem * var(--ov-scale)); }
-.ov-row.row-grp-end { border-bottom: 2px solid rgba(255, 255, 255, 0.28); }
-.ov-row:last-child { border-bottom: 0; }
-.ov-label {
-  display: flex; align-items: center; gap: .32rem; padding: 0 .4rem 0 .26rem;
-  border-right: 1px solid rgba(255, 255, 255, 0.14); font-size: calc(.8rem * var(--ov-scale)); font-weight: 800;
-  color: var(--spk-color, #fff); background: rgba(10, 12, 16, 0.88);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: grab; touch-action: none;
-}
-.ov-label:hover { background: rgba(24, 30, 40, 0.94); }
-.ov-label.sub-lbl {
-  font-size: calc(.73rem * var(--ov-scale)); font-weight: 700; box-shadow: inset 3px 0 var(--spk-color, #fff);
-  background: rgba(8, 10, 14, 0.86);
-}
-.ov-overlay .spk-avatar {
-  width: calc(20px * var(--ov-scale)); height: calc(20px * var(--ov-scale));
-  min-width: 12px; min-height: 12px; border-width: 1.5px;
-}
-.ov-overlay .lbl-kind { font-size: calc(.64rem * var(--ov-scale)); }
-.ov-track { position: relative; overflow: hidden; cursor: pointer; }
-.ov-overlay .lane-block {
-  top: 2px; bottom: 2px;
-  line-height: calc(2.55rem * var(--ov-scale) - 6px);
-  font-size: calc(.84rem * var(--ov-scale));
-}
-.ov-overlay .lane-block.ja-plain-blk {
-  line-height: calc(2.5rem * var(--ov-scale) - 6px);
-  font-size: calc(.84rem * var(--ov-scale));
-}
-.ov-overlay .lane-block.ja-furi-blk { line-height: 1.18; font-size: calc(.86rem * var(--ov-scale)); }
-.ov-overlay .lane-block.ja-furi-blk .lane-word { top: auto; bottom: 2px; line-height: 1.18; }
-.ov-overlay .lane-block.ja-plain-blk .lane-word { top: 50%; bottom: auto; transform: translateY(-50%); }
-.ov-overlay .lane-block.lb-ww {
-  line-height: calc(1.95rem * var(--ov-scale) - 6px);
-  font-size: calc(.74rem * var(--ov-scale));
-}
-.ov-overlay .lane-block.lb-en {
-  line-height: calc(2.0rem * var(--ov-scale) - 6px);
-  font-size: calc(.78rem * var(--ov-scale));
-}
-.ov-overlay.has-tone .lane-block.has-tone-blk {
-  line-height: calc(1.5rem * var(--ov-scale));
-}
-.ov-overlay.has-tone .lane-block.has-tone-blk .lane-words {
-  height: 50%; line-height: calc(1.5rem * var(--ov-scale));
-}
-.lbl-grip {
-  color: rgba(255, 255, 255, 0.34); font-size: .78em; line-height: 1; flex: 0 0 auto;
-  letter-spacing: -1px;
-}
-.ov-label:hover .lbl-grip, .lane-label:hover .lbl-grip { color: rgba(255, 255, 255, 0.85); }
-.is-dragging { opacity: .42; }
-.is-dragging .ov-label, .is-dragging .lane-label { cursor: grabbing; }
-.drag-over-top { box-shadow: inset 0 2.5px 0 var(--gold); }
-.drag-over-bot { box-shadow: inset 0 -2.5px 0 var(--gold); }
+.stage-splitter:hover, .stage-splitter.is-active { background: #1f2b3d; }
+.stage-splitter:hover::after, .stage-splitter.is-active::after { background: #7cc4ff; }
 
-/* Primary speech-overlap swimlane visualization */
-.viz-stage { margin: .65rem 0 .8rem; }
+.stage-dock {
+  flex: 0 0 auto; max-height: 62vh; overflow-y: auto;
+  background: #07090d; z-index: 14; order: 4;
+}
+.player-wrap.dock-top .stage-dock { order: 0; }
+.player-wrap.dock-top .stage-splitter { order: 1; }
+.player-wrap.dock-top .stage-video-area { order: 2; }
+.stage-dock .speaker-lanes { border: 0; border-radius: 0; box-shadow: none; }
+
+/* Windowed Theater stage height resizer along bottom edge of player-wrap */
+.stage-win-resize {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 7px; z-index: 28;
+  cursor: ns-resize; touch-action: none; background: transparent;
+}
+.stage-win-resize::after {
+  content: ""; position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%);
+  width: 44px; height: 3px; border-radius: 99px; background: rgba(124, 196, 255, 0.45);
+  opacity: 0; transition: opacity .15s;
+}
+.player-wrap:fullscreen .stage-win-resize,
+.player-wrap:-webkit-full-screen .stage-win-resize { display: none; }
+html.handles-show .stage-win-resize::after,
+.stage-win-resize:hover::after { opacity: 1; }
+html.handles-hidden .stage-win-resize { pointer-events: none; display: none; }
+
+/* Minimal floating corner HUD in Fullscreen when dock is hidden */
+.fs-corner-hud {
+  position: absolute; top: 8px; right: 10px; z-index: 40;
+  display: flex; align-items: center; gap: .3rem;
+  padding: .22rem .36rem; border-radius: 6px;
+  background: rgba(10, 13, 19, 0.84); border: 1px solid rgba(124, 196, 255, 0.42);
+  backdrop-filter: blur(5px); opacity: .28; transition: opacity .18s;
+}
+.fs-corner-hud:hover, html.handles-show .fs-corner-hud { opacity: 1; }
+.fs-corner-hud button { font-size: .74rem; padding: .14rem .42rem; }
+
+/* Independent floating per-speaker scroller layer (covers entire stage incl. ultrawide & bottom matte) */
+.stage-float-layer {
+  position: absolute; inset: 0; pointer-events: none; z-index: 24; overflow: hidden;
+}
+.spk-float-card {
+  --fc-scale: 1;
+  --fc-alpha: 0.90;
+  position: absolute; pointer-events: auto;
+  display: flex; flex-direction: column;
+  background: rgba(7, 9, 13, var(--fc-alpha));
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-top: 2px solid var(--spk-color, #7cc4ff);
+  border-radius: 7px; backdrop-filter: blur(5px);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.56);
+  user-select: none; overflow: visible;
+  min-width: 170px;
+}
+.spk-float-card.is-moving {
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.78), 0 0 0 1.5px var(--spk-color, #7cc4ff);
+  z-index: 32;
+}
+.fc-bar {
+  display: flex; align-items: center; gap: .3rem;
+  padding: .16rem .34rem; min-height: 22px;
+  background: rgba(14, 18, 26, 0.94);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 5px 5px 0 0; cursor: move; touch-action: none;
+  font-size: calc(.75rem * var(--fc-scale));
+}
+.fc-bar-name {
+  font-weight: 800; color: var(--spk-color, #fff);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fc-bar-grip { color: #94a3b8; font-weight: 700; flex: 0 0 auto; letter-spacing: -.5px; }
+.fc-bar-btns { display: inline-flex; align-items: center; gap: .2rem; margin-left: auto; flex: 0 0 auto; }
+.fc-bar-btn {
+  padding: .04rem .3rem; font-size: .7rem; line-height: 1.25;
+  border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(20, 26, 36, 0.92); color: #e2e8f0;
+}
+.fc-bar-btn:hover { border-color: #7cc4ff; color: #fff; background: #223047; }
+
+/* Handles visibility modes (Show / Hover / Locked-Hidden) */
+html.handles-hover .spk-float-card .fc-bar {
+  position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: 2px;
+  border-radius: 5px; border: 1px solid rgba(255, 255, 255, 0.24);
+  opacity: 0; pointer-events: none; transition: opacity .15s;
+}
+html.handles-hover .spk-float-card:hover .fc-bar,
+html.handles-hover .spk-float-card.is-moving .fc-bar,
+html.handles-hover .spk-float-card:focus-within .fc-bar {
+  opacity: 1; pointer-events: auto;
+}
+html.handles-hidden .spk-float-card .fc-bar,
+html.handles-hidden .fc-rz,
+html.handles-hidden .spk-deck-resizer,
+html.handles-hidden .lbl-grip,
+html.handles-hidden .lbl-cfg-btn,
+html.handles-hidden .stage-splitter {
+  display: none !important;
+}
+html.handles-hidden .lane-label,
+html.handles-hidden .fc-label { cursor: pointer; }
+html.handles-hover .spk-deck-resizer { opacity: .12; transition: opacity .15s; }
+html.handles-hover .spk-deck:hover .spk-deck-resizer,
+html.handles-hover .spk-deck-resizer:hover { opacity: 1; }
+html.handles-hover .lbl-cfg-btn { opacity: .28; transition: opacity .15s; }
+html.handles-hover .lane-label:hover .lbl-cfg-btn,
+html.handles-hover .fc-label:hover .lbl-cfg-btn,
+html.handles-show .lbl-cfg-btn { opacity: 1; }
+
+.fc-stage { display: flex; flex-direction: column; overflow: hidden; border-radius: 0 0 6px 6px; }
+html.handles-hover .fc-stage, html.handles-hidden .fc-stage { border-radius: 5px; }
+.fc-rows { display: flex; flex-direction: column; order: 2; }
+.fc-ruler-row {
+  display: grid; grid-template-columns: var(--fc-gutter, 6.2rem) minmax(0, 1fr);
+  height: calc(1.3rem * var(--fc-scale)); background: rgba(12, 15, 21, 0.94);
+  border-top: 1px solid rgba(255, 255, 255, 0.14); order: 3;
+}
+.fc-stage.timer-top .fc-ruler-row {
+  order: 1; border-top: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+.fc-stage.timer-hidden .fc-ruler-row { display: none; }
+.fc-stage.no-gutter .fc-ruler-row,
+.fc-stage.no-gutter .fc-row { grid-template-columns: minmax(0, 1fr); }
+.fc-stage.no-gutter .fc-gutter,
+.fc-stage.no-gutter .fc-label { display: none; }
+.fc-gutter {
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 .3rem; border-right: 1px solid rgba(255, 255, 255, 0.12);
+  font: 700 calc(.68rem * var(--fc-scale))/1 var(--mono); color: #9ec5fe;
+  font-variant-numeric: tabular-nums; cursor: pointer;
+}
+.fc-ruler { position: relative; overflow: hidden; cursor: pointer; }
+.fc-row {
+  display: grid; grid-template-columns: var(--fc-gutter, 6.2rem) minmax(0, 1fr);
+  height: calc(var(--row-base-rem, 2.55rem) * var(--fc-scale));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+.fc-row:last-child { border-bottom: 0; }
+.fc-label {
+  display: flex; align-items: center; gap: .26rem; padding: 0 .3rem 0 .24rem;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: calc(.76rem * var(--fc-scale)); font-weight: 800;
+  color: var(--spk-color, #fff); background: rgba(10, 13, 18, 0.88);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fc-label.sub-lbl {
+  font-size: calc(.7rem * var(--fc-scale)); font-weight: 700;
+  box-shadow: inset 3px 0 var(--spk-color, #fff);
+}
+.fc-track { position: relative; overflow: hidden; cursor: pointer; }
+.spk-float-card .ruler-tick {
+  font-size: calc(.68rem * var(--fc-scale)); line-height: calc(1.3rem * var(--fc-scale));
+}
+.spk-float-card .lane-block {
+  top: 2px; bottom: 2px;
+  font-size: calc(.84rem * var(--fc-scale));
+  line-height: calc(var(--row-base-rem, 2.55rem) * var(--fc-scale) - 6px);
+}
+.spk-float-card .lane-block.has-tone-blk {
+  line-height: calc(1.48rem * var(--fc-scale));
+}
+.spk-float-card .lane-block.has-tone-blk .lane-words {
+  height: 52%; line-height: calc(1.48rem * var(--fc-scale));
+}
+.spk-float-card .lane-block.lb-ww { font-size: calc(.74rem * var(--fc-scale)); }
+.spk-float-card .lane-block.lb-en,
+.spk-float-card .lane-block.lb-std,
+.spk-float-card .lane-block.lb-custom-text { font-size: calc(.78rem * var(--fc-scale)); }
+.spk-float-card .spk-avatar {
+  width: calc(19px * var(--fc-scale)); height: calc(19px * var(--fc-scale));
+  min-width: 13px; min-height: 13px; border-width: 1.5px;
+}
+
+/* Edge & corner resize handles on each floating speaker card */
+.fc-rz { position: absolute; z-index: 30; touch-action: none; }
+.fc-rz-w { top: 4px; bottom: 4px; left: -4px; width: 8px; cursor: ew-resize; }
+.fc-rz-e { top: 4px; bottom: 4px; right: -4px; width: 8px; cursor: ew-resize; }
+.fc-rz-s { left: 8px; right: 14px; bottom: -4px; height: 8px; cursor: ns-resize; }
+.fc-rz-se {
+  right: -3px; bottom: -3px; width: 14px; height: 14px; cursor: nwse-resize;
+  border-right: 2.5px solid var(--spk-color, #7cc4ff);
+  border-bottom: 2.5px solid var(--spk-color, #7cc4ff);
+  border-radius: 0 0 4px 0; opacity: .75;
+}
+html.handles-hover .fc-rz-se { opacity: 0; transition: opacity .15s; }
+html.handles-hover .spk-float-card:hover .fc-rz-se,
+html.handles-hover .spk-float-card.is-moving .fc-rz-se { opacity: .9; }
+
+/* Primary docked speech-overlap swimlane visualization */
+.viz-stage { margin: .55rem 0 .7rem; }
 .speaker-lanes {
   border: 1px solid var(--border); border-radius: 7px;
   background: #08090c; overflow: hidden;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
 }
-.lanes-stage { position: relative; user-select: none; }
-.lanes-ruler-row, .lane-row { display: grid; grid-template-columns: 10.2rem minmax(0, 1fr); }
-.lanes-ruler-row {
-  border-bottom: 1px solid #222730; background: #0d1015; height: 1.55rem;
+.lanes-stage {
+  position: relative; user-select: none; display: flex; flex-direction: column;
 }
-.lanes-gutter { border-right: 1px solid #222730; }
+.lanes-body { order: 2; display: flex; flex-direction: column; }
+.lanes-ruler-row {
+  display: grid; grid-template-columns: 10.6rem minmax(0, 1fr);
+  border-top: 1px solid #222730; background: #0d1015; height: 1.52rem; order: 3;
+}
+.lanes-stage.timer-top .lanes-ruler-row {
+  order: 1; border-top: 0; border-bottom: 1px solid #222730;
+}
+.lanes-stage.timer-hidden .lanes-ruler-row { display: none; }
+.lanes-gutter {
+  display: flex; align-items: center; justify-content: space-between; gap: .25rem;
+  padding: 0 .45rem; border-right: 1px solid #222730;
+  font: 700 .75rem/1.52rem var(--mono); color: #9ec5fe;
+  font-variant-numeric: tabular-nums; cursor: pointer;
+}
+.lanes-gutter:hover { background: #151b26; color: #fff; }
 .lanes-ruler { position: relative; overflow: hidden; cursor: pointer; }
 .ruler-tick {
   position: absolute; top: 0; bottom: 0; border-left: 1px solid #2a303b;
-  padding-left: .28rem; font: 700 .72rem/1.55rem var(--mono); color: #fff;
+  padding-left: .28rem; font: 700 .72rem/1.52rem var(--mono); color: #fff;
   font-variant-numeric: tabular-nums; pointer-events: none; white-space: nowrap;
 }
 .lane-gridline {
@@ -321,154 +441,90 @@ main.split-view { display: block; }
 .ann-live-title { font-weight: 800; color: #fff; }
 .ann-live-note { color: #fff; flex: 1 1 18rem; }
 .ann-live button { font-size: .76rem; padding: .12rem .4rem; margin-left: auto; }
-.lane-row { border-bottom: 1px solid #1b1f27; height: 3.05rem; }
-.lanes-stage.has-tone .lane-row { height: 3.95rem; }
-.lane-row.row-ja, .lane-row.row-es { height: 3.05rem; }
-.lanes-stage.has-tone .lane-row.row-ja,
-.lanes-stage.has-tone .lane-row.row-es { height: 3.95rem; }
-.lane-row.row-ja-furi { height: 3.6rem; }
-.lanes-stage.has-tone .lane-row.row-ja-furi { height: 4.9rem; }
-.lane-row.row-es-std { height: 2.15rem; }
-.lane-row.row-literal { height: 2.1rem; }
-.lane-row.row-en { height: 2.2rem; }
-.lane-row.row-grp-end { border-bottom: 2px solid #2e3748; }
-.lane-row:last-child { border-bottom: 0; }
-.lane-label.sub-lbl {
-  font-size: .76rem; font-weight: 700; color: var(--spk-color, #fff); background: #090b0f;
-  padding-left: .55rem; box-shadow: inset 3px 0 var(--spk-color, #fff); cursor: pointer;
+
+/* Per-speaker deck inside the docked swimlane (supports separate height, width & subcomponents) */
+.spk-deck {
+  --spk-scale: 1;
+  position: relative; display: flex; flex-direction: column;
+  border-bottom: 2px solid #293242; background: #08090c;
 }
-.lane-label.sub-lbl::before { display: none; }
-.lane-label.has-avatar::before { display: none; }
-.lbl-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.lbl-kind {
-  margin-left: auto; font: 700 .66rem/1.2 var(--mono); padding: .04rem .26rem;
-  border-radius: 3px; border: 1px solid var(--spk-color, #7cc4ff); color: var(--spk-color, #fff);
-  opacity: .9; flex: 0 0 auto;
+.spk-deck:last-child { border-bottom: 0; }
+.spk-deck.deck-narrow {
+  border-left: 1px solid #293242; border-right: 1px solid #293242;
 }
-.spk-avatar {
-  width: 26px; height: 26px; border-radius: 999px; object-fit: cover; flex: 0 0 auto;
-  border: 2px solid var(--spk-color, #7cc4ff); background: #141820;
+.spk-deck-resizer {
+  height: 5px; background: transparent; cursor: ns-resize; touch-action: none;
+  position: relative; z-index: 6; margin-top: -2px;
 }
-.spk-avatar.av-sm { width: 20px; height: 20px; border-width: 1.5px; }
-.spk-avatar.av-xs { width: 18px; height: 18px; border-width: 1.5px; }
-.lane-block.ja-furi-blk {
-  top: 4px; bottom: 4px; line-height: 1.25; font-size: .92rem;
+.spk-deck-resizer::after {
+  content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 36px; height: 2px; border-radius: 99px; background: var(--spk-color, #64748b);
 }
-.lane-block.ja-furi-blk .lane-word { top: auto; bottom: 4px; line-height: 1.25; }
-.lane-block.ja-furi-blk rt { display: ruby-text !important; }
-.lane-block.ja-plain-blk {
-  top: 4px; bottom: 4px; line-height: calc(3.05rem - 10px); font-size: .92rem;
+.spk-deck-resizer:hover { background: rgba(124, 196, 255, 0.16); }
+
+.lane-row {
+  display: grid; grid-template-columns: 10.6rem minmax(0, 1fr);
+  border-bottom: 1px solid #1b1f27;
+  height: calc(var(--row-base-rem, 3.0rem) * var(--spk-scale, 1));
 }
-.lane-block.ja-plain-blk rt { display: none !important; }
-.lane-block.lb-ww {
-  top: 3px; bottom: 3px; border: 1px dashed var(--spk-color, #7cc4ff);
-  background: var(--spk-bg, rgba(124, 196, 255, 0.16));
-  font-size: .78rem; font-weight: 600; line-height: calc(2.1rem - 8px);
+.spk-deck.no-gutter .lane-row { grid-template-columns: minmax(0, 1fr); }
+.spk-deck.no-gutter .lane-label { display: none; }
+.lane-row:last-of-type { border-bottom: 0; }
+.deck-mini-ruler {
+  display: grid; grid-template-columns: 10.6rem minmax(0, 1fr);
+  height: 1.25rem; background: #0d1015; border-top: 1px solid #222730;
 }
-.lane-block.lb-ww .lane-word { color: #fff; font-weight: 600; }
-.lane-block.lb-ww.now { border-style: solid; border-color: #fff; background: var(--spk-bg-hi, rgba(124, 196, 255, 0.36)); }
-.lane-block.lb-ww .lane-word.lw-now { color: #fff; background: rgba(255, 255, 255, 0.32); }
-.lane-block.lb-en {
-  top: 3px; bottom: 3px; border: 1px solid var(--spk-color, #7cc4ff);
-  border-left: 3px solid var(--spk-color, #7cc4ff);
-  background: var(--spk-bg, rgba(124, 196, 255, 0.14)); color: #fff;
-  font-size: .82rem; font-weight: 500; line-height: calc(2.2rem - 8px); padding: 0 .45rem;
-}
-.lane-block.lb-en.now { border-color: #fff; background: var(--spk-bg-hi, rgba(124, 196, 255, 0.38)); }
-.lane-block.lb-std {
-  top: 3px; bottom: 3px; border: 1px dotted var(--spk-color, #7cc4ff);
-  border-left: 3px solid var(--spk-color, #7cc4ff);
-  background: rgba(20, 26, 38, 0.72); color: #e2e8f0;
-  font-size: .8rem; font-weight: 500; line-height: calc(2.15rem - 8px); padding: 0 .45rem;
-}
-.lane-block.lb-std.now { border-style: solid; border-color: #fff; background: var(--spk-bg-hi, rgba(124, 196, 255, 0.36)); color: #fff; }
-.ov-overlay .lane-block.lb-std {
-  line-height: calc(2.0rem * var(--ov-scale) - 6px);
-  font-size: calc(.76rem * var(--ov-scale));
-}
-.lanes-empty {
-  padding: .65rem .9rem; font-size: .84rem; color: #cbd5e1; text-align: center;
-  background: rgba(12, 15, 21, 0.85); cursor: context-menu;
-}
-.stream-ctx-menu {
-  position: fixed; z-index: 250; min-width: 16rem; max-width: 23rem;
-  max-height: calc(100vh - 16px); overflow-y: auto;
-  background: #10141c; border: 1px solid #49566b; border-radius: 8px;
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.68); padding: .35rem 0;
-  color: #fff; font-size: .84rem; user-select: none;
-}
-.ctx-head {
-  display: flex; align-items: center; gap: .4rem; padding: .3rem .75rem .35rem;
-  font-size: .78rem; font-weight: 800; color: #a9d6ff; border-bottom: 1px solid #232a36;
-}
-.ctx-sec {
-  padding: .3rem .75rem .15rem; font-size: .7rem; font-weight: 800;
-  text-transform: uppercase; letter-spacing: .04em; color: #94a3b8;
-}
-.ctx-sep { height: 1px; background: #232a36; margin: .25rem 0; }
-.ctx-item {
-  display: flex; align-items: center; gap: .45rem; width: 100%; border: 0;
-  border-radius: 0; background: transparent; color: #fff; text-align: left;
-  padding: .32rem .75rem; font-size: .83rem; cursor: pointer;
-}
-.ctx-item:hover { background: #1c2433; }
-.ctx-item.ctx-danger { color: #fca5a5; }
-.ctx-item .ctx-act {
-  margin-left: auto; font: 700 .72rem/1.2 var(--mono); padding: .04rem .3rem;
-  border-radius: 3px; border: 1px solid #3c4657; color: #cbd5e1;
-}
-.ctx-item.is-on .ctx-act { border-color: #68c77b; color: #7ee787; background: #112416; }
-.ctx-item.is-off .ctx-act { border-color: #7cc4ff; color: #7cc4ff; background: #0f1c2e; }
-.ctx-inline-bar {
-  display: flex; flex-wrap: wrap; align-items: center; gap: .26rem;
-  padding: .2rem .75rem .28rem;
-}
-.ctx-inline-lbl {
-  font-size: .74rem; font-weight: 700; color: #cbd5e1; margin-right: .15rem;
-  min-width: 2.8rem;
-}
-.ctx-meta {
-  margin-left: auto; font: 700 .72rem/1.2 var(--mono); color: #94a3b8;
-}
-.ctx-chip-btn {
-  padding: .16rem .42rem; font-size: .76rem; font-weight: 700;
-  border-radius: 4px; border: 1px solid #3c4657; background: #161c27; color: #fff;
-  cursor: pointer;
-}
-.ctx-chip-btn:hover:not(:disabled) { background: #222c3e; border-color: #7cc4ff; }
-.ctx-chip-btn:disabled { opacity: .38; cursor: not-allowed; }
-.ctx-chip-btn.is-on { border-color: #68c77b; background: #132818; color: #7ee787; }
-.ctx-chip-btn.is-off { border-color: #7cc4ff; background: #102036; color: #a9d6ff; }
-.lane-pulse {
-  position: absolute; top: 8px; bottom: 8px; min-width: 6px; border-radius: 4px;
-  border: 1px dashed var(--spk-color, #7cc4ff); background: var(--spk-bg, rgba(124, 196, 255, 0.14));
-  opacity: .72; pointer-events: auto; z-index: 2; cursor: pointer;
-}
-.lane-word.has-vocab { cursor: pointer; }
-.word-inspector {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .65rem;
-  padding: .46rem .7rem; background: #121722; border-top: 1px solid #2a3444;
-  border-left: 3px solid var(--accent); font-size: .88rem;
-}
-.wi-ja { font-size: 1.25rem; font-weight: 700; color: #fff; line-height: 1.6; }
-.wi-read { font-family: var(--mono); font-size: .82rem; color: #a9d6ff; }
-.wi-gloss { font-weight: 800; color: #fff; }
-.wi-role { font-size: .8rem; color: #cbd5e1; }
-.wi-note { font-size: .82rem; color: #fde68a; flex: 1 1 16rem; }
-.wi-btns { display: inline-flex; gap: .3rem; margin-left: auto; }
-.wi-btns button { font-size: .76rem; padding: .12rem .45rem; }
+.spk-deck.no-gutter .deck-mini-ruler { grid-template-columns: minmax(0, 1fr); }
+.spk-deck.no-gutter .deck-mini-ruler .lanes-gutter { display: none; }
+.deck-mini-ruler .ruler-tick { font-size: .68rem; line-height: 1.25rem; }
+
 .lane-label {
-  display: flex; align-items: center; gap: .38rem; padding: 0 .5rem 0 .32rem;
-  border-right: 1px solid #222730; font-size: .88rem; font-weight: 800;
-  color: var(--spk-color, #fff); background: #0c0e12;
+  display: flex; align-items: center; gap: .32rem; padding: 0 .35rem 0 .28rem;
+  border-right: 1px solid #222730; font-size: calc(.86rem * min(1.25, var(--spk-scale, 1)));
+  font-weight: 800; color: var(--spk-color, #fff); background: #0c0e12;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: grab; touch-action: none;
 }
 .lane-label::before {
-  content: ""; width: .5rem; height: .5rem; border-radius: 999px; flex: 0 0 auto;
+  content: ""; width: .48rem; height: .48rem; border-radius: 999px; flex: 0 0 auto;
   background: var(--spk-color, #fff);
 }
 .lane-label:hover { background: #151922; }
 .lane-label.filtered { background: #182130; box-shadow: inset 3px 0 var(--spk-color, #fff); }
+.lane-label.sub-lbl {
+  font-size: calc(.74rem * min(1.2, var(--spk-scale, 1))); font-weight: 700;
+  color: var(--spk-color, #fff); background: #090b0f;
+  padding-left: .48rem; box-shadow: inset 3px 0 var(--spk-color, #fff); cursor: pointer;
+}
+.lane-label.sub-lbl::before, .lane-label.has-avatar::before { display: none; }
+.lbl-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lbl-kind {
+  margin-left: auto; font: 700 .65rem/1.2 var(--mono); padding: .04rem .24rem;
+  border-radius: 3px; border: 1px solid var(--spk-color, #7cc4ff); color: var(--spk-color, #fff);
+  opacity: .9; flex: 0 0 auto;
+}
+.lbl-cfg-btn {
+  margin-left: auto; padding: .02rem .24rem; font-size: .72rem; line-height: 1.2;
+  border-radius: 3px; border: 1px solid #334155; background: #111620; color: #cbd5e1;
+  flex: 0 0 auto; cursor: pointer;
+}
+.lbl-cfg-btn:hover { border-color: #7cc4ff; color: #fff; background: #1d283a; }
+.lbl-kind + .lbl-cfg-btn { margin-left: .18rem; }
+.lbl-grip {
+  color: rgba(255, 255, 255, 0.34); font-size: .8em; line-height: 1; flex: 0 0 auto;
+  letter-spacing: -1px;
+}
+.lane-label:hover .lbl-grip { color: rgba(255, 255, 255, 0.88); }
+.spk-deck.is-dragging { opacity: .45; }
+.spk-deck.drag-over-top { box-shadow: inset 0 2.5px 0 var(--gold); }
+.spk-deck.drag-over-bot { box-shadow: inset 0 -2.5px 0 var(--gold); }
+
+.spk-avatar {
+  width: 24px; height: 24px; border-radius: 999px; object-fit: cover; flex: 0 0 auto;
+  border: 2px solid var(--spk-color, #7cc4ff); background: #141820;
+}
+.spk-avatar.av-sm { width: 19px; height: 19px; border-width: 1.5px; }
+.spk-avatar.av-xs { width: 17px; height: 17px; border-width: 1.5px; }
+
 .lane-track { position: relative; overflow: hidden; cursor: pointer; background: #08090c; }
 .lane-ov-band {
   position: absolute; top: 0; bottom: 0;
@@ -478,37 +534,123 @@ main.split-view { display: block; }
   pointer-events: none; z-index: 1;
 }
 .lane-block {
-  position: absolute; top: 5px; bottom: 5px; min-width: 4px; border-radius: 5px;
+  position: absolute; top: 4px; bottom: 4px; min-width: 4px; border-radius: 5px;
   border: 1.5px solid var(--spk-color, #7cc4ff);
   background: var(--spk-bg, rgba(124, 196, 255, 0.2));
-  color: #fff; padding: 0 .4rem; font-size: .9rem; font-weight: 600;
-  line-height: calc(3.05rem - 13px); white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis; z-index: 2; cursor: pointer;
+  color: #fff; padding: 0 .4rem;
+  font-size: calc(.88rem * var(--spk-scale, 1)); font-weight: 600;
+  line-height: calc(var(--row-base-rem, 3.0rem) * var(--spk-scale, 1) - 10px);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 2; cursor: pointer;
 }
 .lane-block.has-words { padding: 0; text-overflow: clip; }
 .lane-words { position: relative; width: 100%; height: 100%; overflow: hidden; z-index: 2; }
-.lanes-stage.has-tone .lane-block.has-tone-blk { line-height: 1.75rem; }
-.lanes-stage.has-tone .lane-block.has-tone-blk .lane-words { height: 52%; line-height: 1.75rem; }
+.lane-block.has-tone-blk {
+  line-height: calc(1.7rem * var(--spk-scale, 1));
+}
+.lane-block.has-tone-blk .lane-words {
+  height: 52%; line-height: calc(1.7rem * var(--spk-scale, 1));
+}
+.lane-block.ja-furi-blk { line-height: 1.24; font-size: calc(.9rem * var(--spk-scale, 1)); }
+.lane-block.ja-furi-blk .lane-word { top: auto; bottom: 3px; line-height: 1.24; }
+.lane-block.ja-furi-blk.has-tone-blk .lane-words { height: 55%; }
+.lane-block.ja-furi-blk rt { display: ruby-text !important; }
+.lane-block.ja-plain-blk rt { display: none !important; }
+.lane-block.lb-ww {
+  top: 3px; bottom: 3px; border: 1px dashed var(--spk-color, #7cc4ff);
+  background: var(--spk-bg, rgba(124, 196, 255, 0.16));
+  font-size: calc(.77rem * var(--spk-scale, 1)); font-weight: 600;
+}
+.lane-block.lb-ww .lane-word { color: #fff; font-weight: 600; }
+.lane-block.lb-ww.now { border-style: solid; border-color: #fff; background: var(--spk-bg-hi, rgba(124, 196, 255, 0.36)); }
+.lane-block.lb-ww .lane-word.lw-now { color: #fff; background: rgba(255, 255, 255, 0.32); }
+.lane-block.lb-en {
+  top: 3px; bottom: 3px; border: 1px solid var(--spk-color, #7cc4ff);
+  border-left: 3px solid var(--spk-color, #7cc4ff);
+  background: var(--spk-bg, rgba(124, 196, 255, 0.14)); color: #fff;
+  font-size: calc(.82rem * var(--spk-scale, 1)); font-weight: 500; padding: 0 .45rem;
+}
+.lane-block.lb-en.now { border-color: #fff; background: var(--spk-bg-hi, rgba(124, 196, 255, 0.38)); }
+.lane-block.lb-std {
+  top: 3px; bottom: 3px; border: 1px dotted var(--spk-color, #7cc4ff);
+  border-left: 3px solid var(--spk-color, #7cc4ff);
+  background: rgba(20, 26, 38, 0.72); color: #e2e8f0;
+  font-size: calc(.8rem * var(--spk-scale, 1)); font-weight: 500; padding: 0 .45rem;
+}
+.lane-block.lb-std.now { border-style: solid; border-color: #fff; background: var(--spk-bg-hi, rgba(124, 196, 255, 0.36)); color: #fff; }
+
+/* Extensible data/analysis track blocks (text, tag, meter, analysis, delivery) */
+.lane-block.lb-custom-text {
+  top: 3px; bottom: 3px; border: 1px solid var(--trk-color, #a9d6ff);
+  border-left: 3px solid var(--trk-color, #a9d6ff);
+  background: rgba(18, 24, 36, 0.84); color: #f1f5f9;
+  font-size: calc(.78rem * var(--spk-scale, 1)); font-weight: 500; padding: 0 .42rem;
+}
+.lane-block.lb-custom-tag {
+  top: 3px; bottom: 3px; border: 1px solid var(--trk-color, #ff85a2);
+  background: rgba(20, 18, 28, 0.88); color: #fff;
+  font-size: calc(.74rem * var(--spk-scale, 1)); font-weight: 700; padding: 0 .38rem;
+  display: flex; align-items: center; gap: .28rem;
+}
+.tag-dot {
+  width: 7px; height: 7px; border-radius: 999px; flex: 0 0 auto;
+  background: var(--trk-color, #ff85a2);
+}
+.lane-block.lb-custom-meter {
+  top: 3px; bottom: 3px; border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(10, 14, 22, 0.9); color: #fff; padding: 0;
+  font-size: calc(.72rem * var(--spk-scale, 1)); font-weight: 700;
+}
+.meter-fill {
+  position: absolute; top: 0; bottom: 0; pointer-events: none; opacity: .55;
+}
+.meter-mid {
+  position: absolute; top: 0; bottom: 0; left: 50%; width: 1px;
+  background: rgba(255, 255, 255, 0.35); pointer-events: none;
+}
+.meter-lbl {
+  position: relative; z-index: 2; padding: 0 .38rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
+}
+.lane-block.lb-analysis {
+  top: 3px; bottom: 3px; border: 1px solid var(--cat-color, #7cc4ff);
+  border-left: 3px solid var(--cat-color, #7cc4ff);
+  background: rgba(17, 22, 33, 0.92); color: #fff;
+  font-size: calc(.75rem * var(--spk-scale, 1)); font-weight: 700; padding: 0 .4rem;
+}
+.lane-block.lb-delivery {
+  top: 3px; bottom: 3px; border: 1px dashed rgba(148, 163, 184, 0.5);
+  background: rgba(12, 16, 24, 0.88); color: #cbd5e1;
+  font: 700 calc(.7rem * var(--spk-scale, 1))/calc(var(--row-base-rem, 1.9rem) * var(--spk-scale, 1) - 8px) var(--mono);
+  padding: 0 .38rem;
+}
+
 .tone-svg {
   position: absolute; left: 0; right: 0; bottom: 0; height: 48%; width: 100%;
-  background: rgba(5, 7, 11, 0.62); border-top: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(5, 7, 11, 0.64); border-top: 1px solid rgba(255, 255, 255, 0.14);
   pointer-events: none; z-index: 1; display: block;
 }
+.tone-badges-wrap {
+  position: absolute; z-index: 4; display: inline-flex; align-items: center; gap: 2px;
+  pointer-events: auto;
+}
+.tone-badges-wrap.pos-br { bottom: 2px; right: 3px; }
+.tone-badges-wrap.pos-tr { top: 2px; right: 3px; }
+.tone-badges-wrap.pos-tl { top: 2px; left: 3px; }
 .tone-badge {
-  position: absolute; bottom: 2px; right: 3px; z-index: 4; padding: 0 .24rem;
-  border-radius: 3px; font: 800 .62rem/1.25 var(--mono);
-  background: rgba(7, 8, 12, 0.9); border: 1px solid currentColor;
-  pointer-events: none; white-space: nowrap;
+  padding: 0 .26rem; border-radius: 3px; font: 800 .62rem/1.28 var(--mono);
+  background: rgba(7, 8, 12, 0.92); border: 1px solid currentColor;
+  white-space: nowrap;
 }
 .tone-badge.tb-falsetto { color: #ff5ca8; }
 .tone-badge.tb-high { color: #ffd240; }
 .tone-badge.tb-low { color: #9aa7ff; }
 .tone-badge.tb-quiet { color: #94a3b8; }
 .tone-badge.tb-fast { color: #66e3d8; }
+.tone-badge.tb-slow { color: #c9b3ff; }
 .tone-legend {
   display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .7rem;
-  padding: .28rem .62rem; background: #0b0e14; border-top: 1px solid #1e2430;
-  font-size: .75rem; color: #cbd5e1;
+  padding: .26rem .6rem; background: #0b0e14; border-top: 1px solid #1e2430;
+  font-size: .74rem; color: #cbd5e1;
 }
 .tone-legend .tl-spk { font-family: var(--mono); font-size: .72rem; }
 .tone-swatch {
@@ -539,19 +681,23 @@ main.split-view { display: block; }
   position: absolute; top: 0; bottom: 0; width: 2px; background: var(--red);
   box-shadow: 0 0 8px rgba(255, 71, 71, 0.7); pointer-events: none; z-index: 6;
 }
+.lanes-empty {
+  padding: .55rem .9rem; font-size: .82rem; color: #cbd5e1; text-align: center;
+  background: rgba(12, 15, 21, 0.85); cursor: context-menu;
+}
 
 .lanes-bar {
-  display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .65rem;
-  padding: .36rem .6rem; background: #0d1015; border-top: 1px solid #20252e;
+  display: flex; flex-wrap: wrap; align-items: center; gap: .32rem .55rem;
+  padding: .34rem .58rem; background: #0d1015; border-top: 1px solid #20252e;
 }
 .lanes-status {
-  flex: 1 1 10rem; min-width: 0; font-size: .82rem;
+  flex: 1 1 8rem; min-width: 0; font-size: .8rem;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .lanes-status .ov-badge { color: var(--gold); font-weight: 800; margin-right: .35rem; }
-.lanes-tools { display: flex; flex-wrap: wrap; align-items: center; gap: .32rem; margin-left: auto; }
-.lanes-tools button, .lanes-tools select { padding: .2rem .46rem; font-size: .8rem; }
-.lanes-tools label { display: inline-flex; align-items: center; gap: .28rem; font-size: .8rem; font-weight: 700; }
+.lanes-tools { display: flex; flex-wrap: wrap; align-items: center; gap: .28rem; margin-left: auto; }
+.lanes-tools button, .lanes-tools select { padding: .18rem .44rem; font-size: .79rem; }
+.lanes-tools label { display: inline-flex; align-items: center; gap: .26rem; font-size: .79rem; font-weight: 700; }
 
 .lanes-minimap-wrap {
   position: relative; height: 22px; background: #050608;
@@ -567,23 +713,107 @@ main.split-view { display: block; }
   pointer-events: none;
 }
 
+/* Context menu & Config popovers (Layout, Labels, Per-speaker settings) */
+.stream-ctx-menu, .cfg-popover {
+  position: fixed; z-index: 260; min-width: 17.5rem; max-width: 24rem;
+  max-height: calc(100vh - 16px); overflow-y: auto;
+  background: #10141c; border: 1px solid #49566b; border-radius: 8px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.75); padding: .36rem 0;
+  color: #fff; font-size: .83rem; user-select: none;
+}
+.ctx-head {
+  display: flex; align-items: center; gap: .4rem; padding: .3rem .75rem .36rem;
+  font-size: .8rem; font-weight: 800; color: #a9d6ff; border-bottom: 1px solid #232a36;
+}
+.ctx-head-close {
+  margin-left: auto; padding: .04rem .36rem; font-size: .78rem;
+  border: 1px solid #334155; background: transparent; color: #cbd5e1;
+}
+.ctx-sec {
+  padding: .34rem .75rem .14rem; font-size: .69rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .04em; color: #94a3b8;
+}
+.ctx-sep { height: 1px; background: #232a36; margin: .28rem 0; }
+.ctx-item {
+  display: flex; align-items: center; gap: .45rem; width: 100%; border: 0;
+  border-radius: 0; background: transparent; color: #fff; text-align: left;
+  padding: .3rem .75rem; font-size: .82rem; cursor: pointer;
+}
+.ctx-item:hover { background: #1c2433; }
+.ctx-item.ctx-danger { color: #fca5a5; }
+.ctx-item .ctx-act {
+  margin-left: auto; font: 700 .7rem/1.2 var(--mono); padding: .04rem .3rem;
+  border-radius: 3px; border: 1px solid #3c4657; color: #cbd5e1;
+}
+.ctx-item.is-on .ctx-act { border-color: #68c77b; color: #7ee787; background: #112416; }
+.ctx-item.is-off .ctx-act { border-color: #7cc4ff; color: #7cc4ff; background: #0f1c2e; }
+.ctx-inline-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .26rem;
+  padding: .2rem .75rem .28rem;
+}
+.ctx-inline-lbl {
+  font-size: .74rem; font-weight: 700; color: #cbd5e1; margin-right: .15rem;
+  min-width: 3.4rem;
+}
+.ctx-meta {
+  margin-left: auto; font: 700 .72rem/1.2 var(--mono); color: #94a3b8;
+}
+.ctx-chip-btn {
+  padding: .15rem .42rem; font-size: .75rem; font-weight: 700;
+  border-radius: 4px; border: 1px solid #3c4657; background: #161c27; color: #fff;
+  cursor: pointer;
+}
+.ctx-chip-btn:hover:not(:disabled) { background: #222c3e; border-color: #7cc4ff; }
+.ctx-chip-btn.is-on { border-color: #68c77b; background: #132818; color: #7ee787; }
+.ctx-chip-btn.is-off { border-color: #7cc4ff; background: #102036; color: #a9d6ff; }
+.ctx-slider-row {
+  display: flex; align-items: center; gap: .45rem; padding: .2rem .75rem .26rem;
+}
+.ctx-slider-row input[type="range"] { flex: 1 1 6rem; min-width: 5rem; }
+.ctx-check-row {
+  display: flex; align-items: center; gap: .45rem; padding: .22rem .75rem;
+  cursor: pointer; font-size: .81rem;
+}
+.ctx-check-row:hover { background: #182030; }
+.ctx-check-row input[type="checkbox"] { margin: 0; width: 14px; height: 14px; cursor: pointer; }
+.ctx-check-hint { margin-left: auto; font-size: .7rem; color: #94a3b8; font-family: var(--mono); }
+
+.lane-pulse {
+  position: absolute; top: 8px; bottom: 8px; min-width: 6px; border-radius: 4px;
+  border: 1px dashed var(--spk-color, #7cc4ff); background: var(--spk-bg, rgba(124, 196, 255, 0.14));
+  opacity: .72; pointer-events: auto; z-index: 2; cursor: pointer;
+}
+.lane-word.has-vocab { cursor: pointer; }
+.word-inspector {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .65rem;
+  padding: .46rem .7rem; background: #121722; border-top: 1px solid #2a3444;
+  border-left: 3px solid var(--accent); font-size: .88rem;
+}
+.wi-ja { font-size: 1.25rem; font-weight: 700; color: #fff; line-height: 1.6; }
+.wi-read { font-family: var(--mono); font-size: .82rem; color: #a9d6ff; }
+.wi-gloss { font-weight: 800; color: #fff; }
+.wi-role { font-size: .8rem; color: #cbd5e1; }
+.wi-note { font-size: .82rem; color: #fde68a; flex: 1 1 16rem; }
+.wi-btns { display: inline-flex; gap: .3rem; margin-left: auto; }
+.wi-btns button { font-size: .76rem; padding: .12rem .45rem; }
+
 .transcript {
-  margin-top: .7rem; padding: .6rem .75rem; border: 1px solid var(--border);
+  margin-top: .65rem; padding: .58rem .72rem; border: 1px solid var(--border);
   border-radius: 7px; background: var(--panel);
 }
-.transcript-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .38rem; }
+.transcript-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .36rem; }
 .transcript-controls label { display: inline-flex; align-items: center; gap: .28rem; font-size: .8rem; font-weight: 700; }
 .transcript-controls button, .transcript-controls select, .transcript-controls input {
-  font-size: .82rem; padding: .22rem .46rem;
+  font-size: .81rem; padding: .2rem .44rem;
 }
 .transcript-search { flex: 1 1 10rem; min-width: 7.5rem; }
 .caption-box {
-  margin-top: .45rem; border: 1px solid #222730; border-radius: 6px;
+  margin-top: .42rem; border: 1px solid #222730; border-radius: 6px;
   background: #08090c; max-height: 28rem; overflow-y: auto;
 }
 .segment {
   display: grid; grid-template-columns: 4.5rem 7rem minmax(0, 1fr); gap: .48rem;
-  align-items: baseline; padding: .4rem .6rem; border-bottom: 1px solid #191d24; cursor: pointer;
+  align-items: baseline; padding: .38rem .58rem; border-bottom: 1px solid #191d24; cursor: pointer;
 }
 .segment:last-child { border-bottom: 0; }
 .segment:hover { background: #141820; }
@@ -616,6 +846,15 @@ html.no-furigana .segment-ja { line-height: 1.5; }
 .segment-ww .ww-ja { color: #90b4e8; margin-right: .15rem; }
 .segment-std { margin-top: .16rem; font-size: .84rem; line-height: 1.4; color: #a9d6ff; }
 .segment-en { margin-top: .2rem; font-size: .88rem; line-height: 1.42; color: #e2e8f0; }
+.segment-fields {
+  margin-top: .22rem; display: flex; flex-wrap: wrap; gap: .25rem;
+}
+.seg-field-chip {
+  display: inline-flex; align-items: center; gap: .22rem; padding: .04rem .36rem;
+  border-radius: 4px; border: 1px solid var(--trk-color, #7cc4ff);
+  background: #111622; font-size: .74rem; color: #e2e8f0;
+}
+.seg-field-chip strong { color: var(--trk-color, #7cc4ff); }
 
 .vocab-panel {
   margin-top: .7rem; padding: .6rem .75rem; border: 1px solid var(--border);
@@ -728,7 +967,7 @@ html.no-furigana .v-ja { line-height: 1.35; }
 @media (min-width: 1040px) {
   main.split-view {
     display: grid;
-    grid-template-columns: minmax(22rem, min(62vw, calc(var(--split-vid-h, 54vh) * 16 / 9))) minmax(20rem, 1fr);
+    grid-template-columns: var(--split-col-w, minmax(22rem, min(62vw, 960px))) minmax(20rem, 1fr);
     column-gap: .75rem; row-gap: .5rem; align-items: start;
   }
   main.split-view > .player-wrap { grid-column: 1; grid-row: 1; }
@@ -742,9 +981,7 @@ html.no-furigana .v-ja { line-height: 1.35; }
   main.split-view > .notes-panel { grid-column: 1 / -1; margin-top: 0; }
 }
 @media (max-width: 760px) {
-  .lanes-ruler-row, .lane-row { grid-template-columns: 6.4rem minmax(0, 1fr); }
-  .ov-ruler-row, .ov-row { grid-template-columns: 5.8rem minmax(0, 1fr); }
-  .ov-grip-txt { display: none; }
+  .lanes-ruler-row, .lane-row, .deck-mini-ruler { grid-template-columns: 6.8rem minmax(0, 1fr); }
   .segment { grid-template-columns: 4.2rem 5.8rem minmax(0, 1fr); gap: .38rem; }
   .note-row { grid-template-columns: 4rem 6rem minmax(0, 1fr) auto; }
   .vocab-row { grid-template-columns: minmax(0, 1fr) auto; }
@@ -765,7 +1002,7 @@ APP_JS = r"""(() => {
   ];
   const UNASSIGNED = {fg: '#a9d6ff', bg: 'rgba(169,214,255,0.16)', bgHi: 'rgba(169,214,255,0.36)'};
   const YT_ORIGIN = 'https://www.youtube-nocookie.com';
-  const OV_WINDOW_SEC = 10;
+  const FLOAT_WINDOW_MAX = 14;
 
   let doc = null;
   let model = null;
@@ -786,12 +1023,71 @@ APP_JS = r"""(() => {
 
   let lanesWindow = Number(localStorage.getItem('ovpub.window')) || 20;
   let lanesFollow = true;
-  let showOverlay = localStorage.getItem('ovpub.overlay') === 'true';
   let showMinimap = localStorage.getItem('ovpub.minimap') === 'true';
   let showBadges = localStorage.getItem('ovpub.badges') === 'true';
   let showAnnotations = false;
   let splitView = localStorage.getItem('ovpub.split') !== 'false';
   let autoScroll = localStorage.getItem('ovpub.autoScroll') !== 'false';
+
+  // Stage & monitor layout settings (persisted globally)
+  const DEFAULT_STAGE_CFG = {
+    videoScale: 1.0,        // 0.40 .. 1.00 (strictly aspect-contained, never overzooms)
+    videoAlignX: 'center',  // 'left' | 'center' | 'right'
+    videoAlignY: 'center',  // 'top' | 'center' | 'bottom'
+    videoAspect: '16:9',    // '16:9' | '4:3' | '21:9'
+    fsDock: 'bottom',       // 'bottom' (below video) | 'top' | 'off' (float only)
+    fsDockH: 0,             // 0 = auto, >0 = explicit px height dragged via splitter
+    winStageH: 0,           // 0 = auto single-screen fit in stacked/theater mode, >0 = dragged px
+    timerPos: 'bottom',     // 'bottom' (DEFAULT) | 'top' | 'hidden'
+    handlesMode: 'hover',   // 'hover' | 'show' | 'hidden' (locked)
+  };
+  let stageCfg = loadJsonStorage('ovpub.stageCfg', DEFAULT_STAGE_CFG);
+
+  // Meta-label settings for prosody badges ('loud', 'falsetto', pitch, pace, etc.)
+  const DEFAULT_META_LABELS = {
+    enabled: true,
+    format: 'words',        // 'words' | 'numeric' | 'both'
+    position: 'br',         // 'br' | 'tr' | 'tl'
+    sensitivity: 'normal',  // 'strict' | 'normal' | 'all'
+    maxPerBlock: 1,         // 1 | 2
+    kinds: {
+      falsetto: true,
+      high: true,
+      low: true,
+      loud: true,
+      quiet: true,
+      fast: true,
+      slow: false,
+    },
+  };
+  let metaLabels = loadMetaLabels();
+
+  function loadJsonStorage(key, defaults) {
+    try {
+      const raw = JSON.parse(localStorage.getItem(key) || 'null');
+      if (raw && typeof raw === 'object') return {...defaults, ...raw};
+    } catch {}
+    return {...defaults};
+  }
+  function saveStageCfg() {
+    localStorage.setItem('ovpub.stageCfg', JSON.stringify(stageCfg));
+  }
+  function loadMetaLabels() {
+    try {
+      const raw = JSON.parse(localStorage.getItem('ovpub.metaLabels') || 'null');
+      if (raw && typeof raw === 'object') {
+        return {
+          ...DEFAULT_META_LABELS,
+          ...raw,
+          kinds: {...DEFAULT_META_LABELS.kinds, ...(raw.kinds || {})},
+        };
+      }
+    } catch {}
+    return {...DEFAULT_META_LABELS, kinds: {...DEFAULT_META_LABELS.kinds}};
+  }
+  function saveMetaLabels() {
+    localStorage.setItem('ovpub.metaLabels', JSON.stringify(metaLabels));
+  }
 
   let hasStudy = false;
   let isCjk = false;
@@ -813,572 +1109,24 @@ APP_JS = r"""(() => {
     mtg: 5, ar: 5, slang: 4, econ: 4, n1: 3, c1: 3, n2: 2, b2: 2, n3: 1, b1: 1, basic: 0,
   };
 
-  let STUDY_STREAMS = [
-    {id: 'ja', label: 'Native Japanese', short: 'JP'},
-    {id: 'ja-furi', label: 'Japanese + Furigana', short: 'JP+furi'},
-    {id: 'literal', label: 'English literal (word-by-word)', short: 'literal'},
-    {id: 'en', label: 'English translation', short: 'English'},
-  ];
-  let STREAM_MAP = new Map(STUDY_STREAMS.map(s => [s.id, s]));
-  let STREAM_ORDER = new Map(STUDY_STREAMS.map((s, i) => [s.id, i]));
-  let mainRows = [];
-  let overlayRows = [];
-  let ctxMenuState = null;
+  // Unified subcomponent/stream registry (built-in speech/study + analysis + delivery + custom --tracks)
+  let AVAILABLE_STREAMS = [];
+  let STREAM_MAP = new Map();
+  let STREAM_ORDER = new Map();
+  let CUSTOM_TRACKS = [];
+  let CUSTOM_TRACK_MAP = new Map();
 
-  function configureStudyStreams() {
-    if (!doc) return;
-    if (doc.language === 'es' && hasStudy) {
-      const origLbl = doc.dialect === 'ar' ? 'Original Spanish (AR)' : 'Original Spanish';
-      const origShort = doc.dialect === 'ar' ? 'ES (AR)' : 'ES';
-      const list = [{id: 'es', label: origLbl, short: origShort}];
-      if (doc.segments.some(s => s.std)) {
-        list.push({id: 'es-std', label: 'Neutral Spanish', short: 'Neutral'});
-      }
-      if (doc.segments.some(s => s.tokens.some(t => t.gloss))) {
-        list.push({id: 'literal', label: 'Word-by-word English', short: 'literal'});
-      }
-      if (doc.segments.some(s => s.en)) {
-        list.push({id: 'en', label: 'Natural English', short: 'English'});
-      }
-      STUDY_STREAMS = list;
-    } else {
-      STUDY_STREAMS = [
-        {id: 'ja', label: 'Native Japanese', short: 'JP'},
-        {id: 'ja-furi', label: 'Japanese + Furigana', short: 'JP+furi'},
-        {id: 'literal', label: 'English literal (word-by-word)', short: 'literal'},
-        {id: 'en', label: 'English translation', short: 'English'},
-      ];
-    }
-    STREAM_MAP = new Map(STUDY_STREAMS.map(s => [s.id, s]));
-    STREAM_ORDER = new Map(STUDY_STREAMS.map((s, i) => [s.id, i]));
-  }
+  // Independent per-speaker state (order, dock/float placement, per-speaker geometry & subcomponents)
+  let speakerOrder = [];
+  let speakerConfigs = {};
+  let ctxMenuState = null;
+  let openPopoverKind = ''; // '' | 'layout' | 'labels' | 'speaker:<name>'
 
   let hasProsody = false;
   let prosodyDt = 0.06;
   let prosodyByIndex = new Map();
   let prosodySpeakers = {};
   let showTone = localStorage.getItem('ovpub.tone') !== 'false';
-
-  function readNumStorage(key, fallback) {
-    const raw = localStorage.getItem(key);
-    if (raw == null || raw === '') return fallback;
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : fallback;
-  }
-  const DEFAULT_OV_BOTTOM_WIN = 62;
-  const DEFAULT_OV_BOTTOM_FS = 84;
-  let ovBottomWin = readNumStorage('ovpub.ovBottomWin', DEFAULT_OV_BOTTOM_WIN);
-  let ovBottomFs = readNumStorage('ovpub.ovBottomFs', DEFAULT_OV_BOTTOM_FS);
-  let ovFontScale = readNumStorage('ovpub.ovFont', 1);
-  let ovAlpha = readNumStorage('ovpub.ovAlpha', 0.88);
-  let ovCurrentScale = 1;
-  let autoOverlayForFs = false;
-
-  function isPlayerFullscreen() {
-    const pw = document.getElementById('player-wrap');
-    return Boolean(pw && (document.fullscreenElement === pw || document.webkitFullscreenElement === pw));
-  }
-  function getOvBottom() {
-    return isPlayerFullscreen() ? ovBottomFs : ovBottomWin;
-  }
-  function ovRowRem(kind) {
-    const extra = hasProsody && showTone && (kind === 'text' || kind === 'ja' || kind === 'ja-furi' || kind === 'es') ? 0.8 : 0;
-    if (kind === 'ja-furi') return 3.15 + extra;
-    if (kind === 'ja' || kind === 'es') return 2.5 + extra;
-    if (kind === 'es-std') return 2.0;
-    if (kind === 'literal') return 1.95;
-    if (kind === 'en') return 2.0;
-    return 2.55 + extra;
-  }
-  function fitOverlayLayout() {
-    const ovEl = document.getElementById('ov-overlay');
-    const pw = document.getElementById('player-wrap');
-    if (!ovEl || !pw) return getOvBottom();
-    const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 15;
-    const pwH = pw.clientHeight || pw.getBoundingClientRect().height
-      || (isPlayerFullscreen() ? window.innerHeight : 500);
-    const rows = overlayRows || [];
-    let natRem = 1.35;
-    if (rows.length) {
-      for (const r of rows) natRem += ovRowRem(r.kind);
-    } else {
-      natRem += 2.6;
-    }
-    const natPx = natRem * rootPx + Math.max(2, rows.length + 2);
-    const baseBottom = Math.max(12, getOvBottom());
-    const minFloorBottom = isPlayerFullscreen() ? 76 : 56;
-    const desired = Math.max(0.7, Math.min(1.4, ovFontScale || 1));
-    let effBaseBottom = baseBottom;
-    // If the user previously dragged the overlay high up and then added many rows,
-    // slide down toward YouTube's control-bar clearance before shrinking text.
-    if (pwH - effBaseBottom - 14 < natPx * desired && effBaseBottom > minFloorBottom) {
-      effBaseBottom = Math.max(minFloorBottom, Math.round(pwH - natPx * desired - 14));
-    }
-    const availH = Math.max(96, pwH - effBaseBottom - 14);
-    const scale = Math.max(0.38, Math.min(desired, availH / Math.max(1, natPx)));
-    const maxBottom = Math.max(12, pwH - natPx * scale - 10);
-    const effBottom = Math.round(Math.max(12, Math.min(effBaseBottom, maxBottom)));
-    const prevScale = ovCurrentScale;
-    ovCurrentScale = scale;
-    ovEl.style.setProperty('--ov-scale', scale.toFixed(3));
-    ovEl.style.setProperty('--ov-bottom', effBottom + 'px');
-    ovEl.style.setProperty('--ov-alpha', String(ovAlpha));
-    if (Math.abs(scale - prevScale) > 0.015) ovRenderedStart = -1;
-    return effBottom;
-  }
-  function setOvBottom(px, persist) {
-    const v = Math.max(12, Math.round(Number(px) || 0));
-    if (isPlayerFullscreen()) ovBottomFs = v;
-    else ovBottomWin = v;
-    const eff = fitOverlayLayout();
-    if (persist) {
-      if (isPlayerFullscreen()) {
-        ovBottomFs = eff;
-        localStorage.setItem('ovpub.ovBottomFs', String(ovBottomFs));
-      } else {
-        ovBottomWin = eff;
-        localStorage.setItem('ovpub.ovBottomWin', String(ovBottomWin));
-      }
-    }
-    if (showOverlay && ovRenderedStart < 0) updateOverlayTimeline(currentTime(), true);
-  }
-  function setOvFontScale(val) {
-    ovFontScale = Math.max(0.75, Math.min(1.35, Number(val) || 1));
-    localStorage.setItem('ovpub.ovFont', String(ovFontScale));
-    fitOverlayLayout();
-    if (showOverlay) {
-      ovRenderedStart = -1;
-      updateOverlayTimeline(currentTime(), true);
-    }
-  }
-  function setOvAlpha(val) {
-    ovAlpha = Math.max(0.55, Math.min(0.98, Number(val) || 0.88));
-    localStorage.setItem('ovpub.ovAlpha', String(ovAlpha));
-    fitOverlayLayout();
-  }
-  function syncFullscreenButtons() {
-    const fs = isPlayerFullscreen();
-    const btn = document.getElementById('toggle-fullscreen');
-    if (btn) {
-      btn.setAttribute('aria-pressed', String(fs));
-      btn.textContent = fs ? 'Exit Full' : 'Fullscreen';
-    }
-    const ovBtn = document.getElementById('ov-fs-btn');
-    if (ovBtn) {
-      ovBtn.textContent = fs ? 'Exit' : '⛶';
-      ovBtn.setAttribute('aria-pressed', String(fs));
-      ovBtn.title = fs ? 'Exit fullscreen (F)' : 'Fullscreen video with overlay (F)';
-    }
-  }
-  function togglePlayerFullscreen() {
-    const pw = document.getElementById('player-wrap');
-    if (!pw) return;
-    if (isPlayerFullscreen()) {
-      const exit = document.exitFullscreen || document.webkitExitFullscreen;
-      if (exit) Promise.resolve(exit.call(document)).catch(() => {});
-      return;
-    }
-    if (!showOverlay) {
-      autoOverlayForFs = true;
-      showOverlay = true;
-      applyOverlayState();
-    } else {
-      autoOverlayForFs = false;
-    }
-    const req = pw.requestFullscreen || pw.webkitRequestFullscreen;
-    if (req) {
-      Promise.resolve(req.call(pw)).catch(() => {
-        if (autoOverlayForFs) {
-          autoOverlayForFs = false;
-          showOverlay = false;
-          applyOverlayState();
-        }
-      });
-    }
-  }
-  function onFullscreenChange() {
-    syncFullscreenButtons();
-    closeStreamMenu();
-    const menu = document.getElementById('stream-ctx-menu');
-    const host = document.fullscreenElement || document.webkitFullscreenElement || document.body;
-    if (menu && menu.parentElement !== host) host.appendChild(menu);
-    const fs = isPlayerFullscreen();
-    if (!fs && autoOverlayForFs) {
-      autoOverlayForFs = false;
-      showOverlay = false;
-      applyOverlayState();
-    } else if (showOverlay) {
-      fitOverlayLayout();
-      ovRenderedStart = -1;
-      requestAnimationFrame(() => {
-        fitOverlayLayout();
-        updateOverlayTimeline(currentTime(), true);
-      });
-    }
-    if (!fs) applySplitLayout();
-  }
-
-  function avatarHtml(spk, sizeCls) {
-    const url = doc && doc.avatars && doc.avatars[spk];
-    if (!url) return '';
-    return '<img class="spk-avatar' + (sizeCls ? ' ' + sizeCls : '') + '" src="' + html(url)
-      + '" alt="' + html(spk) + '" loading="lazy">';
-  }
-  function defaultRowsForSurface(surface) {
-    if (!model) return [];
-    if (!hasStudy) return model.speakers.map(spk => ({spk, kind: 'text'}));
-    if (doc && doc.language === 'es') {
-      const hasEn = STUDY_STREAMS.some(s => s.id === 'en');
-      // With 4+ speakers, keep the bottom compact for a single-screen fit:
-      // every speaker's original ES row + English under the primary speaker (other layers 1 click away).
-      if (model.speakers.length >= 4) {
-        let primary = model.speakers[0];
-        let maxCnt = -1;
-        for (const s of model.speakers) {
-          const c = model.speakerCounts.get(s) || 0;
-          if (c > maxCnt) { maxCnt = c; primary = s; }
-        }
-        const ordered = [primary, ...model.speakers.filter(s => s !== primary)];
-        const out = [];
-        for (const spk of ordered) {
-          out.push({spk, kind: 'es'});
-          if (hasEn && spk === primary) out.push({spk, kind: 'en'});
-        }
-        return out;
-      }
-      const kinds = hasEn ? ['es', 'en'] : ['es'];
-      const out = [];
-      for (const spk of model.speakers) for (const kind of kinds) out.push({spk, kind});
-      return out;
-    }
-    const kinds = ['ja-furi', 'literal', 'en'];
-    const out = [];
-    for (const spk of model.speakers) {
-      for (const kind of kinds) out.push({spk, kind});
-    }
-    return out;
-  }
-  function rowsStorageKey(surface) {
-    return 'ovpub.' + (surface === 'overlay' ? 'ovRows.' : 'mainRows.') + doc.video_id;
-  }
-  function sanitizeRows(arr) {
-    if (!Array.isArray(arr) || !model) return null;
-    const validSpk = new Set(model.speakers);
-    const validKinds = hasStudy ? new Set(STUDY_STREAMS.map(s => s.id)) : new Set(['text']);
-    const seen = new Set();
-    const out = [];
-    for (const r of arr) {
-      if (!r || typeof r !== 'object') continue;
-      if (!validSpk.has(r.spk) || !validKinds.has(r.kind)) continue;
-      const k = r.spk + '\0' + r.kind;
-      if (seen.has(k)) continue;
-      seen.add(k);
-      out.push({spk: r.spk, kind: r.kind});
-    }
-    return out;
-  }
-  function loadSurfaceRows(surface) {
-    const raw = localStorage.getItem(rowsStorageKey(surface));
-    if (raw != null) {
-      try {
-        const clean = sanitizeRows(JSON.parse(raw));
-        if (clean) return clean;
-      } catch {}
-    }
-    return defaultRowsForSurface(surface);
-  }
-  function getSurfaceRows(surface) {
-    return surface === 'overlay' ? overlayRows : mainRows;
-  }
-  function setSurfaceRows(surface, rows) {
-    if (surface === 'overlay') overlayRows = rows;
-    else mainRows = rows;
-    localStorage.setItem(rowsStorageKey(surface), JSON.stringify(rows));
-    if (surface === 'overlay') {
-      fitOverlayLayout();
-      ovRenderedStart = -1;
-      if (showOverlay) updateOverlayTimeline(currentTime(), true);
-    } else {
-      renderLanesWindow(true);
-      applySplitLayout();
-    }
-  }
-  function isStreamGrouped(rows) {
-    let sameKindAdj = 0;
-    let sameSpkAdj = 0;
-    for (let i = 1; i < rows.length; i++) {
-      if (rows[i].kind === rows[i - 1].kind && rows[i].spk !== rows[i - 1].spk) sameKindAdj += 1;
-      if (rows[i].spk === rows[i - 1].spk) sameSpkAdj += 1;
-    }
-    return sameKindAdj > 0 && sameSpkAdj === 0;
-  }
-  function sortRowsBySpeaker(rows) {
-    const spkOrder = new Map(model.speakers.map((s, i) => [s, i]));
-    return [...rows].sort((a, b) => {
-      const sa = spkOrder.get(a.spk) ?? 99;
-      const sb = spkOrder.get(b.spk) ?? 99;
-      if (sa !== sb) return sa - sb;
-      return (STREAM_ORDER.get(a.kind) ?? 99) - (STREAM_ORDER.get(b.kind) ?? 99);
-    });
-  }
-  function sortRowsByStream(rows) {
-    const spkOrder = new Map(model.speakers.map((s, i) => [s, i]));
-    return [...rows].sort((a, b) => {
-      const ka = STREAM_ORDER.get(a.kind) ?? 99;
-      const kb = STREAM_ORDER.get(b.kind) ?? 99;
-      if (ka !== kb) return ka - kb;
-      return (spkOrder.get(a.spk) ?? 99) - (spkOrder.get(b.spk) ?? 99);
-    });
-  }
-  function insertRowPreservingOrder(rows, spk, kind) {
-    if (rows.some(r => r.spk === spk && r.kind === kind)) return rows;
-    const next = [...rows];
-    const kOrd = STREAM_ORDER.get(kind) ?? 99;
-    if (isStreamGrouped(next)) {
-      let lastKindIdx = -1;
-      for (let i = 0; i < next.length; i++) {
-        if (next[i].kind === kind) lastKindIdx = i;
-      }
-      if (lastKindIdx >= 0) {
-        next.splice(lastKindIdx + 1, 0, {spk, kind});
-        return next;
-      }
-      const afterIdx = next.findIndex(r => (STREAM_ORDER.get(r.kind) ?? 99) > kOrd);
-      if (afterIdx >= 0) { next.splice(afterIdx, 0, {spk, kind}); return next; }
-      next.push({spk, kind});
-      return next;
-    }
-    let firstSpk = -1;
-    let lastSpk = -1;
-    for (let i = 0; i < next.length; i++) {
-      if (next[i].spk === spk) {
-        if (firstSpk < 0) firstSpk = i;
-        lastSpk = i;
-      }
-    }
-    if (firstSpk >= 0) {
-      let ins = lastSpk + 1;
-      for (let i = firstSpk; i <= lastSpk; i++) {
-        if (next[i].spk === spk && (STREAM_ORDER.get(next[i].kind) ?? 99) > kOrd) {
-          ins = i;
-          break;
-        }
-      }
-      next.splice(ins, 0, {spk, kind});
-      return next;
-    }
-    next.push({spk, kind});
-    return next;
-  }
-  function moveRowOnSurface(surface, fromIdx, toIdx) {
-    const rows = [...getSurfaceRows(surface)];
-    if (fromIdx < 0 || fromIdx >= rows.length) return;
-    toIdx = Math.max(0, Math.min(rows.length - 1, toIdx));
-    if (fromIdx === toIdx) return;
-    const [item] = rows.splice(fromIdx, 1);
-    rows.splice(toIdx, 0, item);
-    setSurfaceRows(surface, rows);
-  }
-  function groupRowsBySpeaker(surface) {
-    setSurfaceRows(surface, sortRowsBySpeaker(getSurfaceRows(surface)));
-  }
-  function groupRowsByStream(surface) {
-    setSurfaceRows(surface, sortRowsByStream(getSurfaceRows(surface)));
-  }
-  function addRowToSurface(surface, spk, kind) {
-    const rows = getSurfaceRows(surface);
-    if (rows.some(r => r.spk === spk && r.kind === kind)) return;
-    setSurfaceRows(surface, insertRowPreservingOrder(rows, spk, kind));
-  }
-  function removeRowFromSurface(surface, spk, kind) {
-    const rows = getSurfaceRows(surface).filter(r => !(r.spk === spk && r.kind === kind));
-    setSurfaceRows(surface, rows);
-  }
-  function addKindForActive(surface, kind) {
-    const rows = getSurfaceRows(surface);
-    const activeSpks = [...new Set(rows.map(r => r.spk))];
-    const targetSpks = activeSpks.length ? activeSpks : model.speakers;
-    let next = [...rows];
-    for (const spk of targetSpks) {
-      next = insertRowPreservingOrder(next, spk, kind);
-    }
-    setSurfaceRows(surface, next);
-  }
-  function toggleKindForAllActive(surface, kind) {
-    const rows = getSurfaceRows(surface);
-    const activeSpks = [...new Set(rows.map(r => r.spk))];
-    const targetSpks = activeSpks.length ? activeSpks : model.speakers;
-    const allHave = targetSpks.every(s => rows.some(r => r.spk === s && r.kind === kind));
-    if (allHave) {
-      setSurfaceRows(surface, rows.filter(r => r.kind !== kind));
-    } else {
-      addKindForActive(surface, kind);
-    }
-  }
-  function toggleSpeakerOnSurface(surface, spk) {
-    const rows = getSurfaceRows(surface);
-    const hasSpk = rows.some(r => r.spk === spk);
-    if (hasSpk) {
-      setSurfaceRows(surface, rows.filter(r => r.spk !== spk));
-    } else {
-      const activeKinds = [...new Set(rows.map(r => r.kind))];
-      const defKind = hasStudy ? (isCjk ? 'ja-furi' : (STUDY_STREAMS[0]?.id || 'text')) : 'text';
-      const kinds = activeKinds.length ? activeKinds : [defKind];
-      let next = [...rows];
-      for (const kind of kinds) next = insertRowPreservingOrder(next, spk, kind);
-      setSurfaceRows(surface, next);
-    }
-  }
-  function closeStreamMenu() {
-    const menu = document.getElementById('stream-ctx-menu');
-    if (menu) { menu.hidden = true; menu.innerHTML = ''; }
-    ctxMenuState = null;
-  }
-  function renderStreamMenu(anchorX, anchorY) {
-    const menu = document.getElementById('stream-ctx-menu');
-    if (!menu || !ctxMenuState || !model) return;
-    const host = document.fullscreenElement || document.webkitFullscreenElement || document.body;
-    if (menu.parentElement !== host) host.appendChild(menu);
-
-    const {surface, hitSpk, hitKind} = ctxMenuState;
-    const rows = getSurfaceRows(surface);
-    const hitIdx = hitSpk && hitKind ? rows.findIndex(r => r.spk === hitSpk && r.kind === hitKind) : -1;
-    ctxMenuState.hitIdx = hitIdx;
-    const activeSpks = [...new Set(rows.map(r => r.spk))];
-    const targetSpks = activeSpks.length ? activeSpks : model.speakers;
-    const surfaceTitle = surface === 'overlay' ? 'Overlay streams' : 'Timeline streams';
-    const streamGrouped = isStreamGrouped(rows);
-
-    let out = '<div class="ctx-head">'
-      + (hitSpk ? avatarHtml(hitSpk, 'av-xs') : '')
-      + '<span>' + html(hitIdx >= 0 ? hitSpk + ' · ' + (STREAM_MAP.get(hitKind)?.label || surfaceTitle) : surfaceTitle) + '</span></div>';
-
-    if (hitIdx >= 0) {
-      const disUp = hitIdx <= 0 ? ' disabled' : '';
-      const disDn = hitIdx >= rows.length - 1 ? ' disabled' : '';
-      out += '<div class="ctx-inline-bar">'
-        + '<span class="ctx-inline-lbl">Order</span>'
-        + '<button type="button" class="ctx-chip-btn" data-act="move-up"' + disUp + ' title="Move row up">↑ Up</button>'
-        + '<button type="button" class="ctx-chip-btn" data-act="move-down"' + disDn + ' title="Move row down">↓ Down</button>'
-        + '<button type="button" class="ctx-chip-btn" data-act="move-top"' + disUp + ' title="Move row to top">⤒ Top</button>'
-        + '<button type="button" class="ctx-chip-btn" data-act="move-bot"' + disDn + ' title="Move row to bottom">⤓ Bot</button>'
-        + '</div>';
-      out += '<button type="button" class="ctx-item ctx-danger" data-act="rm-one" data-spk="'
-        + html(hitSpk) + '" data-kind="' + html(hitKind) + '">'
-        + '<span>Remove this row</span><span class="ctx-act">− Remove</span></button>';
-      if (hasStudy) {
-        const missingForSpk = STUDY_STREAMS.filter(s => !rows.some(r => r.spk === hitSpk && r.kind === s.id));
-        if (missingForSpk.length) {
-          out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Add</span>';
-          for (const st of missingForSpk) {
-            out += '<button type="button" class="ctx-chip-btn is-off" data-act="add-one" data-spk="'
-              + html(hitSpk) + '" data-kind="' + html(st.id) + '" title="' + html('Add ' + st.label + ' for ' + hitSpk)
-              + '">+ ' + html(st.short) + '</button>';
-          }
-          out += '</div>';
-        }
-      }
-      out += '<div class="ctx-sep"></div>';
-    }
-
-    if (rows.length > 1 && hasStudy) {
-      out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Group</span>'
-        + '<button type="button" class="ctx-chip-btn' + (!streamGrouped ? ' is-on' : '') + '" data-act="grp-spk">By speaker</button>'
-        + '<button type="button" class="ctx-chip-btn' + (streamGrouped ? ' is-on' : '') + '" data-act="grp-stream">By stream</button>'
-        + '</div><div class="ctx-sep"></div>';
-    }
-
-    if (hasStudy) {
-      out += '<div class="ctx-sec">All speakers</div>';
-      for (const st of STUDY_STREAMS) {
-        const allHave = targetSpks.length > 0 && targetSpks.every(s => rows.some(r => r.spk === s && r.kind === st.id));
-        out += '<button type="button" class="ctx-item ' + (allHave ? 'is-on' : 'is-off')
-          + '" data-act="toggle-kind" data-kind="' + html(st.id) + '">'
-          + '<span>' + html(st.label) + '</span>'
-          + '<span class="ctx-act">' + (allHave ? '✓ Remove' : '+ Add') + '</span></button>';
-      }
-      out += '<div class="ctx-sep"></div>';
-    }
-
-    out += '<div class="ctx-sec">Voices / Speakers</div>';
-    for (const spk of model.speakers) {
-      const c = model.colorOf(spk);
-      const present = rows.some(r => r.spk === spk);
-      out += '<button type="button" class="ctx-item ' + (present ? 'is-on' : 'is-off')
-        + '" data-act="toggle-spk" data-spk="' + html(spk) + '" style="--spk-color:' + c.fg + '">'
-        + avatarHtml(spk, 'av-xs')
-        + '<span style="color:' + c.fg + ';font-weight:700">' + html(spk) + '</span>'
-        + '<span class="ctx-act">' + (present ? '✓ Remove' : '+ Add') + '</span></button>';
-    }
-
-    if (surface === 'overlay') {
-      const fs = isPlayerFullscreen();
-      const curBot = Math.round(getOvBottom());
-      out += '<div class="ctx-sep"></div><div class="ctx-sec">Overlay layout</div>'
-        + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Height</span>'
-        + '<button type="button" class="ctx-chip-btn" data-act="ov-up">↑ Higher</button>'
-        + '<button type="button" class="ctx-chip-btn" data-act="ov-down">↓ Lower</button>'
-        + '<span class="ctx-meta">' + curBot + 'px</span></div>'
-        + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Text</span>'
-        + '<button type="button" class="ctx-chip-btn' + (ovFontScale < 0.92 ? ' is-on' : '') + '" data-act="ov-font" data-val="0.84">S</button>'
-        + '<button type="button" class="ctx-chip-btn' + (ovFontScale >= 0.92 && ovFontScale <= 1.08 ? ' is-on' : '') + '" data-act="ov-font" data-val="1">M</button>'
-        + '<button type="button" class="ctx-chip-btn' + (ovFontScale > 1.08 ? ' is-on' : '') + '" data-act="ov-font" data-val="1.2">L</button>'
-        + '<span class="ctx-meta">' + Math.round(ovCurrentScale * 100) + '%</span></div>'
-        + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">BG</span>'
-        + '<button type="button" class="ctx-chip-btn' + (ovAlpha < 0.8 ? ' is-on' : '') + '" data-act="ov-alpha" data-val="0.72">Light</button>'
-        + '<button type="button" class="ctx-chip-btn' + (ovAlpha >= 0.8 && ovAlpha <= 0.92 ? ' is-on' : '') + '" data-act="ov-alpha" data-val="0.88">Med</button>'
-        + '<button type="button" class="ctx-chip-btn' + (ovAlpha > 0.92 ? ' is-on' : '') + '" data-act="ov-alpha" data-val="0.96">Dark</button>'
-        + '</div>'
-        + '<button type="button" class="ctx-item" data-act="toggle-fs"><span>'
-        + (fs ? 'Exit Fullscreen (F)' : 'Enter Fullscreen (F)') + '</span></button>';
-    }
-
-    out += '<div class="ctx-sep"></div>'
-      + '<button type="button" class="ctx-item" data-act="reset"><span>Reset defaults</span></button>';
-
-    menu.innerHTML = out;
-    menu.hidden = false;
-    const mw = menu.offsetWidth || 260;
-    const mh = menu.offsetHeight || 340;
-    const x = Math.max(8, Math.min(anchorX, window.innerWidth - mw - 10));
-    const y = Math.max(8, Math.min(anchorY, window.innerHeight - mh - 10));
-    menu.style.left = x + 'px';
-    menu.style.top = y + 'px';
-    ctxMenuState.x = x;
-    ctxMenuState.y = y;
-  }
-  function showStreamMenu(ev, surface) {
-    if (!model) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    const rowEl = ev.target.closest('[data-row-spk]');
-    const hitSpk = rowEl ? rowEl.dataset.rowSpk : '';
-    const hitKind = rowEl ? rowEl.dataset.rowKind : '';
-    ctxMenuState = {surface, hitSpk, hitKind, hitIdx: -1, x: ev.clientX, y: ev.clientY};
-    renderStreamMenu(ev.clientX, ev.clientY);
-  }
-
-  function rubyHtml(ruby, fallback) {
-    if (!ruby || !Array.isArray(ruby) || !ruby.length) return html(fallback || '');
-    return ruby.map(pair => {
-      const t = pair[0] || '';
-      const r = pair[1] || '';
-      if (!r) return html(t);
-      return '<ruby>' + html(t) + '<rp>(</rp><rt>' + html(r) + '</rt><rp>)</rp></ruby>';
-    }).join('');
-  }
-  function loadKnownVocab() {
-    try {
-      const arr = JSON.parse(localStorage.getItem('ovpub.knownVocab') || '[]');
-      knownVocab = new Set(Array.isArray(arr) ? arr.map(String) : []);
-    } catch { knownVocab = new Set(); }
-  }
-  function saveKnownVocab() {
-    localStorage.setItem('ovpub.knownVocab', JSON.stringify([...knownVocab]));
-  }
-  function vocabKey(v) {
-    return (v.base || '') + '|' + (v.kana || '');
-  }
 
   const DEFAULT_CATEGORIES = [
     {id: 'overlap', label: 'Cooperative overlap', color: '#ffd240'},
@@ -1411,16 +1159,831 @@ APP_JS = r"""(() => {
   let lastLaneTrackPx = 0;
   let playheadEls = [];
   let blockElsByIndex = new Map();
+  let lastClockStr = '';
 
-  let ovWinStart = 0;
-  let ovRenderedStart = -1;
-  let ovRenderedTrackPx = 0;
-  let ovPlayheadEls = [];
-  let ovBlockElsByIndex = new Map();
+  // Per-floating-speaker render tracking
+  let floatRenderState = new Map(); // spk -> {winStart, winDur, trackPx, playheadEls, blockElsByIndex, clockEl}
 
   let laneMeasureCtx = null;
   let laneMeasureFont = '';
   let rafId = 0;
+
+  function isPrimaryStreamKind(kind) {
+    return kind === 'text' || kind === 'ja' || kind === 'ja-furi' || kind === 'es';
+  }
+  function defaultPrimaryKind() {
+    if (!hasStudy) return 'text';
+    if (isCjk) return showFurigana ? 'ja-furi' : 'ja';
+    if (doc && doc.language === 'es') return 'es';
+    return AVAILABLE_STREAMS[0]?.id || 'text';
+  }
+
+  function buildStreamRegistry() {
+    const list = [];
+    if (hasStudy && doc && doc.language === 'es') {
+      const origLbl = doc.dialect === 'ar' ? 'Original Spanish (AR)' : 'Original Spanish';
+      const origShort = doc.dialect === 'ar' ? 'ES (AR)' : 'ES';
+      list.push({id: 'es', label: origLbl, short: origShort, group: 'speech', baseRem: 2.9});
+      if (doc.segments.some(s => s.std)) {
+        list.push({id: 'es-std', label: 'Neutral Spanish', short: 'Neutral', group: 'study', baseRem: 2.05});
+      }
+      if (doc.segments.some(s => s.tokens.length && s.tokens.some(t => t.gloss))) {
+        list.push({id: 'literal', label: 'Word-by-word English', short: 'literal', group: 'study', baseRem: 2.0});
+      }
+      if (doc.segments.some(s => s.en)) {
+        list.push({id: 'en', label: 'Natural English', short: 'English', group: 'study', baseRem: 2.1});
+      }
+    } else if (hasStudy && isCjk) {
+      list.push({id: 'ja-furi', label: 'Japanese + Furigana', short: 'JP+furi', group: 'speech', baseRem: 3.45});
+      list.push({id: 'ja', label: 'Native Japanese', short: 'JP', group: 'speech', baseRem: 2.9});
+      if (doc.segments.some(s => s.tokens.length && s.tokens.some(t => t.gloss))) {
+        list.push({id: 'literal', label: 'English literal (word-by-word)', short: 'literal', group: 'study', baseRem: 2.0});
+      }
+      if (doc.segments.some(s => s.en)) {
+        list.push({id: 'en', label: 'English translation', short: 'English', group: 'study', baseRem: 2.1});
+      }
+    } else {
+      list.push({id: 'text', label: 'Transcript', short: 'Text', group: 'speech', baseRem: 2.9});
+      if (doc && doc.segments.some(s => s.en)) {
+        list.push({id: 'en', label: 'English translation', short: 'English', group: 'study', baseRem: 2.1});
+      }
+    }
+
+    // Custom extensible tracks from transcript.json (e.g. emotion, sarcasm, mood, status, translation)
+    CUSTOM_TRACKS = (doc && Array.isArray(doc.tracks) ? doc.tracks : []).map(t => ({
+      id: String(t.id || '').trim(),
+      label: String(t.label || t.id || '').trim(),
+      short: String(t.short || t.label || t.id || '').trim(),
+      type: t.type === 'meter' || t.type === 'tag' ? t.type : 'text',
+      color: String(t.color || '#a9d6ff'),
+      defaultOn: Boolean(t.defaultOn),
+      unsigned: Boolean(t.unsigned),
+    })).filter(t => t.id);
+    CUSTOM_TRACK_MAP = new Map(CUSTOM_TRACKS.map(t => [t.id, t]));
+    for (const trk of CUSTOM_TRACKS) {
+      list.push({
+        id: 'track:' + trk.id,
+        trackId: trk.id,
+        label: trk.label,
+        short: trk.short,
+        group: 'custom',
+        trackType: trk.type,
+        color: trk.color,
+        defaultOn: trk.defaultOn,
+        baseRem: trk.type === 'text' ? 2.05 : 1.85,
+      });
+    }
+
+    // Built-in analytical subcomponent rows when annotations or prosody are present
+    if (seedAnnotations.length || (annState.added && annState.added.length)) {
+      list.push({
+        id: 'analysis', label: 'Analysis / Annotations', short: 'Analysis',
+        group: 'analysis', baseRem: 1.9,
+      });
+    }
+    if (hasProsody) {
+      list.push({
+        id: 'delivery', label: 'Delivery Metrics (pitch/vol/pace)', short: 'Delivery',
+        group: 'analysis', baseRem: 1.85,
+      });
+    }
+
+    AVAILABLE_STREAMS = list;
+    STREAM_MAP = new Map(list.map(s => [s.id, s]));
+    STREAM_ORDER = new Map(list.map((s, i) => [s.id, i]));
+  }
+
+  function defaultFloatSlot(idx, total) {
+    if (total === 1) return {x: 4, y: 74, w: 92};
+    if (total === 2) {
+      return idx === 0 ? {x: 1, y: 75, w: 48.5} : {x: 50.5, y: 75, w: 48.5};
+    }
+    const cols = total <= 4 ? 2 : 3;
+    const col = idx % cols;
+    const row = Math.floor(idx / cols);
+    const totalRows = Math.ceil(total / cols);
+    const w = Math.floor((98 - (cols - 1)) / cols * 10) / 10;
+    const x = Math.round((1 + col * (w + 1)) * 10) / 10;
+    const bandH = 19;
+    const y = Math.max(8, 96 - (totalRows - row) * bandH);
+    return {x, y, w};
+  }
+
+  function defaultSpeakerRows(spk, spkIndex) {
+    const out = [];
+    if (hasStudy && doc && doc.language === 'es') {
+      const hasEn = STREAM_MAP.has('en');
+      if (model.speakers.length >= 4) {
+        let primary = model.speakers[0];
+        let maxCnt = -1;
+        for (const s of model.speakers) {
+          const c = model.speakerCounts.get(s) || 0;
+          if (c > maxCnt) { maxCnt = c; primary = s; }
+        }
+        out.push('es');
+        if (hasEn && spk === primary) out.push('en');
+      } else {
+        out.push('es');
+        if (hasEn) out.push('en');
+      }
+    } else if (hasStudy && isCjk) {
+      out.push('ja-furi');
+      if (STREAM_MAP.has('literal')) out.push('literal');
+      if (STREAM_MAP.has('en')) out.push('en');
+    } else {
+      out.push('text');
+    }
+    for (const trk of CUSTOM_TRACKS) {
+      if (trk.defaultOn) out.push('track:' + trk.id);
+    }
+    return out;
+  }
+
+  function defaultSpeakerOrder() {
+    if (!model) return [];
+    if (hasStudy && doc && doc.language === 'es' && model.speakers.length >= 4) {
+      let primary = model.speakers[0];
+      let maxCnt = -1;
+      for (const s of model.speakers) {
+        const c = model.speakerCounts.get(s) || 0;
+        if (c > maxCnt) { maxCnt = c; primary = s; }
+      }
+      return [primary, ...model.speakers.filter(s => s !== primary)];
+    }
+    return [...model.speakers];
+  }
+
+  function makeDefaultSpeakerCfg(spk, idx, total) {
+    const slot = defaultFloatSlot(idx, total);
+    return {
+      visible: true,
+      placement: 'dock', // 'dock' | 'float'
+      rows: defaultSpeakerRows(spk, idx),
+      showTone: true,
+      showBadges: true,
+      showPulses: true,
+      showLabel: true,
+      timerPos: 'inherit', // 'inherit' | 'bottom' | 'top' | 'hidden'
+      dockScale: 1.0,
+      dockWidth: 100,
+      dockAlign: 'left',
+      x: slot.x,
+      y: slot.y,
+      w: slot.w,
+      scale: 1.0,
+      alpha: 0.90,
+      windowSec: 0,
+    };
+  }
+
+  function spkStorageKey() {
+    return 'ovpub.spkCfg.v2.' + doc.video_id;
+  }
+  function loadSpeakerConfigs() {
+    const order = defaultSpeakerOrder();
+    const total = order.length;
+    const cfgs = {};
+    order.forEach((spk, idx) => { cfgs[spk] = makeDefaultSpeakerCfg(spk, idx, total); });
+    try {
+      const raw = JSON.parse(localStorage.getItem(spkStorageKey()) || 'null');
+      if (raw && typeof raw === 'object') {
+        if (Array.isArray(raw.order)) {
+          const valid = new Set(order);
+          const cleanOrder = raw.order.filter(s => valid.has(s));
+          for (const s of order) if (!cleanOrder.includes(s)) cleanOrder.push(s);
+          speakerOrder = cleanOrder;
+        } else {
+          speakerOrder = order;
+        }
+        const saved = raw.configs || {};
+        for (const spk of order) {
+          const sc = saved[spk];
+          if (!sc || typeof sc !== 'object') continue;
+          const base = cfgs[spk];
+          const rows = Array.isArray(sc.rows)
+            ? [...new Set(sc.rows.filter(r => STREAM_MAP.has(r)))]
+            : base.rows;
+          cfgs[spk] = {
+            ...base,
+            visible: sc.visible !== false,
+            placement: sc.placement === 'float' ? 'float' : 'dock',
+            rows: rows.length ? rows : base.rows,
+            showTone: sc.showTone !== false,
+            showBadges: sc.showBadges !== false,
+            showPulses: sc.showPulses !== false,
+            showLabel: sc.showLabel !== false,
+            timerPos: ['inherit', 'bottom', 'top', 'hidden'].includes(sc.timerPos) ? sc.timerPos : 'inherit',
+            dockScale: clampNum(sc.dockScale, 0.65, 2.0, base.dockScale),
+            dockWidth: clampNum(sc.dockWidth, 35, 100, base.dockWidth),
+            dockAlign: ['left', 'center', 'right'].includes(sc.dockAlign) ? sc.dockAlign : 'left',
+            x: clampNum(sc.x, 0, 88, base.x),
+            y: clampNum(sc.y, 0, 90, base.y),
+            w: clampNum(sc.w, 18, 100, base.w),
+            scale: clampNum(sc.scale, 0.6, 1.8, base.scale),
+            alpha: clampNum(sc.alpha, 0.45, 0.98, base.alpha),
+            windowSec: Number(sc.windowSec) || 0,
+          };
+        }
+        speakerConfigs = cfgs;
+        return;
+      }
+    } catch {}
+    speakerOrder = order;
+    speakerConfigs = cfgs;
+  }
+  function saveSpeakerConfigs() {
+    localStorage.setItem(spkStorageKey(), JSON.stringify({order: speakerOrder, configs: speakerConfigs}));
+  }
+  function clampNum(v, lo, hi, fallback) {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fallback;
+  }
+  function anyFloatingSpeakers() {
+    return speakerOrder.some(s => speakerConfigs[s]?.visible && speakerConfigs[s]?.placement === 'float');
+  }
+  function anyDockedSpeakers() {
+    return speakerOrder.some(s => speakerConfigs[s]?.visible && speakerConfigs[s]?.placement === 'dock');
+  }
+  function rowBaseRem(kind, withTone) {
+    const st = STREAM_MAP.get(kind);
+    const base = st ? st.baseRem : 2.9;
+    const toneExtra = withTone && isPrimaryStreamKind(kind) ? 0.95 : 0;
+    return base + toneExtra;
+  }
+  function effectiveTimerPos(spkCfg) {
+    if (spkCfg && spkCfg.timerPos && spkCfg.timerPos !== 'inherit') return spkCfg.timerPos;
+    return stageCfg.timerPos || 'bottom';
+  }
+
+  function isPlayerFullscreen() {
+    const pw = document.getElementById('player-wrap');
+    return Boolean(pw && (document.fullscreenElement === pw || document.webkitFullscreenElement === pw));
+  }
+  function parseAspect(a) {
+    if (a === '4:3') return 4 / 3;
+    if (a === '21:9') return 21 / 9;
+    return 16 / 9;
+  }
+  function fitVideoBox() {
+    const area = document.getElementById('stage-video-area');
+    const box = document.getElementById('video-box');
+    if (!area || !box) return;
+    const aw = area.clientWidth || area.getBoundingClientRect().width;
+    const ah = area.clientHeight || area.getBoundingClientRect().height;
+    if (aw <= 0 || ah <= 0) return;
+    const ar = parseAspect(stageCfg.videoAspect);
+    const scale = clampNum(stageCfg.videoScale, 0.4, 1.0, 1.0);
+    let vw = aw * scale;
+    let vh = vw / ar;
+    if (vh > ah * scale) {
+      vh = ah * scale;
+      vw = vh * ar;
+    }
+    box.style.width = Math.max(160, Math.floor(vw)) + 'px';
+    box.style.height = Math.max(90, Math.floor(vh)) + 'px';
+    const ax = {left: 'flex-start', center: 'center', right: 'flex-end'};
+    const ay = {top: 'flex-start', center: 'center', bottom: 'flex-end'};
+    area.style.justifyContent = ax[stageCfg.videoAlignX] || 'center';
+    area.style.alignItems = ay[stageCfg.videoAlignY] || 'center';
+  }
+
+  function applyHandlesMode() {
+    const m = stageCfg.handlesMode || 'hover';
+    document.documentElement.classList.toggle('handles-hover', m === 'hover');
+    document.documentElement.classList.toggle('handles-show', m === 'show');
+    document.documentElement.classList.toggle('handles-hidden', m === 'hidden');
+  }
+  function applyTimerPosClasses() {
+    const ls = document.getElementById('lanes-stage');
+    if (ls) {
+      const p = stageCfg.timerPos || 'bottom';
+      ls.classList.toggle('timer-bottom', p === 'bottom');
+      ls.classList.toggle('timer-top', p === 'top');
+      ls.classList.toggle('timer-hidden', p === 'hidden');
+    }
+  }
+  function syncFloatButton() {
+    const btn = document.getElementById('toggle-overlay');
+    if (btn) btn.setAttribute('aria-pressed', String(anyFloatingSpeakers()));
+  }
+  function syncFullscreenButtons() {
+    const fs = isPlayerFullscreen();
+    const btn = document.getElementById('toggle-fullscreen');
+    if (btn) {
+      btn.setAttribute('aria-pressed', String(fs));
+      btn.textContent = fs ? 'Exit Full' : 'Fullscreen';
+    }
+  }
+  function syncDockHost() {
+    const fs = isPlayerFullscreen();
+    const pw = document.getElementById('player-wrap');
+    const stageDock = document.getElementById('stage-dock');
+    const splitter = document.getElementById('stage-splitter');
+    const vizStage = document.getElementById('viz-stage');
+    const speakerLanes = document.getElementById('speaker-lanes');
+    const hud = document.getElementById('fs-corner-hud');
+    if (!pw || !stageDock || !vizStage || !speakerLanes) return;
+
+    pw.classList.toggle('dock-top', fs && stageCfg.fsDock === 'top');
+    if (fs) {
+      if (stageCfg.fsDock === 'off') {
+        if (speakerLanes.parentElement !== vizStage) vizStage.appendChild(speakerLanes);
+        stageDock.hidden = true;
+        if (splitter) splitter.hidden = true;
+        if (hud) hud.hidden = false;
+      } else {
+        if (speakerLanes.parentElement !== stageDock) stageDock.appendChild(speakerLanes);
+        stageDock.hidden = false;
+        if (splitter) splitter.hidden = false;
+        if (hud) hud.hidden = true;
+        if (stageCfg.fsDockH > 0) {
+          stageDock.style.height = Math.min(Math.round(window.innerHeight * 0.65), Math.max(88, stageCfg.fsDockH)) + 'px';
+        } else {
+          stageDock.style.height = '';
+        }
+      }
+    } else {
+      if (speakerLanes.parentElement !== vizStage) vizStage.appendChild(speakerLanes);
+      stageDock.hidden = true;
+      stageDock.style.height = '';
+      if (splitter) splitter.hidden = true;
+      if (hud) hud.hidden = true;
+    }
+    fitVideoBox();
+  }
+  function togglePlayerFullscreen() {
+    const pw = document.getElementById('player-wrap');
+    if (!pw) return;
+    if (isPlayerFullscreen()) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) Promise.resolve(exit.call(document)).catch(() => {});
+      return;
+    }
+    const req = pw.requestFullscreen || pw.webkitRequestFullscreen;
+    if (req) Promise.resolve(req.call(pw)).catch(() => {});
+  }
+  function onFullscreenChange() {
+    syncFullscreenButtons();
+    closeAllPopovers();
+    const host = document.fullscreenElement || document.webkitFullscreenElement || document.body;
+    for (const id of ['stream-ctx-menu', 'cfg-popover']) {
+      const el = document.getElementById(id);
+      if (el && el.parentElement !== host) host.appendChild(el);
+    }
+    syncDockHost();
+    applySplitLayout();
+    requestAnimationFrame(() => {
+      fitVideoBox();
+      renderLanesWindow(true);
+      renderAllFloatCards(true);
+    });
+  }
+
+  function avatarHtml(spk, sizeCls) {
+    const url = doc && doc.avatars && doc.avatars[spk];
+    if (!url) return '';
+    return '<img class="spk-avatar' + (sizeCls ? ' ' + sizeCls : '') + '" src="' + html(url)
+      + '" alt="' + html(spk) + '" loading="lazy">';
+  }
+
+  function syncStudyToolbarButtons() {
+    if (!hasStudy) return;
+    const allRows = speakerOrder.flatMap(s => (speakerConfigs[s]?.visible ? speakerConfigs[s].rows : []));
+    const stdBtn = document.getElementById('toggle-std');
+    if (stdBtn && !stdBtn.hidden) stdBtn.setAttribute('aria-pressed', String(allRows.includes('es-std')));
+    const gBtn = document.getElementById('toggle-gloss');
+    if (gBtn && !gBtn.hidden) {
+      showGloss = allRows.includes('literal');
+      gBtn.setAttribute('aria-pressed', String(showGloss));
+    }
+    const eBtn = document.getElementById('toggle-english');
+    if (eBtn && !eBtn.hidden) {
+      showEnglish = allRows.includes('en');
+      eBtn.setAttribute('aria-pressed', String(showEnglish));
+    }
+  }
+
+  function refreshAllTimelines(recalcLayout) {
+    saveSpeakerConfigs();
+    syncFloatButton();
+    syncStudyToolbarButtons();
+    syncDockHost();
+    renderLanesWindow(true);
+    renderAllFloatCards(true);
+    paintTranscript();
+    if (recalcLayout) applySplitLayout();
+    else fitVideoBox();
+  }
+
+  function addRowToSpeaker(spk, kind) {
+    const cfg = speakerConfigs[spk];
+    if (!cfg || !STREAM_MAP.has(kind)) return;
+    if (cfg.rows.includes(kind)) return;
+    const kOrd = STREAM_ORDER.get(kind) ?? 99;
+    const next = [...cfg.rows];
+    const ins = next.findIndex(r => (STREAM_ORDER.get(r) ?? 99) > kOrd);
+    if (ins >= 0) next.splice(ins, 0, kind);
+    else next.push(kind);
+    cfg.rows = next;
+    cfg.visible = true;
+    refreshAllTimelines(true);
+  }
+  function removeRowFromSpeaker(spk, kind) {
+    const cfg = speakerConfigs[spk];
+    if (!cfg) return;
+    cfg.rows = cfg.rows.filter(r => r !== kind);
+    if (!cfg.rows.length) cfg.visible = false;
+    refreshAllTimelines(true);
+  }
+  function toggleRowOnSpeaker(spk, kind) {
+    const cfg = speakerConfigs[spk];
+    if (!cfg) return;
+    if (cfg.rows.includes(kind)) removeRowFromSpeaker(spk, kind);
+    else addRowToSpeaker(spk, kind);
+  }
+  function toggleRowForAllSpeakers(kind) {
+    const visSpks = speakerOrder.filter(s => speakerConfigs[s]?.visible);
+    const targets = visSpks.length ? visSpks : speakerOrder;
+    const allHave = targets.length > 0 && targets.every(s => speakerConfigs[s].rows.includes(kind));
+    for (const s of targets) {
+      const cfg = speakerConfigs[s];
+      if (allHave) {
+        cfg.rows = cfg.rows.filter(r => r !== kind);
+        if (!cfg.rows.length) cfg.rows = [defaultPrimaryKind()];
+      } else if (!cfg.rows.includes(kind)) {
+        const kOrd = STREAM_ORDER.get(kind) ?? 99;
+        const ins = cfg.rows.findIndex(r => (STREAM_ORDER.get(r) ?? 99) > kOrd);
+        if (ins >= 0) cfg.rows.splice(ins, 0, kind);
+        else cfg.rows.push(kind);
+      }
+    }
+    refreshAllTimelines(true);
+  }
+  function moveSpeakerOrder(fromIdx, toIdx) {
+    if (fromIdx < 0 || fromIdx >= speakerOrder.length) return;
+    toIdx = Math.max(0, Math.min(speakerOrder.length - 1, toIdx));
+    if (fromIdx === toIdx) return;
+    const [spk] = speakerOrder.splice(fromIdx, 1);
+    speakerOrder.splice(toIdx, 0, spk);
+    refreshAllTimelines(false);
+  }
+  function setAllSpeakersPlacement(placement) {
+    const total = speakerOrder.length;
+    speakerOrder.forEach((spk, idx) => {
+      const cfg = speakerConfigs[spk];
+      cfg.placement = placement;
+      if (placement === 'float' && (!Number.isFinite(cfg.w) || cfg.w > 98)) {
+        const slot = defaultFloatSlot(idx, total);
+        cfg.x = slot.x; cfg.y = slot.y; cfg.w = slot.w;
+      }
+    });
+    refreshAllTimelines(true);
+  }
+
+  function closeStreamMenu() {
+    const menu = document.getElementById('stream-ctx-menu');
+    if (menu) { menu.hidden = true; menu.innerHTML = ''; }
+    ctxMenuState = null;
+  }
+  function closeCfgPopover() {
+    const pop = document.getElementById('cfg-popover');
+    if (pop) { pop.hidden = true; pop.innerHTML = ''; }
+    openPopoverKind = '';
+  }
+  function closeAllPopovers() {
+    closeStreamMenu();
+    closeCfgPopover();
+  }
+  function positionFixedPopover(el, anchorX, anchorY) {
+    const host = document.fullscreenElement || document.webkitFullscreenElement || document.body;
+    if (el.parentElement !== host) host.appendChild(el);
+    el.hidden = false;
+    const mw = el.offsetWidth || 300;
+    const mh = el.offsetHeight || 360;
+    const x = Math.max(8, Math.min(anchorX, window.innerWidth - mw - 10));
+    const y = Math.max(8, Math.min(anchorY, window.innerHeight - mh - 10));
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    return {x, y};
+  }
+
+  // Per-speaker config popover (also opened from right-click on any speaker or its ⚙ button)
+  function renderSpeakerConfigPopover(spk, anchorX, anchorY) {
+    const pop = document.getElementById('cfg-popover');
+    const cfg = speakerConfigs[spk];
+    if (!pop || !cfg || !model) return;
+    closeStreamMenu();
+    openPopoverKind = 'speaker:' + spk;
+    const c = model.colorOf(spk);
+    const idx = speakerOrder.indexOf(spk);
+    const isFloat = cfg.placement === 'float';
+
+    let out = '<div class="ctx-head">'
+      + avatarHtml(spk, 'av-xs')
+      + '<span style="color:' + c.fg + '">' + html(spk) + ' — Scroller</span>'
+      + '<button type="button" class="ctx-head-close" data-pop-close="1">×</button></div>';
+
+    // Placement: Dock below vs Float independently
+    out += '<div class="ctx-sec">Position &amp; Mode</div>'
+      + '<div class="ctx-inline-bar">'
+      + '<button type="button" class="ctx-chip-btn' + (!isFloat ? ' is-on' : '') + '" data-sc="place" data-spk="' + html(spk) + '" data-val="dock">Dock below</button>'
+      + '<button type="button" class="ctx-chip-btn' + (isFloat ? ' is-on' : '') + '" data-sc="place" data-spk="' + html(spk) + '" data-val="float">Float separate</button>'
+      + '<button type="button" class="ctx-chip-btn" data-sc="order-up" data-spk="' + html(spk) + '"' + (idx <= 0 ? ' disabled' : '') + '>↑</button>'
+      + '<button type="button" class="ctx-chip-btn" data-sc="order-dn" data-spk="' + html(spk) + '"' + (idx >= speakerOrder.length - 1 ? ' disabled' : '') + '>↓</button>'
+      + '</div>';
+
+    // Independent Size controls
+    out += '<div class="ctx-sec">Size (' + (isFloat ? 'Floating card' : 'Docked deck') + ')</div>';
+    if (isFloat) {
+      out += '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Width</span>'
+        + '<input type="range" min="18" max="100" step="1" value="' + Math.round(cfg.w) + '" data-sc-rng="w" data-spk="' + html(spk) + '">'
+        + '<span class="ctx-meta">' + Math.round(cfg.w) + '%</span></div>'
+        + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Scale</span>'
+        + '<input type="range" min="60" max="180" step="5" value="' + Math.round(cfg.scale * 100) + '" data-sc-rng="scale" data-spk="' + html(spk) + '">'
+        + '<span class="ctx-meta">' + Math.round(cfg.scale * 100) + '%</span></div>'
+        + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">BG</span>'
+        + '<input type="range" min="45" max="98" step="2" value="' + Math.round(cfg.alpha * 100) + '" data-sc-rng="alpha" data-spk="' + html(spk) + '">'
+        + '<span class="ctx-meta">' + Math.round(cfg.alpha * 100) + '%</span></div>';
+    } else {
+      out += '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Height</span>'
+        + '<input type="range" min="65" max="200" step="5" value="' + Math.round(cfg.dockScale * 100) + '" data-sc-rng="dockScale" data-spk="' + html(spk) + '">'
+        + '<span class="ctx-meta">' + Math.round(cfg.dockScale * 100) + '%</span></div>'
+        + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Width</span>'
+        + '<input type="range" min="35" max="100" step="5" value="' + Math.round(cfg.dockWidth) + '" data-sc-rng="dockWidth" data-spk="' + html(spk) + '">'
+        + '<span class="ctx-meta">' + Math.round(cfg.dockWidth) + '%</span></div>';
+      if (cfg.dockWidth < 100) {
+        out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Align</span>'
+          + ['left', 'center', 'right'].map(a =>
+            '<button type="button" class="ctx-chip-btn' + (cfg.dockAlign === a ? ' is-on' : '') + '" data-sc="dockAlign" data-spk="' + html(spk) + '" data-val="' + a + '">' + a + '</button>'
+          ).join('') + '</div>';
+      }
+    }
+
+    // Independent Subcomponents (rows + inline elements)
+    out += '<div class="ctx-sep"></div><div class="ctx-sec">Subcomponents for ' + html(spk) + '</div>';
+    for (const st of AVAILABLE_STREAMS) {
+      const on = cfg.rows.includes(st.id);
+      out += '<label class="ctx-check-row">'
+        + '<input type="checkbox"' + (on ? ' checked' : '') + ' data-sc-row="' + html(st.id) + '" data-spk="' + html(spk) + '">'
+        + '<span>' + html(st.label) + '</span>'
+        + '<span class="ctx-check-hint">' + html(st.short) + '</span></label>';
+    }
+    if (hasProsody) {
+      out += '<label class="ctx-check-row">'
+        + '<input type="checkbox"' + (cfg.showTone ? ' checked' : '') + ' data-sc-flag="showTone" data-spk="' + html(spk) + '">'
+        + '<span>Pitch &amp; loudness curve</span><span class="ctx-check-hint">SVG</span></label>';
+      out += '<label class="ctx-check-row">'
+        + '<input type="checkbox"' + (cfg.showBadges ? ' checked' : '') + ' data-sc-flag="showBadges" data-spk="' + html(spk) + '">'
+        + '<span>Meta-labels (loud, falsetto…)</span><span class="ctx-check-hint">badges</span></label>';
+    }
+    if ((model.pulsesBySpeaker?.get(spk) || []).length) {
+      out += '<label class="ctx-check-row">'
+        + '<input type="checkbox"' + (cfg.showPulses ? ' checked' : '') + ' data-sc-flag="showPulses" data-spk="' + html(spk) + '">'
+        + '<span>Vocal overlap pulses</span><span class="ctx-check-hint">pulses</span></label>';
+    }
+    out += '<label class="ctx-check-row">'
+      + '<input type="checkbox"' + (cfg.showLabel ? ' checked' : '') + ' data-sc-flag="showLabel" data-spk="' + html(spk) + '">'
+      + '<span>Speaker name &amp; avatar column</span><span class="ctx-check-hint">gutter</span></label>';
+
+    if (isFloat) {
+      out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Timer</span>'
+        + [['inherit', 'Auto'], ['bottom', 'Bottom'], ['top', 'Top'], ['hidden', 'Off']].map(([v, lbl]) =>
+          '<button type="button" class="ctx-chip-btn' + (cfg.timerPos === v ? ' is-on' : '') + '" data-sc="timerPos" data-spk="' + html(spk) + '" data-val="' + v + '">' + lbl + '</button>'
+        ).join('') + '</div>';
+    }
+
+    out += '<div class="ctx-sep"></div>'
+      + '<div class="ctx-inline-bar">'
+      + '<button type="button" class="ctx-chip-btn" data-sc="reset-spk" data-spk="' + html(spk) + '">Reset ' + html(spk) + '</button>'
+      + '<button type="button" class="ctx-chip-btn" style="color:#fca5a5" data-sc="hide-spk" data-spk="' + html(spk) + '">Hide speaker</button>'
+      + '</div>';
+
+    pop.innerHTML = out;
+    pop.dataset.anchorX = String(anchorX);
+    pop.dataset.anchorY = String(anchorY);
+    positionFixedPopover(pop, anchorX, anchorY);
+  }
+
+  // Monitor & Video Layout Popover (Issues 1, 5, 6)
+  function renderLayoutPopover(anchorX, anchorY) {
+    const pop = document.getElementById('cfg-popover');
+    if (!pop || !model) return;
+    closeStreamMenu();
+    openPopoverKind = 'layout';
+    const fs = isPlayerFullscreen();
+
+    let out = '<div class="ctx-head"><span>Monitor &amp; Stage Layout</span>'
+      + '<button type="button" class="ctx-head-close" data-pop-close="1">×</button></div>';
+
+    out += '<div class="ctx-sec">Video Frame (strict aspect fit — no overzoom)</div>'
+      + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Scale</span>'
+      + '<input type="range" min="40" max="100" step="2" value="' + Math.round(stageCfg.videoScale * 100) + '" data-lay-rng="videoScale">'
+      + '<span class="ctx-meta">' + Math.round(stageCfg.videoScale * 100) + '%</span></div>'
+      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Presets</span>'
+      + [0.6, 0.75, 0.85, 1.0].map(v =>
+        '<button type="button" class="ctx-chip-btn' + (Math.abs(stageCfg.videoScale - v) < 0.02 ? ' is-on' : '')
+        + '" data-lay="videoScale" data-val="' + v + '">' + (v === 1 ? 'Fit 100%' : Math.round(v * 100) + '%') + '</button>'
+      ).join('') + '</div>'
+      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Horiz</span>'
+      + [['left', 'Left'], ['center', 'Center'], ['right', 'Right']].map(([v, lbl]) =>
+        '<button type="button" class="ctx-chip-btn' + (stageCfg.videoAlignX === v ? ' is-on' : '') + '" data-lay="videoAlignX" data-val="' + v + '">' + lbl + '</button>'
+      ).join('') + '</div>'
+      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Vert</span>'
+      + [['top', 'Top'], ['center', 'Center'], ['bottom', 'Bottom']].map(([v, lbl]) =>
+        '<button type="button" class="ctx-chip-btn' + (stageCfg.videoAlignY === v ? ' is-on' : '') + '" data-lay="videoAlignY" data-val="' + v + '">' + lbl + '</button>'
+      ).join('') + '</div>'
+      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Aspect</span>'
+      + ['16:9', '4:3', '21:9'].map(v =>
+        '<button type="button" class="ctx-chip-btn' + (stageCfg.videoAspect === v ? ' is-on' : '') + '" data-lay="videoAspect" data-val="' + v + '">' + v + '</button>'
+      ).join('') + '</div>';
+
+    out += '<div class="ctx-sep"></div><div class="ctx-sec">Scrollers Placement</div>'
+      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Page</span>'
+      + '<button type="button" class="ctx-chip-btn' + (splitView ? ' is-on' : '') + '" data-lay="split" data-val="true">Split + Transcript</button>'
+      + '<button type="button" class="ctx-chip-btn' + (!splitView ? ' is-on' : '') + '" data-lay="split" data-val="false">Below video</button>'
+      + '</div>'
+      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Fullscr</span>'
+      + [['bottom', 'Dock below'], ['top', 'Dock above'], ['off', 'Float only']].map(([v, lbl]) =>
+        '<button type="button" class="ctx-chip-btn' + (stageCfg.fsDock === v ? ' is-on' : '') + '" data-lay="fsDock" data-val="' + v + '">' + lbl + '</button>'
+      ).join('') + '</div>'
+      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Speakers</span>'
+      + '<button type="button" class="ctx-chip-btn' + (!anyFloatingSpeakers() ? ' is-on' : '') + '" data-lay="all-dock">Dock all below</button>'
+      + '<button type="button" class="ctx-chip-btn' + (anyFloatingSpeakers() && !anyDockedSpeakers() ? ' is-on' : '') + '" data-lay="all-float">Float separately</button>'
+      + '<button type="button" class="ctx-chip-btn" data-lay="matte-float" title="Pin video to top at 76% and float speakers in the clean black band below it">Matte below + Float</button>'
+      + '</div>';
+
+    out += '<div class="ctx-sep"></div><div class="ctx-sec">Timer &amp; Move / Resize Handles</div>'
+      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Timer</span>'
+      + [['bottom', 'Bottom'], ['top', 'Top'], ['hidden', 'Hidden']].map(([v, lbl]) =>
+        '<button type="button" class="ctx-chip-btn' + (stageCfg.timerPos === v ? ' is-on' : '') + '" data-lay="timerPos" data-val="' + v + '">' + lbl + '</button>'
+      ).join('') + '</div>'
+      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Handles</span>'
+      + [['hover', 'Hover'], ['show', 'Show'], ['hidden', 'Locked']].map(([v, lbl]) =>
+        '<button type="button" class="ctx-chip-btn' + (stageCfg.handlesMode === v ? ' is-on' : '') + '" data-lay="handlesMode" data-val="' + v + '">' + lbl + '</button>'
+      ).join('') + '</div>';
+
+    out += '<div class="ctx-sep"></div>'
+      + '<div class="ctx-inline-bar">'
+      + '<button type="button" class="ctx-chip-btn" data-lay="toggle-fs">' + (fs ? 'Exit Fullscreen (F)' : 'Enter Fullscreen (F)') + '</button>'
+      + '<button type="button" class="ctx-chip-btn" data-lay="reset-layout">Reset layout</button>'
+      + '</div>';
+
+    pop.innerHTML = out;
+    pop.dataset.anchorX = String(anchorX);
+    pop.dataset.anchorY = String(anchorY);
+    positionFixedPopover(pop, anchorX, anchorY);
+  }
+
+  // Meta-labels config popover (Issue 4: toggle & explain 'loud' + pitch/pace badges)
+  function renderLabelsPopover(anchorX, anchorY) {
+    const pop = document.getElementById('cfg-popover');
+    if (!pop) return;
+    closeStreamMenu();
+    openPopoverKind = 'labels';
+    const ml = metaLabels;
+
+    let out = '<div class="ctx-head"><span>Meta-Labels Config</span>'
+      + '<button type="button" class="ctx-head-close" data-pop-close="1">×</button></div>';
+
+    out += '<label class="ctx-check-row">'
+      + '<input type="checkbox"' + (ml.enabled ? ' checked' : '') + ' data-ml-flag="enabled">'
+      + '<span><strong>Show meta-labels on turns</strong></span></label>';
+
+    out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Style</span>'
+      + [['words', 'Plain words'], ['numeric', 'Numeric'], ['both', 'Both']].map(([v, lbl]) =>
+        '<button type="button" class="ctx-chip-btn' + (ml.format === v ? ' is-on' : '') + '" data-ml="format" data-val="' + v + '">' + lbl + '</button>'
+      ).join('') + '</div>'
+      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Corner</span>'
+      + [['br', 'Bot-right'], ['tr', 'Top-right'], ['tl', 'Top-left']].map(([v, lbl]) =>
+        '<button type="button" class="ctx-chip-btn' + (ml.position === v ? ' is-on' : '') + '" data-ml="position" data-val="' + v + '">' + lbl + '</button>'
+      ).join('') + '</div>'
+      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Trigger</span>'
+      + [['strict', 'Major only'], ['normal', 'Normal'], ['all', 'Sensitive']].map(([v, lbl]) =>
+        '<button type="button" class="ctx-chip-btn' + (ml.sensitivity === v ? ' is-on' : '') + '" data-ml="sensitivity" data-val="' + v + '">' + lbl + '</button>'
+      ).join('') + '</div>'
+      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Max/turn</span>'
+      + [1, 2].map(v =>
+        '<button type="button" class="ctx-chip-btn' + (ml.maxPerBlock === v ? ' is-on' : '') + '" data-ml="maxPerBlock" data-val="' + v + '">' + v + '</button>'
+      ).join('') + '</div>';
+
+    out += '<div class="ctx-sep"></div><div class="ctx-sec">Label types (vs speaker baseline)</div>';
+    const defs = [
+      ['falsetto', 'Falsetto / high pitch peak', '+9.5st+ (semitones)'],
+      ['high', 'Rising / elevated pitch', '+6st rising'],
+      ['low', 'Low pitch drop', '−3.5st+'],
+      ['loud', 'Loud volume spike', '+7.5dB peak'],
+      ['quiet', 'Quiet / soft voice', '−6.5dB'],
+      ['fast', 'Fast speaking pace', '1.45×+ speed'],
+      ['slow', 'Slow / drawn-out pace', '≤0.62× speed'],
+    ];
+    for (const [k, lbl, hint] of defs) {
+      out += '<label class="ctx-check-row">'
+        + '<input type="checkbox"' + (ml.kinds[k] ? ' checked' : '') + ' data-ml-kind="' + k + '">'
+        + '<span>' + lbl + '</span><span class="ctx-check-hint">' + hint + '</span></label>';
+    }
+
+    pop.innerHTML = out;
+    pop.dataset.anchorX = String(anchorX);
+    pop.dataset.anchorY = String(anchorY);
+    positionFixedPopover(pop, anchorX, anchorY);
+  }
+
+  // Global Layers / Speakers menu (also right-click anywhere on swimlane)
+  function renderStreamMenu(anchorX, anchorY) {
+    const menu = document.getElementById('stream-ctx-menu');
+    if (!menu || !ctxMenuState || !model) return;
+    closeCfgPopover();
+    const {hitSpk, hitKind} = ctxMenuState;
+    const visSpks = speakerOrder.filter(s => speakerConfigs[s]?.visible);
+    const targets = visSpks.length ? visSpks : speakerOrder;
+
+    let out = '<div class="ctx-head">'
+      + (hitSpk ? avatarHtml(hitSpk, 'av-xs') : '')
+      + '<span>' + html(hitSpk ? hitSpk + ' · Layers' : 'Speakers &amp; Data Layers') + '</span></div>';
+
+    if (hitSpk && speakerConfigs[hitSpk]) {
+      const sc = speakerConfigs[hitSpk];
+      out += '<button type="button" class="ctx-item" data-act="open-spk-cfg" data-spk="' + html(hitSpk) + '">'
+        + '<span>⚙ Configure ' + html(hitSpk) + ' (size, position, parts)…</span></button>';
+      out += '<button type="button" class="ctx-item" data-act="toggle-spk-float" data-spk="' + html(hitSpk) + '">'
+        + '<span>' + (sc.placement === 'float' ? 'Dock ' + html(hitSpk) + ' below video' : 'Float ' + html(hitSpk) + ' independently') + '</span></button>';
+      if (hitKind && sc.rows.includes(hitKind) && sc.rows.length > 1) {
+        out += '<button type="button" class="ctx-item ctx-danger" data-act="rm-one" data-spk="'
+          + html(hitSpk) + '" data-kind="' + html(hitKind) + '">'
+          + '<span>Remove “' + html(STREAM_MAP.get(hitKind)?.short || hitKind) + '” from ' + html(hitSpk) + '</span></button>';
+      }
+      out += '<div class="ctx-sep"></div>';
+    }
+
+    out += '<div class="ctx-sec">Data &amp; Subtitle Layers (all active speakers)</div>';
+    for (const st of AVAILABLE_STREAMS) {
+      const allHave = targets.length > 0 && targets.every(s => speakerConfigs[s].rows.includes(st.id));
+      out += '<button type="button" class="ctx-item ' + (allHave ? 'is-on' : 'is-off')
+        + '" data-act="toggle-kind" data-kind="' + html(st.id) + '">'
+        + '<span>' + html(st.label) + '</span>'
+        + '<span class="ctx-act">' + (allHave ? '✓ On' : '+ Add') + '</span></button>';
+    }
+
+    out += '<div class="ctx-sep"></div><div class="ctx-sec">Speakers (click ⚙ for per-speaker settings)</div>';
+    for (const spk of speakerOrder) {
+      const sc = speakerConfigs[spk];
+      const c = model.colorOf(spk);
+      out += '<div class="ctx-inline-bar" style="padding:.16rem .75rem">'
+        + avatarHtml(spk, 'av-xs')
+        + '<span style="color:' + c.fg + ';font-weight:800;margin-right:auto">' + html(spk) + '</span>'
+        + '<button type="button" class="ctx-chip-btn' + (sc.visible ? ' is-on' : ' is-off') + '" data-act="toggle-spk" data-spk="' + html(spk) + '">'
+        + (sc.visible ? 'Shown' : 'Hidden') + '</button>'
+        + '<button type="button" class="ctx-chip-btn' + (sc.placement === 'float' ? ' is-on' : '') + '" data-act="toggle-spk-float" data-spk="' + html(spk) + '" title="Toggle docked below vs floating card">'
+        + (sc.placement === 'float' ? 'Float' : 'Dock') + '</button>'
+        + '<button type="button" class="ctx-chip-btn" data-act="open-spk-cfg" data-spk="' + html(spk) + '" title="Independent size &amp; subcomponents">⚙</button>'
+        + '</div>';
+    }
+
+    out += '<div class="ctx-sep"></div>'
+      + '<div class="ctx-inline-bar">'
+      + '<button type="button" class="ctx-chip-btn" data-act="open-layout">Monitor Layout…</button>'
+      + (hasProsody ? '<button type="button" class="ctx-chip-btn" data-act="open-labels">Meta-Labels…</button>' : '')
+      + '<button type="button" class="ctx-chip-btn" data-act="reset-all">Reset</button>'
+      + '</div>';
+
+    menu.innerHTML = out;
+    const pos = positionFixedPopover(menu, anchorX, anchorY);
+    ctxMenuState.x = pos.x;
+    ctxMenuState.y = pos.y;
+  }
+  function showStreamMenu(ev) {
+    if (!model) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const rowEl = ev.target.closest('[data-row-spk]');
+    const deckEl = ev.target.closest('[data-spk]');
+    const hitSpk = rowEl ? rowEl.dataset.rowSpk : (deckEl ? deckEl.dataset.spk : '');
+    const hitKind = rowEl ? rowEl.dataset.rowKind : '';
+    ctxMenuState = {hitSpk, hitKind, x: ev.clientX, y: ev.clientY};
+    renderStreamMenu(ev.clientX, ev.clientY);
+  }
+
+  function rubyHtml(ruby, fallback) {
+    if (!ruby || !Array.isArray(ruby) || !ruby.length) return html(fallback || '');
+    return ruby.map(pair => {
+      const t = pair[0] || '';
+      const r = pair[1] || '';
+      if (!r) return html(t);
+      return '<ruby>' + html(t) + '<rp>(</rp><rt>' + html(r) + '</rt><rp>)</rp></ruby>';
+    }).join('');
+  }
+  function loadKnownVocab() {
+    try {
+      const arr = JSON.parse(localStorage.getItem('ovpub.knownVocab') || '[]');
+      knownVocab = new Set(Array.isArray(arr) ? arr.map(String) : []);
+    } catch { knownVocab = new Set(); }
+  }
+  function saveKnownVocab() {
+    localStorage.setItem('ovpub.knownVocab', JSON.stringify([...knownVocab]));
+  }
+  function vocabKey(v) {
+    return (v.base || '') + '|' + (v.kana || '');
+  }
 
   function catInfo(id) {
     return catMap.get(id) || {id: id || 'other', label: id || 'Other', color: '#7cc4ff'};
@@ -1445,9 +2008,7 @@ APP_JS = r"""(() => {
         out.push(patch ? {...item, ...patch, _origin: 'edited'} : {...item, _origin: 'ai'});
       }
     }
-    for (const item of (annState.added || [])) {
-      out.push({...item, _origin: 'user'});
-    }
+    for (const item of (annState.added || [])) out.push({...item, _origin: 'user'});
     out.sort((a, b) => (a.t - b.t) || String(a.id).localeCompare(String(b.id)));
     return out;
   }
@@ -1513,9 +2074,7 @@ APP_JS = r"""(() => {
     if (pendingHashSeek == null && model && model.clipStart > 0) {
       pendingHashSeek = model.clipStart;
     }
-    if (pendingHashSeek != null && pendingHashSeek > 0) {
-      ytTime = pendingHashSeek;
-    }
+    if (pendingHashSeek != null && pendingHashSeek > 0) ytTime = pendingHashSeek;
     const originParam = /^https?:\/\//.test(location.origin)
       ? '&origin=' + encodeURIComponent(location.origin)
       : '';
@@ -1614,6 +2173,7 @@ APP_JS = r"""(() => {
         text: s.t || '',
         std: String(s.std || ''),
         en: String(s.en || ''),
+        fields: s.f && typeof s.f === 'object' ? s.f : {},
         words,
         tokens,
       };
@@ -1653,6 +2213,7 @@ APP_JS = r"""(() => {
       clip_end: raw.clip_end != null ? Number(raw.clip_end) : null,
       chapters: raw.chapters || [],
       avatars: raw.avatars && typeof raw.avatars === 'object' ? raw.avatars : {},
+      tracks: Array.isArray(raw.tracks) ? raw.tracks : [],
       segments,
       vocab,
       acousticOverlaps,
@@ -1757,7 +2318,6 @@ APP_JS = r"""(() => {
     for (const p of (data.pulses || [])) {
       if (p.speaker && pulsesBySpeaker.has(p.speaker)) pulsesBySpeaker.get(p.speaker).push(p);
     }
-    // Tag segments that intersect an acoustic overlap span so transcript filter='overlaps' finds them too.
     if ((data.acousticOverlaps || []).length) {
       for (const seg of sorted) {
         const info = infoByIndex.get(seg.index);
@@ -1782,20 +2342,18 @@ APP_JS = r"""(() => {
       : Math.max(clipStart + 1, maxEnd);
     return {
       duration: Math.max(1, maxEnd),
-      clipStart,
-      clipEnd,
+      clipStart, clipEnd,
       speakers, speakerCounts, colorOf, byIndex, infoByIndex, overlapSpans, sorted, bySpeaker, pulsesBySpeaker,
     };
   }
 
-  function getLaneMeasurer(isOverlay, scaleOverride) {
+  function getLaneMeasurer(scaleRem) {
     if (!laneMeasureCtx) {
       laneMeasureCtx = document.createElement('canvas').getContext('2d');
     }
     const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 15;
     const family = getComputedStyle(document.body).fontFamily || 'sans-serif';
-    const scale = scaleOverride || (isOverlay ? 0.84 : 0.9);
-    const font = '600 ' + (scale * rootPx).toFixed(2) + 'px ' + family;
+    const font = '600 ' + (scaleRem * rootPx).toFixed(2) + 'px ' + family;
     if (laneMeasureCtx && font !== laneMeasureFont) {
       laneMeasureCtx.font = font;
       laneMeasureFont = font;
@@ -1956,7 +2514,6 @@ APP_JS = r"""(() => {
     };
     let tokens = allTokens;
     let m = measureList(tokens);
-    // When zoomed out, drop grammatical particle labels first so content meanings stay aligned and readable.
     if (m.total > innerPx) {
       const contentOnly = tokens.filter(t => {
         const v = t.vid >= 0 ? vocabById.get(t.vid) : null;
@@ -2008,10 +2565,80 @@ APP_JS = r"""(() => {
     const v = Number(n) || 0;
     return (v >= 0 ? '+' : '') + v.toFixed(1);
   }
-  function buildToneOverlay(seg, s0, s1, blockPx, spkColor) {
-    if (!hasProsody || !showTone) return null;
+  function buildMetaBadgesHtml(pr, blockPx, spkCfg) {
+    if (!pr || !metaLabels.enabled || (spkCfg && !spkCfg.showBadges) || blockPx < 64) return '';
+    const sens = metaLabels.sensitivity || 'normal';
+    const th = sens === 'strict'
+      ? {fal: 13.0, hiPk: 8.5, hiSl: 4.0, lo: -5.0, loud: 10.5, quiet: -8.5, fast: 1.65, slow: 0.52}
+      : sens === 'all'
+        ? {fal: 8.0, hiPk: 4.5, hiSl: 2.0, lo: -2.8, loud: 5.5, quiet: -5.0, fast: 1.32, slow: 0.72}
+        : {fal: 9.5, hiPk: 6.0, hiSl: 3.5, lo: -3.5, loud: 7.5, quiet: -6.5, fast: 1.45, slow: 0.62};
+
+    const hits = [];
+    const k = metaLabels.kinds || {};
+    if (k.falsetto && pr.pk >= th.fal) {
+      hits.push({
+        cls: 'tb-falsetto', word: 'falsetto', num: '↑+' + Math.round(pr.pk) + 'st',
+        tip: 'Falsetto / pitch peak: +' + pr.pk.toFixed(1) + ' semitones above baseline',
+      });
+    } else if (k.high && pr.pk >= th.hiPk && (pr.sl >= th.hiSl || sens === 'all')) {
+      hits.push({
+        cls: 'tb-high', word: 'rising', num: '↗+' + Math.round(pr.pk) + 'st',
+        tip: 'Rising / high pitch: +' + pr.pk.toFixed(1) + ' semitones above baseline',
+      });
+    }
+    if (k.low && pr.md <= th.lo) {
+      hits.push({
+        cls: 'tb-low', word: 'low', num: '↓' + Math.round(pr.md) + 'st',
+        tip: 'Low pitch drop: ' + pr.md.toFixed(1) + ' semitones below baseline',
+      });
+    }
+    if (k.loud && pr.pdb >= th.loud) {
+      hits.push({
+        cls: 'tb-high', word: 'loud', num: '+' + Math.round(pr.pdb) + 'dB',
+        tip: 'Loud peak: +' + pr.pdb.toFixed(1) + ' dB above speaker normal volume',
+      });
+    } else if (k.quiet && pr.db <= th.quiet) {
+      hits.push({
+        cls: 'tb-quiet', word: 'quiet', num: Math.round(pr.db) + 'dB',
+        tip: 'Quiet voice: ' + pr.db.toFixed(1) + ' dB below speaker normal volume',
+      });
+    }
+    if (k.fast && pr.rt >= th.fast) {
+      hits.push({
+        cls: 'tb-fast', word: 'fast', num: pr.rt.toFixed(1) + '×',
+        tip: 'Fast pace: ' + pr.rt.toFixed(2) + '× speaker normal syllables/sec',
+      });
+    } else if (k.slow && pr.rt > 0 && pr.rt <= th.slow) {
+      hits.push({
+        cls: 'tb-slow', word: 'slow', num: pr.rt.toFixed(1) + '×',
+        tip: 'Slow / drawn-out pace: ' + pr.rt.toFixed(2) + '× speaker normal syllables/sec',
+      });
+    }
+    if (!hits.length) return '';
+    const maxB = Number(metaLabels.maxPerBlock) || 1;
+    const fmt = metaLabels.format || 'words';
+    const pos = metaLabels.position || 'br';
+    const badges = hits.slice(0, maxB).map(h => {
+      const txt = fmt === 'numeric' ? h.num : fmt === 'both' ? (h.word + ' ' + h.num) : h.word;
+      return '<span class="tone-badge ' + h.cls + '" title="' + html(h.tip) + '">' + html(txt) + '</span>';
+    }).join('');
+    return '<span class="tone-badges-wrap pos-' + html(pos) + '">' + badges + '</span>';
+  }
+
+  function buildToneOverlay(seg, s0, s1, blockPx, spkColor, spkCfg) {
+    if (!hasProsody) return null;
     const pr = prosodyByIndex.get(seg.index);
     if (!pr || !Array.isArray(pr.p) || !pr.p.length) return null;
+    const wantCurve = showTone && (!spkCfg || spkCfg.showTone);
+    const badgeHtml = buildMetaBadgesHtml(pr, blockPx, spkCfg);
+    const tags = Array.isArray(pr.tg) && pr.tg.length ? ' [' + pr.tg.join(', ') + ']' : '';
+    const tip = ' | pitch ' + fmtSigned(pr.md) + 'st (peak ' + fmtSigned(pr.pk) + 'st) · vol '
+      + fmtSigned(pr.db) + 'dB · ' + (Number(pr.rt) || 1).toFixed(2) + '× pace' + tags;
+    if (!wantCurve) {
+      return badgeHtml ? {svg: '', badge: badgeHtml, tip, hasCurve: false} : null;
+    }
+
     const span = Math.max(0.01, s1 - s0);
     const dt = prosodyDt || 0.06;
     const pArr = pr.p;
@@ -2031,7 +2658,6 @@ APP_JS = r"""(() => {
     }
     if (!pts.length) return null;
 
-    // Loudness silhouette polygon along the bottom of the tone strip
     const polyPts = [pts[0].x.toFixed(1) + ',98'];
     for (const pt of pts) {
       const frac = Math.max(0.04, Math.min(1, (pt.db + 16) / 28));
@@ -2044,7 +2670,6 @@ APP_JS = r"""(() => {
     const pitchClr = st => (st >= 9.5 ? '#ff5ca8' : st >= 5.0 ? '#ffd240' : st <= -3.5 ? '#9aa7ff' : spkColor);
     const dbStyle = db => (db >= 4.5 ? {w: 4.8, o: 1.0} : db <= -5.0 ? {w: 2.2, o: 0.78} : {w: 3.2, o: 0.96});
 
-    // Group adjacent voiced segments sharing (color, stroke-width) into minimal SVG paths
     const paths = [];
     let curKey = '';
     let curD = '';
@@ -2092,20 +2717,49 @@ APP_JS = r"""(() => {
       + '<line x1="0" y1="65" x2="1000" y2="65" stroke="rgba(255,255,255,0.28)" stroke-dasharray="14,10" stroke-width="1"/>'
       + '<polygon points="' + polyPts.join(' ') + '" fill="' + spkColor + '" fill-opacity="0.26"/>'
       + paths.join('') + '</svg>';
+    return {svg, badge: badgeHtml, tip, hasCurve: true};
+  }
 
-    let badge = '';
-    if (blockPx >= 72) {
-      if (pr.pk >= 9.5) badge = '<span class="tone-badge tb-falsetto">↑+' + Math.round(pr.pk) + 'st</span>';
-      else if (pr.pk >= 6.0 && pr.sl >= 3.5) badge = '<span class="tone-badge tb-high">↗+' + Math.round(pr.pk) + 'st</span>';
-      else if (pr.md <= -3.5) badge = '<span class="tone-badge tb-low">↓' + Math.round(pr.md) + 'st</span>';
-      else if (pr.db <= -6.5) badge = '<span class="tone-badge tb-quiet">quiet</span>';
-      else if (pr.rt >= 1.45) badge = '<span class="tone-badge tb-fast">⚡' + pr.rt.toFixed(1) + '×</span>';
-      else if (pr.pdb >= 7.5) badge = '<span class="tone-badge tb-high">loud</span>';
+  function buildCustomTrackBlock(seg, trk, posStyle, hasOv) {
+    const raw = seg.fields ? seg.fields[trk.id] : null;
+    if (raw == null || raw === '') return '';
+    const isObj = typeof raw === 'object' && !Array.isArray(raw);
+    const clr = (isObj && raw.color) || trk.color || '#a9d6ff';
+    const note = isObj && raw.note ? ' — ' + raw.note : '';
+    const style = posStyle + ';--trk-color:' + clr;
+
+    if (trk.type === 'meter') {
+      const val = isObj ? Number(raw.value ?? raw.score ?? 0) : Number(raw);
+      if (!Number.isFinite(val)) return '';
+      const lbl = (isObj && raw.label) ? String(raw.label) : ((val >= 0 && !trk.unsigned ? '+' : '') + val.toFixed(2));
+      let fillHtml = '';
+      if (trk.unsigned) {
+        const pct = Math.max(0, Math.min(100, val * 100));
+        fillHtml = '<span class="meter-fill" style="left:0;width:' + pct.toFixed(1) + '%;background:' + clr + '"></span>';
+      } else {
+        const clamped = Math.max(-1, Math.min(1, val));
+        const pct = Math.abs(clamped) * 50;
+        const left = clamped >= 0 ? 50 : 50 - pct;
+        const barClr = clamped >= 0 ? '#ffd240' : '#7cc4ff';
+        fillHtml = '<span class="meter-mid"></span><span class="meter-fill" style="left:'
+          + left.toFixed(1) + '%;width:' + pct.toFixed(1) + '%;background:' + barClr + '"></span>';
+      }
+      return '<div class="lane-block lb-custom-meter' + (hasOv ? ' has-ov' : '') + '" data-index="' + seg.index
+        + '" style="' + style + '" title="' + html(trk.label + ': ' + lbl + note) + '">'
+        + fillHtml + '<span class="meter-lbl">' + html(lbl) + '</span></div>';
     }
-    const tags = Array.isArray(pr.tg) && pr.tg.length ? ' [' + pr.tg.join(', ') + ']' : '';
-    const tip = ' | pitch ' + fmtSigned(pr.md) + 'st (peak ' + fmtSigned(pr.pk) + 'st) · vol '
-      + fmtSigned(pr.db) + 'dB · ' + (Number(pr.rt) || 1).toFixed(2) + '× pace' + tags;
-    return {svg, badge, tip};
+    if (trk.type === 'tag') {
+      const lbl = isObj ? String(raw.label ?? raw.value ?? '') : String(raw);
+      if (!lbl) return '';
+      const scoreTxt = isObj && raw.score != null ? ' ' + Math.round(Number(raw.score) * 100) + '%' : '';
+      return '<div class="lane-block lb-custom-tag' + (hasOv ? ' has-ov' : '') + '" data-index="' + seg.index
+        + '" style="' + style + '" title="' + html(trk.label + ': ' + lbl + scoreTxt + note) + '">'
+        + '<span class="tag-dot"></span><span>' + html(lbl + scoreTxt) + '</span></div>';
+    }
+    const txt = isObj ? String(raw.text ?? raw.label ?? '') : String(raw);
+    if (!txt) return '';
+    return '<div class="lane-block lb-custom-text' + (hasOv ? ' has-ov' : '') + '" data-index="' + seg.index
+      + '" style="' + style + '" title="' + html(trk.label + ': ' + txt + note) + '">' + html(txt) + '</div>';
   }
 
   function applyToneState() {
@@ -2115,10 +2769,11 @@ APP_JS = r"""(() => {
       btn.hidden = !hasProsody;
       btn.setAttribute('aria-pressed', String(active));
     }
-    const ls = document.getElementById('lanes-stage');
-    if (ls) ls.classList.toggle('has-tone', active);
-    const ov = document.getElementById('ov-overlay');
-    if (ov) ov.classList.toggle('has-tone', active);
+    const lBtn = document.getElementById('open-labels-menu');
+    if (lBtn) {
+      lBtn.hidden = !hasProsody;
+      lBtn.setAttribute('aria-pressed', String(hasProsody && metaLabels.enabled));
+    }
     const leg = document.getElementById('tone-legend');
     if (leg) {
       leg.hidden = !active;
@@ -2139,33 +2794,22 @@ APP_JS = r"""(() => {
       }
     }
     if (model) {
-      fitOverlayLayout();
       renderLanesWindow(true);
+      renderAllFloatCards(true);
       applySplitLayout();
-      if (showOverlay) {
-        ovRenderedStart = -1;
-        updateOverlayTimeline(currentTime(), true);
-      }
     }
   }
 
-  function clampWinStart(start) {
+  function clampWinStart(start, winDur) {
     if (!model) return 0;
+    const dur = winDur || lanesWindow;
     const lo = model.clipStart || 0;
-    const hi = Math.max(lo, (model.clipEnd || model.duration) - lanesWindow);
+    const hi = Math.max(lo, (model.clipEnd || model.duration) - dur);
     return Math.max(lo, Math.min(start, hi));
   }
 
-  function renderTimelineInto(ruler, body, winStart, winDur, isOverlay) {
-    const trackPx = ruler.getBoundingClientRect().width || 0;
+  function buildRulerHtml(winStart, winDur, isCompact) {
     const winEnd = winStart + winDur;
-    const ovMul = isOverlay ? ovCurrentScale : 1;
-    const measurer = trackPx > 0
-      ? getLaneMeasurer(isOverlay, isOverlay ? (hasStudy ? 0.86 : 0.84) * ovMul : (hasStudy ? 0.92 : 0.9))
-      : null;
-    const glossMeasurer = hasStudy && trackPx > 0
-      ? getLaneMeasurer(isOverlay, (isOverlay ? 0.74 : 0.78) * ovMul)
-      : null;
     const step = winDur <= 8 ? 1 : winDur <= 12 ? 2 : winDur <= 20 ? 4 : winDur <= 30 ? 5 : 10;
     const firstTick = Math.ceil(winStart / step) * step;
     const ticks = [];
@@ -2180,7 +2824,7 @@ APP_JS = r"""(() => {
       const left = ((Math.max(ov.start, winStart) - winStart) / winDur) * 100;
       const right = ((Math.min(ov.end, winEnd) - winStart) / winDur) * 100;
       const width = Math.max(0.25, right - left);
-      if (width < (isOverlay ? 3.5 : 2.6)) return '';
+      if (width < (isCompact ? 3.5 : 2.6)) return '';
       const dur = Math.max(0.1, ov.end - ov.start);
       return '<span class="ruler-ov-pill" style="left:' + left.toFixed(3)
         + '%;max-width:' + width.toFixed(3) + '%">∥ ' + dur.toFixed(1) + 's</span>';
@@ -2202,100 +2846,147 @@ APP_JS = r"""(() => {
       const tip = spanTxt + ' [' + ci.label + ']'
         + (n.title ? ' ' + n.title : '')
         + (n.note ? ' — ' + n.note : '');
-      const label = clipText(n.title || ci.label, isOverlay ? 14 : 18);
+      const label = clipText(n.title || ci.label, isCompact ? 13 : 18);
       return '<span class="ruler-note-pin" data-ann-id="' + html(n.id) + '" data-t="' + n.t
         + '" style="left:' + pct.toFixed(3) + '%;--cat-color:' + ci.color + '" title="'
         + html(tip) + '">' + html(label) + '</span>';
     }).join('');
-
-    ruler.innerHTML = ticks.join('') + pills + annSpans + notePins + '<div class="lane-playhead"></div>';
-
     const bands = visibleOverlaps.map(ov => {
       const left = ((Math.max(ov.start, winStart) - winStart) / winDur) * 100;
       const right = ((Math.min(ov.end, winEnd) - winStart) / winDur) * 100;
       return '<div class="lane-ov-band" style="left:' + left.toFixed(3)
         + '%;width:' + Math.max(0.25, right - left).toFixed(3) + '%"></div>';
     }).join('');
-    const gridHtml = gridlines.join('');
 
+    return {
+      rulerHtml: ticks.join('') + pills + annSpans + notePins + '<div class="lane-playhead"></div>',
+      gridHtml: gridlines.join(''),
+      bandsHtml: bands,
+    };
+  }
+
+  function buildSpeakerRowsHtml(spk, spkCfg, winStart, winDur, trackPx, gridHtml, bandsHtml, isFloat) {
+    const winEnd = winStart + winDur;
+    const c = model.colorOf(spk);
+    const segs = model.bySpeaker.get(spk) || [];
+    const scaleMul = isFloat ? (spkCfg.scale || 1) : (spkCfg.dockScale || 1);
+    const measurer = trackPx > 0
+      ? getLaneMeasurer((isFloat ? 0.84 : (hasStudy ? 0.9 : 0.88)) * scaleMul)
+      : null;
+    const glossMeasurer = hasStudy && trackPx > 0
+      ? getLaneMeasurer((isFloat ? 0.74 : 0.77) * scaleMul)
+      : null;
     const filter = document.getElementById('transcript-filter')?.value || 'all';
-    const rowCls = isOverlay ? 'ov-row' : 'lane-row';
-    const lblCls = isOverlay ? 'ov-label' : 'lane-label';
-    const trkCls = isOverlay ? 'ov-track' : 'lane-track';
-    const rows = getSurfaceRows(isOverlay ? 'overlay' : 'main');
-    if (!rows.length) {
-      body.innerHTML = '<div class="lanes-empty">No streams shown — right-click here to add streams or speakers</div>';
-      return trackPx;
-    }
-    const spkRowCount = new Map();
-    for (const r of rows) spkRowCount.set(r.spk, (spkRowCount.get(r.spk) || 0) + 1);
-    const streamGrouped = isStreamGrouped(rows);
-    const seenPulseSpk = new Set();
+    const isFiltered = !isFloat && filter === 'spk:' + spk;
+    const rowCls = isFloat ? 'fc-row' : 'lane-row';
+    const lblCls = isFloat ? 'fc-label' : 'lane-label';
+    const trkCls = isFloat ? 'fc-track' : 'lane-track';
+    const rows = spkCfg.rows || [defaultPrimaryKind()];
+    let renderedPulses = false;
+    const allAnns = mergedAnnotations(true);
 
-    body.innerHTML = rows.map((row, ri) => {
-      const spk = row.spk;
-      const kind = row.kind;
-      const c = model.colorOf(spk);
-      const segs = model.bySpeaker.get(spk) || [];
-      const sameAsPrev = ri > 0 && rows[ri - 1].spk === spk;
-      const isGroupEnd = ri < rows.length - 1 && (
-        streamGrouped ? rows[ri + 1].kind !== kind : rows[ri + 1].spk !== spk
-      );
+    return rows.map((kind, ri) => {
+      const sameAsPrev = ri > 0;
+      const hasToneCurve = hasProsody && showTone && spkCfg.showTone && isPrimaryStreamKind(kind);
+      const baseRem = rowBaseRem(kind, hasToneCurve);
       const blocks = [];
-      for (const seg of segs) {
-        if (seg.end <= winStart) continue;
-        if (seg.start >= winEnd) break;
-        const s0 = Math.max(seg.start, winStart);
-        const s1 = Math.min(seg.end, winEnd);
-        const left = ((s0 - winStart) / winDur) * 100;
-        const width = Math.max(0.4, ((s1 - s0) / winDur) * 100);
-        const blockPx = trackPx > 0 ? (trackPx * width) / 100 : 0;
-        const info = model.infoByIndex.get(seg.index);
-        const hasOv = Boolean(info && (info.partners.length || info.hasAcousticOv));
-        const title = spk + ' (' + clockPrecise(seg.start) + '–' + clockPrecise(seg.end) + '): '
-          + seg.text + (seg.en ? ' — ' + seg.en : '');
-        const posStyle = 'left:' + left.toFixed(3) + '%;width:' + width.toFixed(3) + '%;'
-          + '--spk-color:' + c.fg + ';--spk-bg:' + c.bg + ';--spk-bg-hi:' + c.bgHi;
-        if (kind === 'literal') {
-          const gc = buildGlossBlockContent(seg, s0, s1, blockPx, glossMeasurer);
-          if (gc.inner) {
-            blocks.push(
-              '<div class="lane-block lb-ww' + (hasOv ? ' has-ov' : '') + gc.cls + '" data-index="' + seg.index + '"'
-              + ' style="' + posStyle + '" title="' + html(title) + '">' + gc.inner + '</div>'
-            );
-          }
-        } else if (kind === 'es-std') {
-          if (seg.std) {
-            blocks.push(
-              '<div class="lane-block lb-std' + (hasOv ? ' has-ov' : '') + '" data-index="' + seg.index + '"'
-              + ' style="' + posStyle + '" title="' + html(spk + ' (neutral ES): ' + seg.std) + '">'
-              + html(seg.std) + '</div>'
-            );
-          }
-        } else if (kind === 'en') {
-          if (seg.en) {
-            blocks.push(
-              '<div class="lane-block lb-en' + (hasOv ? ' has-ov' : '') + '" data-index="' + seg.index + '"'
-              + ' style="' + posStyle + '" title="' + html(spk + ': ' + seg.en) + '">'
-              + html(seg.en) + '</div>'
-            );
-          }
-        } else {
-          const withFuri = kind === 'ja-furi';
-          const content = buildLaneBlockContent(seg, s0, s1, blockPx, info, measurer, withFuri);
-          const extraBlkCls = kind === 'ja-furi' ? ' ja-furi-blk' : kind === 'ja' ? ' ja-plain-blk' : '';
-          const tone = buildToneOverlay(seg, s0, s1, blockPx, c.fg);
-          const toneCls = tone ? ' has-tone-blk' : '';
-          const fullTitle = title + (tone ? tone.tip : '');
+
+      if (kind === 'analysis') {
+        for (const a of allAnns) {
+          const aEnd = Math.max(a.end || 0, a.t + 3.0);
+          if (aEnd <= winStart || a.t >= winEnd) continue;
+          const s0 = Math.max(a.t, winStart);
+          const s1 = Math.min(aEnd, winEnd);
+          const left = ((s0 - winStart) / winDur) * 100;
+          const width = Math.max(0.8, ((s1 - s0) / winDur) * 100);
+          const ci = catInfo(a.cat);
+          const label = a.title || ci.label;
           blocks.push(
-            '<div class="lane-block' + extraBlkCls + toneCls + (hasOv ? ' has-ov' : '') + content.cls + '"'
-            + ' data-index="' + seg.index + '" style="' + posStyle + '"'
-            + ' title="' + html(fullTitle) + '">' + (tone ? tone.svg + tone.badge : '') + content.inner + '</div>'
+            '<div class="lane-block lb-analysis" data-t="' + a.t + '" style="left:' + left.toFixed(3)
+            + '%;width:' + width.toFixed(3) + '%;--cat-color:' + ci.color + '"'
+            + ' title="' + html('[' + ci.label + '] ' + label + (a.note ? ' — ' + a.note : '')) + '">'
+            + html(label) + '</div>'
           );
         }
+      } else {
+        for (const seg of segs) {
+          if (seg.end <= winStart) continue;
+          if (seg.start >= winEnd) break;
+          const s0 = Math.max(seg.start, winStart);
+          const s1 = Math.min(seg.end, winEnd);
+          const left = ((s0 - winStart) / winDur) * 100;
+          const width = Math.max(0.4, ((s1 - s0) / winDur) * 100);
+          const blockPx = trackPx > 0 ? (trackPx * width) / 100 : 0;
+          const info = model.infoByIndex.get(seg.index);
+          const hasOv = Boolean(info && (info.partners.length || info.hasAcousticOv));
+          const title = spk + ' (' + clockPrecise(seg.start) + '–' + clockPrecise(seg.end) + '): '
+            + seg.text + (seg.en ? ' — ' + seg.en : '');
+          const posStyle = 'left:' + left.toFixed(3) + '%;width:' + width.toFixed(3) + '%;'
+            + '--spk-color:' + c.fg + ';--spk-bg:' + c.bg + ';--spk-bg-hi:' + c.bgHi;
+
+          if (kind === 'literal') {
+            const gc = buildGlossBlockContent(seg, s0, s1, blockPx, glossMeasurer);
+            if (gc.inner) {
+              blocks.push(
+                '<div class="lane-block lb-ww' + (hasOv ? ' has-ov' : '') + gc.cls + '" data-index="' + seg.index + '"'
+                + ' style="' + posStyle + '" title="' + html(title) + '">' + gc.inner + '</div>'
+              );
+            }
+          } else if (kind === 'es-std') {
+            if (seg.std) {
+              blocks.push(
+                '<div class="lane-block lb-std' + (hasOv ? ' has-ov' : '') + '" data-index="' + seg.index + '"'
+                + ' style="' + posStyle + '" title="' + html(spk + ' (neutral ES): ' + seg.std) + '">'
+                + html(seg.std) + '</div>'
+              );
+            }
+          } else if (kind === 'en') {
+            if (seg.en) {
+              blocks.push(
+                '<div class="lane-block lb-en' + (hasOv ? ' has-ov' : '') + '" data-index="' + seg.index + '"'
+                + ' style="' + posStyle + '" title="' + html(spk + ': ' + seg.en) + '">'
+                + html(seg.en) + '</div>'
+              );
+            }
+          } else if (kind === 'delivery') {
+            const pr = prosodyByIndex.get(seg.index);
+            if (pr) {
+              const parts = [];
+              if (pr.pk >= 6) parts.push('pk ' + fmtSigned(pr.pk) + 'st');
+              else parts.push(fmtSigned(pr.md) + 'st');
+              parts.push(fmtSigned(pr.db) + 'dB');
+              parts.push((Number(pr.rt) || 1).toFixed(2) + '×');
+              if (Array.isArray(pr.tg) && pr.tg.length) parts.push(pr.tg.slice(0, 2).join(','));
+              blocks.push(
+                '<div class="lane-block lb-delivery' + (hasOv ? ' has-ov' : '') + '" data-index="' + seg.index + '"'
+                + ' style="' + posStyle + '" title="' + html(parts.join(' · ')) + '">'
+                + html(parts.join(' · ')) + '</div>'
+              );
+            }
+          } else if (kind.startsWith('track:')) {
+            const trk = CUSTOM_TRACK_MAP.get(kind.slice(6));
+            if (trk) {
+              const b = buildCustomTrackBlock(seg, trk, posStyle, hasOv);
+              if (b) blocks.push(b);
+            }
+          } else {
+            const withFuri = kind === 'ja-furi';
+            const content = buildLaneBlockContent(seg, s0, s1, blockPx, info, measurer, withFuri);
+            const extraBlkCls = kind === 'ja-furi' ? ' ja-furi-blk' : kind === 'ja' ? ' ja-plain-blk' : '';
+            const tone = buildToneOverlay(seg, s0, s1, blockPx, c.fg, spkCfg);
+            const toneCls = tone && tone.hasCurve ? ' has-tone-blk' : '';
+            const fullTitle = title + (tone ? tone.tip : '');
+            blocks.push(
+              '<div class="lane-block' + extraBlkCls + toneCls + (hasOv ? ' has-ov' : '') + content.cls + '"'
+              + ' data-index="' + seg.index + '" style="' + posStyle + '"'
+              + ' title="' + html(fullTitle) + '">' + (tone ? tone.svg + tone.badge : '') + content.inner + '</div>'
+            );
+          }
+        }
       }
-      const showPulses = !seenPulseSpk.has(spk) && (kind === 'ja-furi' || kind === 'ja' || kind === 'es' || kind === 'text');
-      if (showPulses) seenPulseSpk.add(spk);
+
+      const showPulses = !renderedPulses && spkCfg.showPulses && isPrimaryStreamKind(kind);
+      if (showPulses) renderedPulses = true;
       const pulses = showPulses ? (model.pulsesBySpeaker?.get(spk) || []).filter(p => p.end > winStart && p.start < winEnd).map(p => {
         const p0 = Math.max(p.start, winStart);
         const p1 = Math.min(p.end, winEnd);
@@ -2307,32 +2998,32 @@ APP_JS = r"""(() => {
           + ' title="' + html(spk + ' vocal overlap / backchannel (' + dur + 's)') + '"></div>';
       }).join('') : '';
 
-      const av = avatarHtml(spk, isOverlay ? 'av-sm' : (sameAsPrev ? 'av-sm' : ''));
-      const kindShort = STREAM_MAP.get(kind)?.short || '';
-      const isFiltered = !isOverlay && filter === 'spk:' + spk;
-      const rowKindCls = hasStudy ? ' row-' + kind : '';
-      const grip = '<span class="lbl-grip" aria-hidden="true">⋮</span>';
-      const primaryKind = isCjk ? 'ja-furi' : (STUDY_STREAMS[0]?.id || 'text');
+      const av = avatarHtml(spk, isFloat ? 'av-sm' : (sameAsPrev ? 'av-sm' : ''));
+      const kindShort = STREAM_MAP.get(kind)?.short || kind;
+      const grip = !isFloat && !sameAsPrev ? '<span class="lbl-grip" aria-hidden="true">⋮</span>' : '';
+      const cfgBtn = !sameAsPrev
+        ? '<button type="button" class="lbl-cfg-btn" data-cfg-spk="' + html(spk) + '" title="Configure ' + html(spk) + ' size, position &amp; subcomponents">⚙</button>'
+        : '';
       const labelHtml = !sameAsPrev
         ? grip + av + '<span class="lbl-txt">' + html(spk) + '</span>'
-          + (hasStudy && (spkRowCount.get(spk) > 1 || kind !== primaryKind || streamGrouped)
-            ? '<span class="lbl-kind">' + html(kindShort) + '</span>' : '')
-        : grip + av + '<span class="lbl-txt">' + html(kindShort) + '</span>';
+          + (rows.length > 1 || !isPrimaryStreamKind(kind) ? '<span class="lbl-kind">' + html(kindShort) + '</span>' : '')
+          + cfgBtn
+        : av + '<span class="lbl-txt">' + html(kindShort) + '</span>';
 
-      return '<div class="' + rowCls + rowKindCls + (isGroupEnd ? ' row-grp-end' : '') + '"'
-        + ' data-row-idx="' + ri + '" data-row-spk="' + html(spk) + '" data-row-kind="' + html(kind) + '">'
+      return '<div class="' + rowCls + '" style="--row-base-rem:' + baseRem.toFixed(2) + 'rem"'
+        + ' data-row-spk="' + html(spk) + '" data-row-kind="' + html(kind) + '">'
         + '<div class="' + lblCls + (av ? ' has-avatar' : '') + (sameAsPrev ? ' sub-lbl' : '') + (isFiltered ? ' filtered' : '') + '"'
         + ' data-speaker="' + html(spk) + '" style="--spk-color:' + c.fg + '"'
-        + ' title="Drag up/down to reorder · Right-click to add/remove streams or arrange">' + labelHtml + '</div>'
-        + '<div class="' + trkCls + '">' + gridHtml + bands + pulses + blocks.join('')
+        + ' title="' + (isFloat ? 'Right-click or ⚙ to configure' : 'Drag up/down to reorder · Click to filter · Right-click or ⚙ to configure') + '">'
+        + labelHtml + '</div>'
+        + '<div class="' + trkCls + '">' + gridHtml + bandsHtml + pulses + blocks.join('')
         + '<div class="lane-playhead"></div></div></div>';
     }).join('');
-    return trackPx;
   }
 
   function indexLaneBlocks(container) {
     const map = new Map();
-    container.querySelectorAll('.lane-block').forEach(el => {
+    container.querySelectorAll('.lane-block[data-index]').forEach(el => {
       const idx = Number(el.dataset.index);
       if (!map.has(idx)) map.set(idx, []);
       map.get(idx).push(el);
@@ -2342,22 +3033,161 @@ APP_JS = r"""(() => {
 
   function renderLanesWindow(force) {
     if (!model) return;
+    const stage = document.getElementById('lanes-stage');
     const ruler = document.getElementById('lanes-ruler');
     const body = document.getElementById('lanes-body');
-    if (!ruler || !body) return;
-    const winStart = clampWinStart(lanesWinStart);
+    if (!stage || !ruler || !body) return;
+    applyTimerPosClasses();
+
+    const dockedSpks = speakerOrder.filter(s => speakerConfigs[s]?.visible && speakerConfigs[s]?.placement === 'dock');
+    const winStart = clampWinStart(lanesWinStart, lanesWindow);
     const winDur = lanesWindow;
-    const trackPx = ruler.getBoundingClientRect().width || 0;
+    const trackPx = ruler.getBoundingClientRect().width || stage.getBoundingClientRect().width - 170 || 600;
     if (!force && Math.abs(winStart - renderedWinStart) < 0.001 && winDur === renderedWinDur && Math.abs(trackPx - lastLaneTrackPx) < 1) {
       return;
     }
     lanesWinStart = winStart;
     renderedWinStart = winStart;
     renderedWinDur = winDur;
-    lastLaneTrackPx = renderTimelineInto(ruler, body, winStart, winDur, false);
-    playheadEls = [...document.querySelectorAll('#lanes-stage .lane-playhead')];
+    lastLaneTrackPx = trackPx;
+
+    const rData = buildRulerHtml(winStart, winDur, false);
+    ruler.innerHTML = rData.rulerHtml;
+
+    if (!dockedSpks.length) {
+      if (anyFloatingSpeakers()) {
+        body.innerHTML = '';
+        stage.classList.add('all-floating');
+        document.getElementById('lanes-ruler-row').hidden = true;
+      } else {
+        stage.classList.remove('all-floating');
+        document.getElementById('lanes-ruler-row').hidden = false;
+        body.innerHTML = '<div class="lanes-empty">No speakers shown — click Layers or right-click here to add speakers</div>';
+      }
+      playheadEls = [...stage.querySelectorAll('.lane-playhead')];
+      blockElsByIndex = new Map();
+      return;
+    }
+    stage.classList.remove('all-floating');
+    document.getElementById('lanes-ruler-row').hidden = stageCfg.timerPos === 'hidden';
+
+    const fullW = stage.getBoundingClientRect().width || 900;
+    body.innerHTML = dockedSpks.map((spk, di) => {
+      const sc = speakerConfigs[spk];
+      const c = model.colorOf(spk);
+      const isNarrow = sc.dockWidth < 99.5;
+      const deckW = isNarrow ? sc.dockWidth + '%' : '100%';
+      const mLeft = isNarrow ? (sc.dockAlign === 'center' ? 'auto' : sc.dockAlign === 'right' ? 'auto' : '0') : '0';
+      const mRight = isNarrow ? (sc.dockAlign === 'center' ? 'auto' : sc.dockAlign === 'left' ? 'auto' : '0') : '0';
+      const estTrackPx = Math.max(120, fullW * (sc.dockWidth / 100) - (sc.showLabel ? 170 : 0));
+      const rowsHtml = buildSpeakerRowsHtml(spk, sc, winStart, winDur, estTrackPx, rData.gridHtml, rData.bandsHtml, false);
+      const miniRuler = isNarrow && stageCfg.timerPos !== 'hidden'
+        ? '<div class="deck-mini-ruler"><div class="lanes-gutter"><span class="live-clock">' + clock(currentTime()) + '</span></div>'
+          + '<div class="lanes-ruler">' + rData.rulerHtml + '</div></div>'
+        : '';
+      return '<div class="spk-deck' + (isNarrow ? ' deck-narrow' : '') + (sc.showLabel ? '' : ' no-gutter') + '"'
+        + ' data-spk="' + html(spk) + '" data-deck-idx="' + di + '"'
+        + ' style="--spk-scale:' + sc.dockScale.toFixed(2) + ';--spk-color:' + c.fg
+        + ';width:' + deckW + ';margin-left:' + mLeft + ';margin-right:' + mRight + '">'
+        + rowsHtml + miniRuler
+        + '<div class="spk-deck-resizer" data-resize-spk="' + html(spk) + '" title="Drag to resize ' + html(spk) + ' scroller height"></div>'
+        + '</div>';
+    }).join('');
+
+    playheadEls = [...stage.querySelectorAll('.lane-playhead')];
     blockElsByIndex = indexLaneBlocks(body);
     updatePlayheadOn(playheadEls, blockElsByIndex, currentTime(), lanesWinStart, lanesWindow);
+  }
+
+  // Independent floating per-speaker cards on #stage-float-layer
+  function renderAllFloatCards(force) {
+    const layer = document.getElementById('stage-float-layer');
+    if (!layer || !model) return;
+    const floatSpks = speakerOrder.filter(s => speakerConfigs[s]?.visible && speakerConfigs[s]?.placement === 'float');
+    if (!floatSpks.length) {
+      if (layer.childElementCount) layer.innerHTML = '';
+      floatRenderState.clear();
+      return;
+    }
+
+    // Remove stale cards
+    const wantSet = new Set(floatSpks);
+    for (const child of [...layer.children]) {
+      const s = child.dataset.spk;
+      if (!wantSet.has(s)) { child.remove(); floatRenderState.delete(s); }
+    }
+
+    const t = currentTime();
+    const stageW = layer.clientWidth || document.getElementById('player-wrap')?.clientWidth || 900;
+    for (const spk of floatSpks) {
+      const sc = speakerConfigs[spk];
+      const c = model.colorOf(spk);
+      let card = [...layer.children].find(el => el.dataset && el.dataset.spk === spk) || null;
+      if (!card) {
+        card = document.createElement('div');
+        card.className = 'spk-float-card';
+        card.setAttribute('data-spk', spk);
+        card.dataset.spk = spk;
+        card.innerHTML =
+          '<div class="fc-bar" data-move-spk="' + html(spk) + '" title="Drag to move ' + html(spk) + ' anywhere on stage">'
+          + '<span class="fc-bar-grip">⋮⋮</span>'
+          + avatarHtml(spk, 'av-xs')
+          + '<span class="fc-bar-name">' + html(spk) + '</span>'
+          + '<span class="fc-bar-btns">'
+          + '<button type="button" class="fc-bar-btn" data-fc-act="cfg" data-spk="' + html(spk) + '" title="Subcomponents &amp; size">⚙</button>'
+          + '<button type="button" class="fc-bar-btn" data-fc-act="dock" data-spk="' + html(spk) + '" title="Dock below video">⊟</button>'
+          + '<button type="button" class="fc-bar-btn" data-fc-act="hide" data-spk="' + html(spk) + '" title="Hide speaker">×</button>'
+          + '</span></div>'
+          + '<div class="fc-stage"><div class="fc-rows"></div>'
+          + '<div class="fc-ruler-row"><div class="fc-gutter"><span class="live-clock">0:00</span></div>'
+          + '<div class="fc-ruler"></div></div></div>'
+          + '<div class="fc-rz fc-rz-w" data-rz="w" data-spk="' + html(spk) + '"></div>'
+          + '<div class="fc-rz fc-rz-e" data-rz="e" data-spk="' + html(spk) + '"></div>'
+          + '<div class="fc-rz fc-rz-s" data-rz="s" data-spk="' + html(spk) + '"></div>'
+          + '<div class="fc-rz fc-rz-se" data-rz="se" data-spk="' + html(spk) + '"></div>';
+        layer.appendChild(card);
+      }
+      card.style.left = sc.x.toFixed(2) + '%';
+      card.style.top = sc.y.toFixed(2) + '%';
+      card.style.width = sc.w.toFixed(2) + '%';
+      card.style.setProperty('--spk-color', c.fg);
+      card.style.setProperty('--fc-scale', sc.scale.toFixed(3));
+      card.style.setProperty('--fc-alpha', String(sc.alpha));
+      card.style.setProperty('--spk-scale', sc.scale.toFixed(3));
+
+      const fcStage = card.querySelector('.fc-stage');
+      const tPos = effectiveTimerPos(sc);
+      fcStage.classList.toggle('timer-bottom', tPos === 'bottom');
+      fcStage.classList.toggle('timer-top', tPos === 'top');
+      fcStage.classList.toggle('timer-hidden', tPos === 'hidden');
+      fcStage.classList.toggle('no-gutter', !sc.showLabel);
+
+      const winDur = sc.windowSec > 0 ? sc.windowSec : Math.min(FLOAT_WINDOW_MAX, Math.max(4, lanesWindow));
+      const prev = floatRenderState.get(spk);
+      const cardPx = Math.max(170, stageW * (sc.w / 100));
+      const trackPx = Math.max(100, cardPx - (sc.showLabel ? 98 : 0));
+      const outOfView = !prev || t < prev.winStart + winDur * 0.06 || t > prev.winStart + winDur * 0.84;
+      if (force || !prev || outOfView || prev.winDur !== winDur || Math.abs(trackPx - prev.trackPx) >= 6) {
+        const winStart = clampWinStart(outOfView || !prev ? t - winDur * 0.16 : prev.winStart, winDur);
+        const rData = buildRulerHtml(winStart, winDur, true);
+        const fcRuler = card.querySelector('.fc-ruler');
+        const fcRows = card.querySelector('.fc-rows');
+        fcRuler.innerHTML = rData.rulerHtml;
+        fcRows.innerHTML = buildSpeakerRowsHtml(spk, sc, winStart, winDur, trackPx, rData.gridHtml, rData.bandsHtml, true);
+        const st = {
+          winStart, winDur, trackPx,
+          playheadEls: [...card.querySelectorAll('.lane-playhead')],
+          blockElsByIndex: indexLaneBlocks(fcRows),
+          clockEl: card.querySelector('.live-clock'),
+        };
+        floatRenderState.set(spk, st);
+        updatePlayheadOn(st.playheadEls, st.blockElsByIndex, t, winStart, winDur);
+        if (st.clockEl) st.clockEl.textContent = clock(t);
+      } else {
+        updatePlayheadOn(prev.playheadEls, prev.blockElsByIndex, t, prev.winStart, prev.winDur);
+        if (prev.clockEl) prev.clockEl.textContent = clock(t);
+      }
+    }
   }
 
   function updatePlayheadOn(phEls, blkMap, time, winStart, winDur) {
@@ -2385,10 +3215,23 @@ APP_JS = r"""(() => {
     }
   }
 
+  function updateClocks(time) {
+    const s = clock(time);
+    if (s === lastClockStr) return;
+    lastClockStr = s;
+    const mainClk = document.getElementById('lanes-live-clock');
+    if (mainClk) mainClk.textContent = s;
+    document.querySelectorAll('.deck-mini-ruler .live-clock').forEach(el => { el.textContent = s; });
+    for (const st of floatRenderState.values()) {
+      if (st.clockEl) st.clockEl.textContent = s;
+    }
+  }
+
   function updateLanesPlayhead(time) {
     if (!model) return;
+    updateClocks(time);
     if (lanesFollow && (time < lanesWinStart + lanesWindow * 0.08 || time > lanesWinStart + lanesWindow * 0.85)) {
-      const targetStart = clampWinStart(time - lanesWindow * 0.25);
+      const targetStart = clampWinStart(time - lanesWindow * 0.25, lanesWindow);
       if (Math.abs(targetStart - lanesWinStart) > 0.25) {
         lanesWinStart = targetStart;
         renderLanesWindow(true);
@@ -2429,22 +3272,6 @@ APP_JS = r"""(() => {
     status.textContent = model.overlapSpans.length + ' overlaps';
   }
 
-  function applyOverlayState() {
-    const ovEl = document.getElementById('ov-overlay');
-    const btn = document.getElementById('toggle-overlay');
-    if (btn) btn.setAttribute('aria-pressed', String(showOverlay));
-    if (!ovEl) return;
-    ovEl.hidden = !showOverlay;
-    if (showOverlay) {
-      fitOverlayLayout();
-      ovRenderedStart = -1;
-      requestAnimationFrame(() => {
-        fitOverlayLayout();
-        updateOverlayTimeline(currentTime(), true);
-      });
-    }
-  }
-
   function applyMinimapState() {
     const wrap = document.getElementById('lanes-minimap-wrap');
     const btn = document.getElementById('toggle-minimap');
@@ -2459,37 +3286,12 @@ APP_JS = r"""(() => {
     }
     if (model) applySplitLayout();
   }
-
   function applyBadgesState() {
     const btn = document.getElementById('toggle-badges');
     if (btn) btn.setAttribute('aria-pressed', String(showBadges));
     renderLanesWindow(true);
-    if (showOverlay) updateOverlayTimeline(currentTime(), true);
+    renderAllFloatCards(true);
     paintLanesStatus();
-  }
-
-  function updateOverlayTimeline(time, force) {
-    const ovEl = document.getElementById('ov-overlay');
-    if (!ovEl || ovEl.hidden || !model) return;
-    const ruler = document.getElementById('ov-ruler');
-    const body = document.getElementById('ov-body');
-    if (!ruler || !body) return;
-    fitOverlayLayout();
-    const winDur = Math.min(OV_WINDOW_SEC, Math.max(4, lanesWindow));
-    const minStart = model.clipStart || 0;
-    const maxStart = Math.max(minStart, (model.clipEnd || model.duration) - winDur);
-    const trackPx = ruler.getBoundingClientRect().width || 0;
-    const outOfView = ovRenderedStart < 0 || time < ovWinStart + winDur * 0.05 || time > ovWinStart + winDur * 0.84;
-    if (force || outOfView || Math.abs(trackPx - ovRenderedTrackPx) >= 2) {
-      ovWinStart = outOfView || ovRenderedStart < 0
-        ? Math.max(minStart, Math.min(maxStart, time - winDur * 0.14))
-        : Math.max(minStart, Math.min(maxStart, ovWinStart));
-      ovRenderedStart = ovWinStart;
-      ovRenderedTrackPx = renderTimelineInto(ruler, body, ovWinStart, winDur, true);
-      ovPlayheadEls = [...ovEl.querySelectorAll('.lane-playhead')];
-      ovBlockElsByIndex = indexLaneBlocks(body);
-    }
-    updatePlayheadOn(ovPlayheadEls, ovBlockElsByIndex, time, ovWinStart, winDur);
   }
 
   function drawMinimap() {
@@ -2538,10 +3340,24 @@ APP_JS = r"""(() => {
       + html(clipText(chip.other.text, 40)) + '”</span>';
   }
 
+  function activeCustomTrackIds() {
+    const out = new Set();
+    for (const s of speakerOrder) {
+      const sc = speakerConfigs[s];
+      if (!sc || !sc.visible) continue;
+      for (const r of sc.rows) {
+        if (r.startsWith('track:')) out.add(r.slice(6));
+      }
+    }
+    return [...out];
+  }
+
   function paintTranscript() {
     const box = document.getElementById('caption-box');
     const query = (document.getElementById('transcript-search').value || '').trim().toLowerCase();
     const filter = document.getElementById('transcript-filter').value || 'all';
+    const shownTracks = activeCustomTrackIds();
+
     box.innerHTML = doc.segments.map(seg => {
       const info = model.infoByIndex.get(seg.index);
       const partners = info ? info.partners : [];
@@ -2592,6 +3408,20 @@ APP_JS = r"""(() => {
       }
       if (hasStudy && showEnglish && seg.en) {
         extraHtml += '<div class="segment-en">' + html(seg.en) + '</div>';
+      }
+      if (shownTracks.length && seg.fields) {
+        const chips = [];
+        for (const tid of shownTracks) {
+          const val = seg.fields[tid];
+          if (val == null || val === '') continue;
+          const trk = CUSTOM_TRACK_MAP.get(tid);
+          if (!trk) continue;
+          const txt = typeof val === 'object' ? (val.label ?? val.text ?? val.value ?? '') : String(val);
+          if (txt === '') continue;
+          chips.push('<span class="seg-field-chip" style="--trk-color:' + html(trk.color) + '"><strong>'
+            + html(trk.short) + ':</strong> ' + html(txt) + '</span>');
+        }
+        if (chips.length) extraHtml += '<div class="segment-fields">' + chips.join('') + '</div>';
       }
       const ovMark = hasOv ? '<span class="ov-mark">∥</span>' : '';
       const segLang = doc.language ? ' lang="' + html(doc.language) + '"' : '';
@@ -2652,16 +3482,16 @@ APP_JS = r"""(() => {
     if (!model) return;
     const t = currentTime();
     syncTranscript(t, force);
-    if (showOverlay) updateOverlayTimeline(t, force);
     updateLanesPlayhead(t);
+    renderAllFloatCards(force);
     updateLiveAnnotation(t, force);
   }
 
   function tick() {
     if (!ytPlaying) { rafId = 0; return; }
     const t = currentTime();
-    if (showOverlay) updateOverlayTimeline(t, false);
     updateLanesPlayhead(t);
+    renderAllFloatCards(false);
     syncTranscript(t, false);
     updateLiveAnnotation(t, false);
     rafId = requestAnimationFrame(tick);
@@ -2681,52 +3511,67 @@ APP_JS = r"""(() => {
     }
     lanesFollow = true;
     document.getElementById('lanes-follow').setAttribute('aria-pressed', 'true');
-    lanesWinStart = clampWinStart(target.start - lanesWindow * 0.25);
+    lanesWinStart = clampWinStart(target.start - lanesWindow * 0.25, lanesWindow);
     renderLanesWindow(true);
     seekAndPlay(Math.max(0, target.start - 0.3));
   }
 
   function applySplitLayout() {
-    if (isPlayerFullscreen()) {
-      if (showOverlay) {
-        fitOverlayLayout();
-        updateOverlayTimeline(currentTime(), true);
-      }
-      return;
-    }
     const main = document.querySelector('main');
     const pw = document.getElementById('player-wrap');
     const panel = document.getElementById('transcript-panel');
     const btn = document.getElementById('toggle-split-view');
+    if (isPlayerFullscreen()) {
+      if (pw) pw.style.height = '';
+      syncDockHost();
+      fitVideoBox();
+      renderLanesWindow(true);
+      renderAllFloatCards(true);
+      return;
+    }
     const active = splitView && window.innerWidth >= 1040;
     main.classList.toggle('split-view', active);
-    btn.setAttribute('aria-pressed', String(splitView));
-    btn.textContent = splitView ? 'Split' : 'Stacked';
-    if (!active) {
-      main.style.removeProperty('--split-vid-h');
-      panel.style.height = '';
-    } else {
-      const hdr = document.querySelector('header.top');
-      const viz = document.getElementById('viz-stage');
-      const hdrH = hdr ? Math.ceil(hdr.getBoundingClientRect().height) : 52;
-      const vizH = viz ? Math.ceil(viz.getBoundingClientRect().height) : 220;
-      const budgetH = window.innerHeight - hdrH - vizH - 28;
-      const vidH = Math.max(240, Math.min(Math.round(window.innerHeight * 0.64), budgetH));
-      main.style.setProperty('--split-vid-h', vidH + 'px');
-      const h = Math.round(pw.getBoundingClientRect().height);
-      if (h >= 200) panel.style.height = h + 'px';
+    if (btn) {
+      btn.setAttribute('aria-pressed', String(splitView));
+      btn.textContent = splitView ? 'Split' : 'Below';
     }
+    const hdr = document.querySelector('header.top');
+    const viz = document.getElementById('viz-stage');
+    const hdrH = hdr ? Math.ceil(hdr.getBoundingClientRect().height) : 50;
+    const vizH = viz ? Math.ceil(viz.getBoundingClientRect().height) : 210;
+    const budgetH = Math.max(220, window.innerHeight - hdrH - vizH - 22);
+    const ar = parseAspect(stageCfg.videoAspect);
+
+    if (!active) {
+      // Stacked / Below-video Theater mode: strictly cap height so wide monitors NEVER overzoom!
+      main.style.removeProperty('--split-col-w');
+      const autoH = Math.max(220, Math.min(Math.round(window.innerHeight * 0.72), budgetH));
+      const targetH = stageCfg.winStageH > 0
+        ? Math.max(180, Math.min(Math.round(window.innerHeight * 0.88), stageCfg.winStageH))
+        : autoH;
+      if (pw) pw.style.height = targetH + 'px';
+      if (panel) panel.style.height = '';
+    } else {
+      const autoH = Math.max(230, Math.min(Math.round(window.innerHeight * 0.66), budgetH));
+      const targetH = stageCfg.winStageH > 0
+        ? Math.max(200, Math.min(Math.round(window.innerHeight * 0.85), stageCfg.winStageH))
+        : autoH;
+      const maxColW = Math.min(Math.round(window.innerWidth * 0.65), Math.round(targetH * ar));
+      main.style.setProperty('--split-col-w', Math.max(360, maxColW) + 'px');
+      if (pw) pw.style.height = targetH + 'px';
+      if (panel) panel.style.height = targetH + 'px';
+    }
+
+    fitVideoBox();
     requestAnimationFrame(() => {
-      if (active) {
+      fitVideoBox();
+      if (active && pw && panel) {
         const h = Math.round(pw.getBoundingClientRect().height);
         if (h >= 200) panel.style.height = h + 'px';
       }
       if (showMinimap) drawMinimap();
-      renderLanesWindow(true);
-      if (showOverlay) {
-        fitOverlayLayout();
-        updateOverlayTimeline(currentTime(), true);
-      }
+      renderLanesWindow(false);
+      renderAllFloatCards(true);
     });
   }
 
@@ -2788,10 +3633,11 @@ APP_JS = r"""(() => {
   function saveAnnState() {
     localStorage.setItem(annStorageKey(), JSON.stringify(annState));
     lastLiveAnnId = '';
+    buildStreamRegistry();
     populateCategorySelects();
     paintNotes();
     renderLanesWindow(true);
-    if (showOverlay) updateOverlayTimeline(currentTime(), true);
+    renderAllFloatCards(true);
     if (showMinimap) drawMinimap();
     updateLiveAnnotation(currentTime(), true);
   }
@@ -2832,7 +3678,7 @@ APP_JS = r"""(() => {
     populateCategorySelects();
     paintNotes();
     renderLanesWindow(true);
-    if (showOverlay) updateOverlayTimeline(currentTime(), true);
+    renderAllFloatCards(true);
     if (showMinimap) drawMinimap();
     updateLiveAnnotation(currentTime(), true);
   }
@@ -2907,9 +3753,9 @@ APP_JS = r"""(() => {
         editForm = '<div class="note-edit-form" data-edit-for="' + html(n.id) + '">'
           + '<div class="note-edit-row">'
           + '<input type="text" class="ed-time ed-start" value="' + html(clock(n.t))
-          + '" data-orig-clock="' + html(clock(n.t)) + '" data-orig-val="' + n.t + '" placeholder="start" title="Start time (m:ss or h:mm:ss)">'
+          + '" data-orig-clock="' + html(clock(n.t)) + '" data-orig-val="' + n.t + '" placeholder="start">'
           + '<input type="text" class="ed-time ed-end" value="' + html(endClk)
-          + '" data-orig-clock="' + html(endClk) + '" data-orig-val="' + (n.end || '') + '" placeholder="end" title="Optional end time">'
+          + '" data-orig-clock="' + html(endClk) + '" data-orig-val="' + (n.end || '') + '" placeholder="end">'
           + '<select class="ed-cat">' + catOpts + '</select>'
           + '<input type="text" class="ed-title" value="' + html(n.title || '') + '" placeholder="short title…">'
           + '</div>'
@@ -2976,9 +3822,8 @@ APP_JS = r"""(() => {
   }
   function deleteAnnotation(id) {
     const addedIdx = (annState.added || []).findIndex(a => a.id === id);
-    if (addedIdx !== -1) {
-      annState.added.splice(addedIdx, 1);
-    } else {
+    if (addedIdx !== -1) annState.added.splice(addedIdx, 1);
+    else {
       if (!annState.deleted.includes(id)) annState.deleted.push(id);
       delete annState.edits[id];
     }
@@ -3017,7 +3862,7 @@ APP_JS = r"""(() => {
     }
     lanesFollow = true;
     document.getElementById('lanes-follow').setAttribute('aria-pressed', 'true');
-    lanesWinStart = clampWinStart(target.t - lanesWindow * 0.25);
+    lanesWinStart = clampWinStart(target.t - lanesWindow * 0.25, lanesWindow);
     renderLanesWindow(true);
     seekAndPlay(Math.max(0, target.t - 0.3));
   }
@@ -3062,18 +3907,7 @@ APP_JS = r"""(() => {
     if (btn) btn.setAttribute('aria-pressed', String(showFurigana));
     if (model) {
       renderLanesWindow(true);
-      if (showOverlay) updateOverlayTimeline(currentTime(), true);
-    }
-  }
-  function applyStudyLayersState() {
-    const gBtn = document.getElementById('toggle-gloss');
-    const eBtn = document.getElementById('toggle-english');
-    if (gBtn) gBtn.setAttribute('aria-pressed', String(showGloss));
-    if (eBtn) eBtn.setAttribute('aria-pressed', String(showEnglish));
-    if (model) {
-      paintTranscript();
-      renderLanesWindow(true);
-      if (showOverlay) updateOverlayTimeline(currentTime(), true);
+      renderAllFloatCards(true);
     }
   }
   function showWordInspector(vid) {
@@ -3115,7 +3949,7 @@ APP_JS = r"""(() => {
     if (filter === 'b2+') return diff === 'b2' || diff === 'c1' || diff === 'econ' || diff === 'ar';
     if (filter === 'n1+') return diff === 'n1' || diff === 'slang' || diff === 'mtg';
     if (filter === 'n2+') return diff === 'n2' || diff === 'n1' || diff === 'slang' || diff === 'mtg';
-    return diff !== 'basic'; // n3+ / b1+ default
+    return diff !== 'basic';
   }
   function paintVocab() {
     const panel = document.getElementById('vocab-panel');
@@ -3182,19 +4016,414 @@ APP_JS = r"""(() => {
     }).join('');
   }
 
+  function wirePopoverInteractions() {
+    const pop = document.getElementById('cfg-popover');
+    if (!pop) return;
+    pop.addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (ev.target.closest('[data-pop-close]')) { closeCfgPopover(); return; }
+
+      const ax = Number(pop.dataset.anchorX) || 120;
+      const ay = Number(pop.dataset.anchorY) || 120;
+
+      // Layout popover actions
+      const layBtn = ev.target.closest('button[data-lay]');
+      if (layBtn) {
+        const k = layBtn.dataset.lay;
+        const v = layBtn.dataset.val;
+        if (k === 'videoScale') stageCfg.videoScale = clampNum(v, 0.4, 1.0, 1.0);
+        else if (k === 'videoAlignX') stageCfg.videoAlignX = v;
+        else if (k === 'videoAlignY') stageCfg.videoAlignY = v;
+        else if (k === 'videoAspect') stageCfg.videoAspect = v;
+        else if (k === 'fsDock') stageCfg.fsDock = v;
+        else if (k === 'timerPos') stageCfg.timerPos = v;
+        else if (k === 'handlesMode') stageCfg.handlesMode = v;
+        else if (k === 'split') {
+          splitView = v === 'true';
+          localStorage.setItem('ovpub.split', String(splitView));
+        } else if (k === 'all-dock') {
+          setAllSpeakersPlacement('dock');
+          renderLayoutPopover(ax, ay);
+          return;
+        } else if (k === 'all-float') {
+          setAllSpeakersPlacement('float');
+          renderLayoutPopover(ax, ay);
+          return;
+        } else if (k === 'matte-float') {
+          stageCfg.videoScale = 0.76;
+          stageCfg.videoAlignY = 'top';
+          stageCfg.videoAlignX = 'center';
+          stageCfg.handlesMode = 'show';
+          saveStageCfg();
+          applyHandlesMode();
+          const total = speakerOrder.length;
+          speakerOrder.forEach((spk, idx) => {
+            const sc = speakerConfigs[spk];
+            const slot = defaultFloatSlot(idx, total);
+            sc.placement = 'float';
+            sc.visible = true;
+            sc.x = slot.x;
+            sc.w = slot.w;
+            sc.y = Math.max(77, slot.y);
+          });
+          refreshAllTimelines(true);
+          renderLayoutPopover(ax, ay);
+          return;
+        } else if (k === 'toggle-fs') {
+          closeCfgPopover();
+          togglePlayerFullscreen();
+          return;
+        } else if (k === 'reset-layout') {
+          stageCfg = {...DEFAULT_STAGE_CFG};
+          saveStageCfg();
+          applyHandlesMode();
+          applyTimerPosClasses();
+          setAllSpeakersPlacement('dock');
+          applySplitLayout();
+          renderLayoutPopover(ax, ay);
+          return;
+        }
+        saveStageCfg();
+        applyHandlesMode();
+        applyTimerPosClasses();
+        syncDockHost();
+        applySplitLayout();
+        renderLanesWindow(true);
+        renderAllFloatCards(true);
+        renderLayoutPopover(ax, ay);
+        return;
+      }
+
+      // Meta-labels popover buttons
+      const mlBtn = ev.target.closest('button[data-ml]');
+      if (mlBtn) {
+        const k = mlBtn.dataset.ml;
+        const v = mlBtn.dataset.val;
+        metaLabels[k] = k === 'maxPerBlock' ? Number(v) : v;
+        saveMetaLabels();
+        applyToneState();
+        renderLabelsPopover(ax, ay);
+        return;
+      }
+
+      // Per-speaker config buttons
+      const scBtn = ev.target.closest('button[data-sc]');
+      if (scBtn) {
+        const spk = scBtn.dataset.spk;
+        const act = scBtn.dataset.sc;
+        const cfg = speakerConfigs[spk];
+        if (!cfg) return;
+        if (act === 'place') {
+          cfg.placement = scBtn.dataset.val === 'float' ? 'float' : 'dock';
+          refreshAllTimelines(true);
+        } else if (act === 'order-up') {
+          const i = speakerOrder.indexOf(spk);
+          moveSpeakerOrder(i, i - 1);
+        } else if (act === 'order-dn') {
+          const i = speakerOrder.indexOf(spk);
+          moveSpeakerOrder(i, i + 1);
+        } else if (act === 'dockAlign') {
+          cfg.dockAlign = scBtn.dataset.val;
+          refreshAllTimelines(false);
+        } else if (act === 'timerPos') {
+          cfg.timerPos = scBtn.dataset.val;
+          refreshAllTimelines(false);
+        } else if (act === 'hide-spk') {
+          cfg.visible = false;
+          refreshAllTimelines(true);
+          closeCfgPopover();
+          return;
+        } else if (act === 'reset-spk') {
+          const idx = speakerOrder.indexOf(spk);
+          speakerConfigs[spk] = makeDefaultSpeakerCfg(spk, idx, speakerOrder.length);
+          refreshAllTimelines(true);
+        }
+        renderSpeakerConfigPopover(spk, ax, ay);
+      }
+    });
+
+    pop.addEventListener('change', ev => {
+      ev.stopPropagation();
+      const t = ev.target;
+      if (t.dataset.scRow) {
+        const spk = t.dataset.spk;
+        if (t.checked) addRowToSpeaker(spk, t.dataset.scRow);
+        else removeRowFromSpeaker(spk, t.dataset.scRow);
+        return;
+      }
+      if (t.dataset.scFlag) {
+        const cfg = speakerConfigs[t.dataset.spk];
+        if (cfg) {
+          cfg[t.dataset.scFlag] = Boolean(t.checked);
+          refreshAllTimelines(true);
+        }
+        return;
+      }
+      if (t.dataset.mlFlag) {
+        metaLabels[t.dataset.mlFlag] = Boolean(t.checked);
+        saveMetaLabels();
+        applyToneState();
+        return;
+      }
+      if (t.dataset.mlKind) {
+        metaLabels.kinds[t.dataset.mlKind] = Boolean(t.checked);
+        saveMetaLabels();
+        applyToneState();
+      }
+    });
+
+    pop.addEventListener('input', ev => {
+      ev.stopPropagation();
+      const t = ev.target;
+      const metaEl = t.parentElement?.querySelector('.ctx-meta');
+      if (t.dataset.layRng === 'videoScale') {
+        stageCfg.videoScale = clampNum(Number(t.value) / 100, 0.4, 1.0, 1.0);
+        if (metaEl) metaEl.textContent = Math.round(stageCfg.videoScale * 100) + '%';
+        saveStageCfg();
+        fitVideoBox();
+        return;
+      }
+      if (t.dataset.scRng) {
+        const cfg = speakerConfigs[t.dataset.spk];
+        if (!cfg) return;
+        const k = t.dataset.scRng;
+        const raw = Number(t.value);
+        if (k === 'w') {
+          cfg.w = clampNum(raw, 18, 100, 48);
+          cfg.x = Math.min(cfg.x, 100 - cfg.w);
+          if (metaEl) metaEl.textContent = Math.round(cfg.w) + '%';
+        } else if (k === 'scale') {
+          cfg.scale = clampNum(raw / 100, 0.6, 1.8, 1.0);
+          if (metaEl) metaEl.textContent = Math.round(cfg.scale * 100) + '%';
+        } else if (k === 'alpha') {
+          cfg.alpha = clampNum(raw / 100, 0.45, 0.98, 0.9);
+          if (metaEl) metaEl.textContent = Math.round(cfg.alpha * 100) + '%';
+        } else if (k === 'dockScale') {
+          cfg.dockScale = clampNum(raw / 100, 0.65, 2.0, 1.0);
+          if (metaEl) metaEl.textContent = Math.round(cfg.dockScale * 100) + '%';
+        } else if (k === 'dockWidth') {
+          cfg.dockWidth = clampNum(raw, 35, 100, 100);
+          if (metaEl) metaEl.textContent = Math.round(cfg.dockWidth) + '%';
+        }
+        saveSpeakerConfigs();
+        renderLanesWindow(true);
+        renderAllFloatCards(true);
+        if (k === 'dockScale') applySplitLayout();
+      }
+    });
+    pop.addEventListener('contextmenu', ev => ev.preventDefault());
+  }
+
+  function wireFloatingCardInteractions() {
+    const layer = document.getElementById('stage-float-layer');
+    if (!layer) return;
+
+    layer.addEventListener('contextmenu', ev => showStreamMenu(ev));
+
+    layer.addEventListener('click', ev => {
+      ev.stopPropagation();
+      const actBtn = ev.target.closest('button[data-fc-act]');
+      if (actBtn) {
+        const spk = actBtn.dataset.spk;
+        const act = actBtn.dataset.fcAct;
+        const cfg = speakerConfigs[spk];
+        if (!cfg) return;
+        if (act === 'cfg') {
+          const r = actBtn.getBoundingClientRect();
+          renderSpeakerConfigPopover(spk, r.left, Math.max(12, r.top - 260));
+        } else if (act === 'dock') {
+          cfg.placement = 'dock';
+          refreshAllTimelines(true);
+        } else if (act === 'hide') {
+          cfg.visible = false;
+          refreshAllTimelines(true);
+        }
+        return;
+      }
+      const cfgBtn = ev.target.closest('button[data-cfg-spk]');
+      if (cfgBtn) {
+        const r = cfgBtn.getBoundingClientRect();
+        renderSpeakerConfigPopover(cfgBtn.dataset.cfgSpk, r.left, Math.max(12, r.top - 260));
+        return;
+      }
+      closeAllPopovers();
+      const pin = ev.target.closest('.ruler-note-pin, .lb-analysis, .lane-pulse');
+      if (pin && pin.dataset.t != null) { seekAndPlay(Number(pin.dataset.t)); return; }
+      const lw = ev.target.closest('.lane-word[data-v]');
+      if (lw) showWordInspector(Number(lw.dataset.v));
+      const trk = ev.target.closest('.fc-track, .fc-ruler');
+      if (!trk || !model) return;
+      const card = trk.closest('.spk-float-card');
+      const st = card ? floatRenderState.get(card.dataset.spk) : null;
+      if (!st) return;
+      const rect = trk.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const frac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+      seekAndPlay(st.winStart + frac * st.winDur);
+    });
+
+    // Independent Move & Resize per floating speaker card
+    let fDrag = null;
+    layer.addEventListener('pointerdown', ev => {
+      if (ev.button !== 0 || ev.target.closest('button')) return;
+      if (stageCfg.handlesMode === 'hidden') return;
+      const rzEl = ev.target.closest('.fc-rz[data-rz]');
+      const mvEl = ev.target.closest('[data-move-spk]');
+      if (!rzEl && !mvEl) return;
+      const spk = rzEl ? rzEl.dataset.spk : mvEl.dataset.moveSpk;
+      const cfg = speakerConfigs[spk];
+      const card = [...layer.children].find(el => el.dataset && el.dataset.spk === spk) || null;
+      if (!cfg || !card) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeAllPopovers();
+      const stageRect = layer.getBoundingClientRect();
+      if (stageRect.width <= 0 || stageRect.height <= 0) return;
+      fDrag = {
+        mode: rzEl ? 'rz-' + rzEl.dataset.rz : 'move',
+        spk, card, stageRect,
+        startX: ev.clientX, startY: ev.clientY,
+        origX: cfg.x, origY: cfg.y, origW: cfg.w, origScale: cfg.scale,
+      };
+      card.classList.add('is-moving');
+      document.body.classList.add('is-dragging-layout');
+      try { (rzEl || mvEl).setPointerCapture(ev.pointerId); } catch {}
+    });
+
+    window.addEventListener('pointermove', ev => {
+      if (!fDrag) return;
+      const cfg = speakerConfigs[fDrag.spk];
+      if (!cfg) return;
+      const dxPct = ((ev.clientX - fDrag.startX) / fDrag.stageRect.width) * 100;
+      const dyPct = ((ev.clientY - fDrag.startY) / fDrag.stageRect.height) * 100;
+      const dyPx = ev.clientY - fDrag.startY;
+      const cardHPct = Math.min(85, ((fDrag.card.offsetHeight || 70) / fDrag.stageRect.height) * 100);
+
+      if (fDrag.mode === 'move') {
+        cfg.x = clampNum(fDrag.origX + dxPct, 0, Math.max(0, 100 - cfg.w), cfg.x);
+        cfg.y = clampNum(fDrag.origY + dyPct, 0, Math.max(0, 100 - cardHPct), cfg.y);
+        fDrag.card.style.left = cfg.x.toFixed(2) + '%';
+        fDrag.card.style.top = cfg.y.toFixed(2) + '%';
+      } else if (fDrag.mode === 'rz-e') {
+        cfg.w = clampNum(fDrag.origW + dxPct, 18, 100 - cfg.x, cfg.w);
+        fDrag.card.style.width = cfg.w.toFixed(2) + '%';
+      } else if (fDrag.mode === 'rz-w') {
+        const rightEdge = fDrag.origX + fDrag.origW;
+        const nextX = clampNum(fDrag.origX + dxPct, 0, rightEdge - 18, cfg.x);
+        cfg.x = nextX;
+        cfg.w = clampNum(rightEdge - nextX, 18, 100, cfg.w);
+        fDrag.card.style.left = cfg.x.toFixed(2) + '%';
+        fDrag.card.style.width = cfg.w.toFixed(2) + '%';
+      } else if (fDrag.mode === 'rz-s') {
+        cfg.scale = clampNum(fDrag.origScale + dyPx / 120, 0.6, 1.8, cfg.scale);
+        fDrag.card.style.setProperty('--fc-scale', cfg.scale.toFixed(3));
+        fDrag.card.style.setProperty('--spk-scale', cfg.scale.toFixed(3));
+      } else if (fDrag.mode === 'rz-se') {
+        cfg.w = clampNum(fDrag.origW + dxPct, 18, 100 - cfg.x, cfg.w);
+        cfg.scale = clampNum(fDrag.origScale + dyPx / 120, 0.6, 1.8, cfg.scale);
+        fDrag.card.style.width = cfg.w.toFixed(2) + '%';
+        fDrag.card.style.setProperty('--fc-scale', cfg.scale.toFixed(3));
+        fDrag.card.style.setProperty('--spk-scale', cfg.scale.toFixed(3));
+      }
+    });
+
+    const finishFloatDrag = () => {
+      if (!fDrag) return;
+      fDrag.card.classList.remove('is-moving');
+      document.body.classList.remove('is-dragging-layout');
+      fDrag = null;
+      saveSpeakerConfigs();
+      renderAllFloatCards(true);
+    };
+    window.addEventListener('pointerup', finishFloatDrag);
+    window.addEventListener('pointercancel', finishFloatDrag);
+  }
+
+  function wireStageSplitters() {
+    // 1) Fullscreen dock <-> video splitter
+    const splitter = document.getElementById('stage-splitter');
+    const stageDock = document.getElementById('stage-dock');
+    if (splitter && stageDock) {
+      let spDrag = null;
+      splitter.addEventListener('pointerdown', ev => {
+        if (ev.button !== 0) return;
+        ev.preventDefault();
+        spDrag = {
+          startY: ev.clientY,
+          startH: stageDock.getBoundingClientRect().height || 200,
+          isTop: stageCfg.fsDock === 'top',
+        };
+        splitter.classList.add('is-active');
+        document.body.classList.add('is-dragging-layout');
+        try { splitter.setPointerCapture(ev.pointerId); } catch {}
+      });
+      splitter.addEventListener('pointermove', ev => {
+        if (!spDrag) return;
+        const dy = spDrag.isTop ? (ev.clientY - spDrag.startY) : (spDrag.startY - ev.clientY);
+        const nextH = clampNum(spDrag.startH + dy, 84, Math.round(window.innerHeight * 0.65), 220);
+        stageCfg.fsDockH = Math.round(nextH);
+        stageDock.style.height = stageCfg.fsDockH + 'px';
+        fitVideoBox();
+      });
+      const done = () => {
+        if (!spDrag) return;
+        spDrag = null;
+        splitter.classList.remove('is-active');
+        document.body.classList.remove('is-dragging-layout');
+        saveStageCfg();
+        fitVideoBox();
+        renderLanesWindow(true);
+      };
+      splitter.addEventListener('pointerup', done);
+      splitter.addEventListener('pointercancel', done);
+    }
+
+    // 2) Windowed theater stage bottom edge resizer
+    const winRz = document.getElementById('stage-win-resize');
+    const pw = document.getElementById('player-wrap');
+    if (winRz && pw) {
+      let wDrag = null;
+      winRz.addEventListener('pointerdown', ev => {
+        if (ev.button !== 0 || isPlayerFullscreen() || stageCfg.handlesMode === 'hidden') return;
+        ev.preventDefault();
+        wDrag = {startY: ev.clientY, startH: pw.getBoundingClientRect().height || 400};
+        document.body.classList.add('is-dragging-layout');
+        try { winRz.setPointerCapture(ev.pointerId); } catch {}
+      });
+      winRz.addEventListener('pointermove', ev => {
+        if (!wDrag) return;
+        const nextH = clampNum(wDrag.startH + (ev.clientY - wDrag.startY), 180, Math.round(window.innerHeight * 0.88), 420);
+        stageCfg.winStageH = Math.round(nextH);
+        pw.style.height = stageCfg.winStageH + 'px';
+        if (splitView && window.innerWidth >= 1040) {
+          const panel = document.getElementById('transcript-panel');
+          if (panel) panel.style.height = stageCfg.winStageH + 'px';
+        }
+        fitVideoBox();
+      });
+      const done = () => {
+        if (!wDrag) return;
+        wDrag = null;
+        document.body.classList.remove('is-dragging-layout');
+        saveStageCfg();
+        fitVideoBox();
+        renderAllFloatCards(true);
+      };
+      winRz.addEventListener('pointerup', done);
+      winRz.addEventListener('pointercancel', done);
+    }
+  }
+
   async function init() {
     const res = await fetch('transcript.json');
     if (!res.ok) throw new Error('Could not load transcript.json');
     doc = expandCompact(await res.json());
     isCjk = doc.language === 'ja' || doc.language === 'zh';
     hasStudy = Boolean(isCjk || (doc.vocab && doc.vocab.length) || doc.segments.some(s => s.en || s.std || s.tokens.length));
-    configureStudyStreams();
     vocabById = new Map((doc.vocab || []).map(v => [v.id, v]));
     loadKnownVocab();
     model = buildOverlapModel(doc);
     lanesWinStart = model.clipStart || 0;
-    mainRows = loadSurfaceRows('main');
-    overlayRows = loadSurfaceRows('overlay');
 
     const annUrl = document.querySelector('main')?.dataset.annotations || '';
     if (annUrl) {
@@ -3237,6 +4466,12 @@ APP_JS = r"""(() => {
       } catch {}
     }
 
+    loadAnnState();
+    buildStreamRegistry();
+    loadSpeakerConfigs();
+    applyHandlesMode();
+    applyTimerPosClasses();
+
     document.title = doc.title;
     document.getElementById('vid-title').textContent = doc.title;
     const ytLink = document.getElementById('yt-orig-link');
@@ -3278,23 +4513,10 @@ APP_JS = r"""(() => {
       const stdBtn = document.getElementById('toggle-std');
       const gBtn = document.getElementById('toggle-gloss');
       const eBtn = document.getElementById('toggle-english');
-      const hasStd = STUDY_STREAMS.some(s => s.id === 'es-std');
-      const hasGloss = STUDY_STREAMS.some(s => s.id === 'literal');
-      const hasEn = STUDY_STREAMS.some(s => s.id === 'en');
-      if (stdBtn) {
-        stdBtn.hidden = !hasStd;
-        stdBtn.setAttribute('aria-pressed', String(mainRows.some(r => r.kind === 'es-std')));
-      }
-      if (gBtn) {
-        gBtn.hidden = !hasGloss;
-        showGloss = mainRows.some(r => r.kind === 'literal');
-        gBtn.setAttribute('aria-pressed', String(showGloss));
-      }
-      if (eBtn) {
-        eBtn.hidden = !hasEn;
-        showEnglish = mainRows.some(r => r.kind === 'en');
-        eBtn.setAttribute('aria-pressed', String(showEnglish));
-      }
+      if (stdBtn) stdBtn.hidden = !STREAM_MAP.has('es-std');
+      if (gBtn) gBtn.hidden = !STREAM_MAP.has('literal');
+      if (eBtn) eBtn.hidden = !STREAM_MAP.has('en');
+      syncStudyToolbarButtons();
       const vDiffSel = document.getElementById('vocab-diff');
       if (vDiffSel) {
         if (doc.language === 'es') {
@@ -3312,253 +4534,270 @@ APP_JS = r"""(() => {
       if (isCjk) applyFuriganaState();
     }
 
-    loadAnnState();
     showAnnotations = seedAnnotations.length > 0
       && localStorage.getItem('ovpub.annotations.' + doc.video_id) === 'true';
 
     setupYouTube(doc.video_id);
     paintTranscript();
     applyToneState();
-    applyOverlayState();
+    syncFloatButton();
     applyMinimapState();
     applyBadgesState();
     applyAnnotationsState();
     applySplitLayout();
     if (hasStudy) paintVocab();
 
-    const ovEl = document.getElementById('ov-overlay');
-    if (ovEl) {
-      ovEl.addEventListener('click', ev => {
-        ev.stopPropagation();
-        closeStreamMenu();
-        if (ev.target.closest('#ov-drag-handle')) return;
-        const pin = ev.target.closest('.ruler-note-pin');
-        if (pin) { seekAndPlay(Number(pin.dataset.t)); return; }
-        const lw = ev.target.closest('.lane-word[data-v]');
-        if (lw) showWordInspector(Number(lw.dataset.v));
-        const trk = ev.target.closest('.ov-track, .ov-ruler');
-        if (!trk || !model) return;
-        const rect = trk.getBoundingClientRect();
-        if (rect.width <= 0) return;
-        const frac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-        const winDur = Math.min(OV_WINDOW_SEC, Math.max(4, lanesWindow));
-        seekAndPlay(ovWinStart + frac * winDur);
-      });
-      ovEl.addEventListener('contextmenu', ev => showStreamMenu(ev, 'overlay'));
-    }
+    wirePopoverInteractions();
+    wireFloatingCardInteractions();
+    wireStageSplitters();
 
-    const ovDragHandle = document.getElementById('ov-drag-handle');
-    if (ovDragHandle) {
-      let ovPosDrag = null;
-      ovDragHandle.addEventListener('pointerdown', ev => {
-        if (ev.button !== 0 || ev.target.closest('button')) return;
+    // Fullscreen corner HUD buttons (when dock is hidden)
+    const hudLayout = document.getElementById('hud-layout-btn');
+    if (hudLayout) {
+      hudLayout.onclick = ev => {
         ev.stopPropagation();
-        ev.preventDefault();
-        closeStreamMenu();
-        ovPosDrag = {startY: ev.clientY, startBottom: getOvBottom()};
-        try { ovDragHandle.setPointerCapture(ev.pointerId); } catch {}
-      });
-      ovDragHandle.addEventListener('pointermove', ev => {
-        if (!ovPosDrag) return;
-        const dy = ovPosDrag.startY - ev.clientY;
-        setOvBottom(ovPosDrag.startBottom + dy, false);
-      });
-      const finishOvPos = () => {
-        if (!ovPosDrag) return;
-        ovPosDrag = null;
-        setOvBottom(getOvBottom(), true);
+        const r = hudLayout.getBoundingClientRect();
+        renderLayoutPopover(r.left - 220, r.bottom + 6);
       };
-      ovDragHandle.addEventListener('pointerup', finishOvPos);
-      ovDragHandle.addEventListener('pointercancel', finishOvPos);
     }
-    const ovFsBtn = document.getElementById('ov-fs-btn');
-    if (ovFsBtn) {
-      ovFsBtn.addEventListener('click', ev => {
-        ev.stopPropagation();
-        togglePlayerFullscreen();
-      });
-    }
+    const hudExit = document.getElementById('hud-exit-fs');
+    if (hudExit) hudExit.onclick = togglePlayerFullscreen;
+
     const fsBtn = document.getElementById('toggle-fullscreen');
     if (fsBtn) fsBtn.onclick = togglePlayerFullscreen;
     document.addEventListener('fullscreenchange', onFullscreenChange);
     document.addEventListener('webkitfullscreenchange', onFullscreenChange);
     syncFullscreenButtons();
 
-    function setupRowDragReorder(stageEl, surface, labelSel, onLabelClick) {
-      if (!stageEl) return;
-      let rd = null;
-      const clearCls = () => {
-        stageEl.querySelectorAll('.is-dragging, .drag-over-top, .drag-over-bot')
-          .forEach(el => el.classList.remove('is-dragging', 'drag-over-top', 'drag-over-bot'));
-      };
-      stageEl.addEventListener('pointerdown', ev => {
-        if (ev.button !== 0) return;
-        const lbl = ev.target.closest(labelSel);
-        if (!lbl) return;
-        const rowEl = lbl.closest('[data-row-idx]');
-        if (!rowEl) return;
-        const fromIdx = Number(rowEl.dataset.rowIdx);
-        if (!Number.isInteger(fromIdx)) return;
+    // Docked per-speaker deck reordering + independent height resizing + ⚙ button
+    const lanesStage = document.getElementById('lanes-stage');
+    if (lanesStage) {
+      lanesStage.addEventListener('contextmenu', ev => showStreamMenu(ev));
+
+      // Per-speaker height resize handle in dock
+      let deckRz = null;
+      lanesStage.addEventListener('pointerdown', ev => {
+        if (ev.button !== 0 || stageCfg.handlesMode === 'hidden') return;
+        const rz = ev.target.closest('.spk-deck-resizer[data-resize-spk]');
+        if (!rz) return;
+        const spk = rz.dataset.resizeSpk;
+        const sc = speakerConfigs[spk];
+        if (!sc) return;
+        ev.preventDefault();
         ev.stopPropagation();
-        rd = {fromIdx, targetIdx: fromIdx, placeAfter: false, startY: ev.clientY, moved: false, rowEl, lbl};
+        deckRz = {spk, startY: ev.clientY, origScale: sc.dockScale, deckEl: rz.closest('.spk-deck')};
+        document.body.classList.add('is-dragging-layout');
+        try { rz.setPointerCapture(ev.pointerId); } catch {}
+      });
+      window.addEventListener('pointermove', ev => {
+        if (!deckRz) return;
+        const sc = speakerConfigs[deckRz.spk];
+        if (!sc) return;
+        sc.dockScale = clampNum(deckRz.origScale + (ev.clientY - deckRz.startY) / 110, 0.65, 2.0, sc.dockScale);
+        if (deckRz.deckEl) deckRz.deckEl.style.setProperty('--spk-scale', sc.dockScale.toFixed(2));
+      });
+      const finishDeckRz = () => {
+        if (!deckRz) return;
+        deckRz = null;
+        document.body.classList.remove('is-dragging-layout');
+        saveSpeakerConfigs();
+        renderLanesWindow(true);
+        applySplitLayout();
+      };
+      window.addEventListener('pointerup', finishDeckRz);
+      window.addEventListener('pointercancel', finishDeckRz);
+
+      // Drag speaker label to reorder decks, or click to filter speaker
+      let rd = null;
+      lanesStage.addEventListener('pointerdown', ev => {
+        if (ev.button !== 0 || ev.target.closest('button')) return;
+        const lbl = ev.target.closest('.lane-label');
+        if (!lbl) return;
+        const deckEl = lbl.closest('.spk-deck');
+        if (!deckEl) return;
+        const spk = deckEl.dataset.spk;
+        const fromIdx = speakerOrder.indexOf(spk);
+        if (fromIdx < 0) return;
+        ev.stopPropagation();
+        rd = {
+          spk, fromIdx, targetSpk: spk, placeAfter: false, startY: ev.clientY, moved: false,
+          deckEl, canDrag: stageCfg.handlesMode !== 'hidden',
+        };
         try { lbl.setPointerCapture(ev.pointerId); } catch {}
       });
-      stageEl.addEventListener('pointermove', ev => {
-        if (!rd) return;
-        if (!rd.moved && Math.abs(ev.clientY - rd.startY) >= 5) {
+      lanesStage.addEventListener('pointermove', ev => {
+        if (!rd || !rd.canDrag) return;
+        if (!rd.moved && Math.abs(ev.clientY - rd.startY) >= 6) {
           rd.moved = true;
-          rd.rowEl.classList.add('is-dragging');
-          closeStreamMenu();
+          rd.deckEl.classList.add('is-dragging');
+          closeAllPopovers();
         }
         if (!rd.moved) return;
-        const rowEls = [...stageEl.querySelectorAll('[data-row-idx]')];
-        for (const el of rowEls) el.classList.remove('drag-over-top', 'drag-over-bot');
-        let overEl = rowEls[0];
+        const decks = [...lanesStage.querySelectorAll('.spk-deck')];
+        for (const el of decks) el.classList.remove('drag-over-top', 'drag-over-bot');
+        let overEl = decks[0];
         let placeAfter = false;
-        for (const el of rowEls) {
+        for (const el of decks) {
           const r = el.getBoundingClientRect();
           if (ev.clientY < r.top + r.height / 2) { overEl = el; placeAfter = false; break; }
           overEl = el;
           placeAfter = true;
         }
         if (overEl) {
-          const overIdx = Number(overEl.dataset.rowIdx);
-          rd.targetIdx = overIdx;
+          rd.targetSpk = overEl.dataset.spk;
           rd.placeAfter = placeAfter;
-          if (overIdx !== rd.fromIdx) {
+          if (rd.targetSpk !== rd.spk) {
             overEl.classList.add(placeAfter ? 'drag-over-bot' : 'drag-over-top');
           }
         }
       });
-      const finish = ev => {
+      const finishDeckReorder = ev => {
         if (!rd) return;
         const d = rd;
         rd = null;
-        clearCls();
-        if (d.moved) {
-          const ins = d.placeAfter ? d.targetIdx + 1 : d.targetIdx;
+        lanesStage.querySelectorAll('.is-dragging, .drag-over-top, .drag-over-bot')
+          .forEach(el => el.classList.remove('is-dragging', 'drag-over-top', 'drag-over-bot'));
+        if (d.moved && d.targetSpk && d.targetSpk !== d.spk) {
+          const targetIdx = speakerOrder.indexOf(d.targetSpk);
+          const ins = d.placeAfter ? targetIdx + 1 : targetIdx;
           const toIdx = ins > d.fromIdx ? ins - 1 : ins;
-          moveRowOnSurface(surface, d.fromIdx, toIdx);
-        } else if (ev && ev.type === 'pointerup' && onLabelClick) {
-          onLabelClick(d.lbl);
+          moveSpeakerOrder(d.fromIdx, toIdx);
+        } else if (ev && ev.type === 'pointerup') {
+          const val = 'spk:' + d.spk;
+          filterSel.value = filterSel.value === val ? 'all' : val;
+          paintTranscript();
         }
       };
-      stageEl.addEventListener('pointerup', finish);
-      stageEl.addEventListener('pointercancel', () => finish(null));
-    }
+      lanesStage.addEventListener('pointerup', finishDeckReorder);
+      lanesStage.addEventListener('pointercancel', () => finishDeckReorder(null));
 
-    setupRowDragReorder(ovEl, 'overlay', '.ov-label', null);
-
-    const lanesStageCtx = document.getElementById('lanes-stage');
-    if (lanesStageCtx) {
-      lanesStageCtx.addEventListener('contextmenu', ev => showStreamMenu(ev, 'main'));
-      setupRowDragReorder(lanesStageCtx, 'main', '.lane-label', lbl => {
-        if (!lbl.dataset.speaker) return;
-        const val = 'spk:' + lbl.dataset.speaker;
-        filterSel.value = filterSel.value === val ? 'all' : val;
-        paintTranscript();
+      // Per-speaker ⚙ gear click inside docked deck + gutter clock click
+      lanesStage.addEventListener('click', ev => {
+        const cfgBtn = ev.target.closest('button[data-cfg-spk]');
+        if (cfgBtn) {
+          ev.stopPropagation();
+          const r = cfgBtn.getBoundingClientRect();
+          renderSpeakerConfigPopover(cfgBtn.dataset.cfgSpk, r.right + 6, Math.max(12, r.top - 220));
+          return;
+        }
+        if (ev.target.closest('#lanes-gutter')) {
+          ev.stopPropagation();
+          document.getElementById('copy-link-btn')?.click();
+        }
       });
+
+      // Timeline seek, pan, and hover
+      lanesStage.addEventListener('mouseover', ev => {
+        const blk = ev.target.closest('.lane-block[data-index]');
+        if (!blk) { setHover(null); return; }
+        const idx = Number(blk.dataset.index);
+        const info = model.infoByIndex.get(idx);
+        if (info && info.partners.length) setHover([idx, ...info.partners.map(p => p.other.index)]);
+        else setHover([idx]);
+      });
+      lanesStage.addEventListener('mouseleave', () => setHover(null));
+
+      let drag = null;
+      lanesStage.addEventListener('pointerdown', ev => {
+        if (ev.button !== 0) return;
+        const pin = ev.target.closest('.ruler-note-pin, .lb-analysis, .lane-pulse');
+        if (pin && pin.dataset.t != null) { seekAndPlay(Number(pin.dataset.t)); return; }
+        const trk = ev.target.closest('.lane-track, .lanes-ruler');
+        if (!trk) return;
+        const lw = ev.target.closest('.lane-word[data-v]');
+        const vid = lw ? Number(lw.dataset.v) : null;
+        drag = {startX: ev.clientX, startWin: lanesWinStart, rect: trk.getBoundingClientRect(), moved: false, vid};
+        try { lanesStage.setPointerCapture(ev.pointerId); } catch {}
+      });
+      lanesStage.addEventListener('pointermove', ev => {
+        if (!drag) return;
+        const dx = ev.clientX - drag.startX;
+        if (!drag.moved && Math.abs(dx) >= 5) {
+          drag.moved = true;
+          lanesFollow = false;
+          document.getElementById('lanes-follow').setAttribute('aria-pressed', 'false');
+        }
+        if (drag.moved && drag.rect.width > 0) {
+          lanesWinStart = clampWinStart(drag.startWin - (dx / drag.rect.width) * lanesWindow, lanesWindow);
+          renderLanesWindow(true);
+        }
+      });
+      lanesStage.addEventListener('pointerup', ev => {
+        if (!drag) return;
+        const wasDrag = drag.moved, rect = drag.rect, vid = drag.vid;
+        drag = null;
+        if (!wasDrag && rect.width > 0) {
+          if (vid != null && vid >= 0) showWordInspector(vid);
+          const frac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+          seekAndPlay(lanesWinStart + frac * lanesWindow);
+        }
+      });
+      lanesStage.addEventListener('pointercancel', () => { drag = null; });
+      lanesStage.addEventListener('wheel', ev => {
+        if (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) || ev.shiftKey) {
+          ev.preventDefault();
+          const delta = Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY;
+          lanesFollow = false;
+          document.getElementById('lanes-follow').setAttribute('aria-pressed', 'false');
+          lanesWinStart = clampWinStart(lanesWinStart + (delta / 300) * lanesWindow * 0.4, lanesWindow);
+          renderLanesWindow(true);
+        }
+      }, {passive: false});
     }
+
+    // Stream / Layers context menu actions
     const ctxMenu = document.getElementById('stream-ctx-menu');
     if (ctxMenu) {
       ctxMenu.addEventListener('click', ev => {
         ev.stopPropagation();
         const btn = ev.target.closest('button[data-act]');
-        if (!btn || btn.disabled || !ctxMenuState) return;
-        const {surface, hitIdx} = ctxMenuState;
+        if (!btn || !ctxMenuState) return;
         const act = btn.dataset.act;
-        if (act === 'move-up' && hitIdx > 0) {
-          moveRowOnSurface(surface, hitIdx, hitIdx - 1);
-          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
+        const spk = btn.dataset.spk;
+        const x = ctxMenuState.x;
+        const y = ctxMenuState.y;
+        if (act === 'open-spk-cfg' && spk) {
+          renderSpeakerConfigPopover(spk, x, y);
           return;
         }
-        if (act === 'move-down' && hitIdx >= 0) {
-          moveRowOnSurface(surface, hitIdx, hitIdx + 1);
-          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
-          return;
-        }
-        if (act === 'move-top' && hitIdx > 0) {
-          moveRowOnSurface(surface, hitIdx, 0);
-          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
-          return;
-        }
-        if (act === 'move-bot' && hitIdx >= 0) {
-          moveRowOnSurface(surface, hitIdx, getSurfaceRows(surface).length - 1);
-          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
-          return;
-        }
-        if (act === 'grp-spk') {
-          groupRowsBySpeaker(surface);
-          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
-          return;
-        }
-        if (act === 'grp-stream') {
-          groupRowsByStream(surface);
-          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
-          return;
-        }
-        if (act === 'ov-up') {
-          setOvBottom(getOvBottom() + 24, true);
-          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
-          return;
-        }
-        if (act === 'ov-down') {
-          setOvBottom(getOvBottom() - 24, true);
-          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
-          return;
-        }
-        if (act === 'ov-font') {
-          setOvFontScale(Number(btn.dataset.val));
-          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
-          return;
-        }
-        if (act === 'ov-alpha') {
-          setOvAlpha(Number(btn.dataset.val));
-          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
-          return;
-        }
-        if (act === 'toggle-fs') {
-          closeStreamMenu();
-          togglePlayerFullscreen();
-          return;
-        }
-        if (act === 'add-one') {
-          addRowToSurface(surface, btn.dataset.spk, btn.dataset.kind);
-          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
-          return;
-        }
+        if (act === 'open-layout') { renderLayoutPopover(x, y); return; }
+        if (act === 'open-labels') { renderLabelsPopover(x, y); return; }
         if (act === 'toggle-kind') {
-          toggleKindForAllActive(surface, btn.dataset.kind);
-          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
+          toggleRowForAllSpeakers(btn.dataset.kind);
+          renderStreamMenu(x, y);
           return;
         }
-        if (act === 'toggle-spk') {
-          toggleSpeakerOnSurface(surface, btn.dataset.spk);
-          renderStreamMenu(ctxMenuState.x, ctxMenuState.y);
+        if (act === 'toggle-spk' && spk && speakerConfigs[spk]) {
+          speakerConfigs[spk].visible = !speakerConfigs[spk].visible;
+          refreshAllTimelines(true);
+          renderStreamMenu(x, y);
           return;
         }
-        if (act === 'rm-one') {
-          removeRowFromSurface(surface, btn.dataset.spk, btn.dataset.kind);
-        } else if (act === 'reset') {
-          if (surface === 'overlay') {
-            ovBottomWin = DEFAULT_OV_BOTTOM_WIN;
-            ovBottomFs = DEFAULT_OV_BOTTOM_FS;
-            ovFontScale = 1;
-            ovAlpha = 0.88;
-            localStorage.removeItem('ovpub.ovBottomWin');
-            localStorage.removeItem('ovpub.ovBottomFs');
-            localStorage.removeItem('ovpub.ovFont');
-            localStorage.removeItem('ovpub.ovAlpha');
-          }
-          setSurfaceRows(surface, defaultRowsForSurface(surface));
+        if (act === 'toggle-spk-float' && spk && speakerConfigs[spk]) {
+          speakerConfigs[spk].placement = speakerConfigs[spk].placement === 'float' ? 'dock' : 'float';
+          speakerConfigs[spk].visible = true;
+          refreshAllTimelines(true);
+          renderStreamMenu(x, y);
+          return;
         }
-        closeStreamMenu();
+        if (act === 'rm-one' && spk) {
+          removeRowFromSpeaker(spk, btn.dataset.kind);
+          renderStreamMenu(x, y);
+          return;
+        }
+        if (act === 'reset-all') {
+          localStorage.removeItem(spkStorageKey());
+          loadSpeakerConfigs();
+          refreshAllTimelines(true);
+          closeStreamMenu();
+        }
       });
       ctxMenu.addEventListener('contextmenu', ev => ev.preventDefault());
     }
-    document.addEventListener('click', closeStreamMenu);
+
+    document.addEventListener('click', closeAllPopovers);
     document.addEventListener('keydown', ev => {
-      if (ev.key === 'Escape') { closeStreamMenu(); return; }
+      if (ev.key === 'Escape') { closeAllPopovers(); return; }
       if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
       const tag = ev.target && ev.target.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (ev.target && ev.target.isContentEditable)) return;
@@ -3567,26 +4806,30 @@ APP_JS = r"""(() => {
         togglePlayerFullscreen();
       } else if (ev.key === 'o' || ev.key === 'O') {
         ev.preventDefault();
-        autoOverlayForFs = false;
-        showOverlay = !showOverlay;
-        localStorage.setItem('ovpub.overlay', String(showOverlay));
-        applyOverlayState();
+        setAllSpeakersPlacement(anyFloatingSpeakers() ? 'dock' : 'float');
       } else if ((ev.key === 't' || ev.key === 'T') && hasProsody) {
         ev.preventDefault();
         showTone = !showTone;
         localStorage.setItem('ovpub.tone', String(showTone));
         applyToneState();
+      } else if (ev.key === 'l' || ev.key === 'L') {
+        ev.preventDefault();
+        const order = ['hover', 'show', 'hidden'];
+        stageCfg.handlesMode = order[(order.indexOf(stageCfg.handlesMode) + 1) % order.length];
+        saveStageCfg();
+        applyHandlesMode();
       }
     });
 
+    // Toolbar controls
     document.getElementById('transcript-search').addEventListener('input', paintTranscript);
     filterSel.addEventListener('change', paintTranscript);
     winSel.addEventListener('change', () => {
       lanesWindow = Number(winSel.value) || 20;
       localStorage.setItem('ovpub.window', String(lanesWindow));
-      lanesWinStart = clampWinStart(currentTime() - lanesWindow * 0.25);
+      lanesWinStart = clampWinStart(currentTime() - lanesWindow * 0.25, lanesWindow);
       renderLanesWindow(true);
-      if (showOverlay) updateOverlayTimeline(currentTime(), true);
+      renderAllFloatCards(true);
     });
     document.getElementById('lanes-follow').onclick = () => {
       lanesFollow = !lanesFollow;
@@ -3595,6 +4838,7 @@ APP_JS = r"""(() => {
     };
     document.getElementById('prev-overlap').onclick = () => jumpOverlap(-1);
     document.getElementById('next-overlap').onclick = () => jumpOverlap(1);
+
     const furiBtn = document.getElementById('toggle-furigana');
     if (furiBtn) {
       furiBtn.onclick = () => {
@@ -3603,57 +4847,48 @@ APP_JS = r"""(() => {
         if (hasStudy && model) {
           const from = showFurigana ? 'ja' : 'ja-furi';
           const to = showFurigana ? 'ja-furi' : 'ja';
-          const next = [];
-          const seen = new Set();
-          for (const r of mainRows) {
-            const k = r.kind === from ? to : r.kind;
-            const key = r.spk + '\0' + k;
-            if (!seen.has(key)) { seen.add(key); next.push({spk: r.spk, kind: k}); }
+          for (const s of speakerOrder) {
+            const cfg = speakerConfigs[s];
+            if (!cfg) continue;
+            cfg.rows = [...new Set(cfg.rows.map(r => (r === from ? to : r)))];
           }
-          setSurfaceRows('main', next);
+          saveSpeakerConfigs();
         }
         applyFuriganaState();
       };
     }
     const stdBtn = document.getElementById('toggle-std');
-    if (stdBtn) {
-      stdBtn.onclick = () => {
-        if (!hasStudy || !model) return;
-        toggleKindForAllActive('main', 'es-std');
-        stdBtn.setAttribute('aria-pressed', String(mainRows.some(r => r.kind === 'es-std')));
-      };
-    }
+    if (stdBtn) stdBtn.onclick = () => { if (hasStudy && model) toggleRowForAllSpeakers('es-std'); };
     const glossBtn = document.getElementById('toggle-gloss');
-    if (glossBtn) {
-      glossBtn.onclick = () => {
-        showGloss = !showGloss;
-        localStorage.setItem('ovpub.gloss', String(showGloss));
-        if (hasStudy && model) {
-          if (showGloss) addKindForActive('main', 'literal');
-          else setSurfaceRows('main', mainRows.filter(r => r.kind !== 'literal'));
-        }
-        applyStudyLayersState();
-      };
-    }
+    if (glossBtn) glossBtn.onclick = () => { if (hasStudy && model) toggleRowForAllSpeakers('literal'); };
     const engBtn = document.getElementById('toggle-english');
-    if (engBtn) {
-      engBtn.onclick = () => {
-        showEnglish = !showEnglish;
-        localStorage.setItem('ovpub.english', String(showEnglish));
-        if (hasStudy && model) {
-          if (showEnglish) addKindForActive('main', 'en');
-          else setSurfaceRows('main', mainRows.filter(r => r.kind !== 'en'));
-        }
-        applyStudyLayersState();
-      };
-    }
+    if (engBtn) engBtn.onclick = () => { if (hasStudy && model) toggleRowForAllSpeakers('en'); };
+
     const rowsMenuBtn = document.getElementById('open-rows-menu');
     if (rowsMenuBtn) {
       rowsMenuBtn.onclick = ev => {
         ev.stopPropagation();
         const r = rowsMenuBtn.getBoundingClientRect();
-        ctxMenuState = {surface: 'main', hitSpk: '', hitKind: '', hitIdx: -1, x: r.left, y: Math.max(12, r.top - 320)};
-        renderStreamMenu(r.left, Math.max(12, r.top - 320));
+        ctxMenuState = {hitSpk: '', hitKind: '', x: r.left, y: Math.max(12, r.top - 340)};
+        renderStreamMenu(r.left, Math.max(12, r.top - 340));
+      };
+    }
+    const layoutBtn = document.getElementById('open-layout-menu');
+    if (layoutBtn) {
+      layoutBtn.onclick = ev => {
+        ev.stopPropagation();
+        if (openPopoverKind === 'layout') { closeCfgPopover(); return; }
+        const r = layoutBtn.getBoundingClientRect();
+        renderLayoutPopover(r.left, Math.max(12, r.top - 390));
+      };
+    }
+    const labelsBtn = document.getElementById('open-labels-menu');
+    if (labelsBtn) {
+      labelsBtn.onclick = ev => {
+        ev.stopPropagation();
+        if (openPopoverKind === 'labels') { closeCfgPopover(); return; }
+        const r = labelsBtn.getBoundingClientRect();
+        renderLabelsPopover(r.left, Math.max(12, r.top - 380));
       };
     }
     const toneBtn = document.getElementById('toggle-tone');
@@ -3665,10 +4900,7 @@ APP_JS = r"""(() => {
       };
     }
     document.getElementById('toggle-overlay').onclick = () => {
-      autoOverlayForFs = false;
-      showOverlay = !showOverlay;
-      localStorage.setItem('ovpub.overlay', String(showOverlay));
-      applyOverlayState();
+      setAllSpeakersPlacement(anyFloatingSpeakers() ? 'dock' : 'float');
     };
     document.getElementById('toggle-minimap').onclick = () => {
       showMinimap = !showMinimap;
@@ -3791,7 +5023,7 @@ APP_JS = r"""(() => {
       lastLiveAnnId = '';
       paintNotes();
       renderLanesWindow(true);
-      if (showOverlay) updateOverlayTimeline(currentTime(), true);
+      renderAllFloatCards(true);
       if (showMinimap) drawMinimap();
       updateLiveAnnotation(currentTime(), true);
     });
@@ -3836,7 +5068,7 @@ APP_JS = r"""(() => {
       const cancel = ev.target.closest('.ed-cancel');
       if (cancel) { editingAnnId = null; paintNotes(); return; }
       const del = ev.target.closest('.nt-del');
-      if (del) { deleteAnnotation(del.dataset.del); }
+      if (del) deleteAnnotation(del.dataset.del);
     });
 
     const captionBox = document.getElementById('caption-box');
@@ -3861,66 +5093,6 @@ APP_JS = r"""(() => {
       seekAndPlay(tokEl ? Number(tokEl.dataset.t) : Number(row.dataset.start));
     });
 
-    const lanesStage = document.getElementById('lanes-stage');
-    lanesStage.addEventListener('mouseover', ev => {
-      const blk = ev.target.closest('.lane-block');
-      if (!blk) { setHover(null); return; }
-      const idx = Number(blk.dataset.index);
-      const info = model.infoByIndex.get(idx);
-      if (info && info.partners.length) setHover([idx, ...info.partners.map(p => p.other.index)]);
-      else setHover([idx]);
-    });
-    lanesStage.addEventListener('mouseleave', () => setHover(null));
-    let drag = null;
-    lanesStage.addEventListener('pointerdown', ev => {
-      if (ev.button !== 0) return;
-      const pin = ev.target.closest('.ruler-note-pin');
-      if (pin) {
-        seekAndPlay(Number(pin.dataset.t));
-        return;
-      }
-      const trk = ev.target.closest('.lane-track, .lanes-ruler');
-      if (!trk) return;
-      const lw = ev.target.closest('.lane-word[data-v]');
-      const vid = lw ? Number(lw.dataset.v) : null;
-      drag = {startX: ev.clientX, startWin: lanesWinStart, rect: trk.getBoundingClientRect(), moved: false, vid};
-      lanesStage.setPointerCapture(ev.pointerId);
-    });
-    lanesStage.addEventListener('pointermove', ev => {
-      if (!drag) return;
-      const dx = ev.clientX - drag.startX;
-      if (!drag.moved && Math.abs(dx) >= 5) {
-        drag.moved = true;
-        lanesFollow = false;
-        document.getElementById('lanes-follow').setAttribute('aria-pressed', 'false');
-      }
-      if (drag.moved && drag.rect.width > 0) {
-        lanesWinStart = clampWinStart(drag.startWin - (dx / drag.rect.width) * lanesWindow);
-        renderLanesWindow(true);
-      }
-    });
-    lanesStage.addEventListener('pointerup', ev => {
-      if (!drag) return;
-      const wasDrag = drag.moved, rect = drag.rect, vid = drag.vid;
-      drag = null;
-      if (!wasDrag && rect.width > 0) {
-        if (vid != null && vid >= 0) showWordInspector(vid);
-        const frac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-        seekAndPlay(lanesWinStart + frac * lanesWindow);
-      }
-    });
-    lanesStage.addEventListener('pointercancel', () => { drag = null; });
-    lanesStage.addEventListener('wheel', ev => {
-      if (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) || ev.shiftKey) {
-        ev.preventDefault();
-        const delta = Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY;
-        lanesFollow = false;
-        document.getElementById('lanes-follow').setAttribute('aria-pressed', 'false');
-        lanesWinStart = clampWinStart(lanesWinStart + (delta / 300) * lanesWindow * 0.4);
-        renderLanesWindow(true);
-      }
-    }, {passive: false});
-
     const minimapWrap = document.getElementById('lanes-minimap-wrap');
     let scrubbing = false;
     const jumpMini = ev => {
@@ -3931,7 +5103,7 @@ APP_JS = r"""(() => {
       const t = c0 + Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width)) * cSpan;
       lanesFollow = true;
       document.getElementById('lanes-follow').setAttribute('aria-pressed', 'true');
-      lanesWinStart = clampWinStart(t - lanesWindow * 0.25);
+      lanesWinStart = clampWinStart(t - lanesWindow * 0.25, lanesWindow);
       renderLanesWindow(true);
       seekAndPlay(t);
     };
@@ -3946,15 +5118,14 @@ APP_JS = r"""(() => {
     minimapWrap.addEventListener('pointercancel', () => { scrubbing = false; });
 
     if (typeof ResizeObserver !== 'undefined') {
-      new ResizeObserver(() => renderLanesWindow(false)).observe(document.getElementById('lanes-ruler'));
-      const pwEl = document.getElementById('player-wrap');
-      if (pwEl) {
+      const lr = document.getElementById('lanes-ruler');
+      if (lr) new ResizeObserver(() => renderLanesWindow(false)).observe(lr);
+      const sva = document.getElementById('stage-video-area');
+      if (sva) {
         new ResizeObserver(() => {
-          if (showOverlay) {
-            fitOverlayLayout();
-            updateOverlayTimeline(currentTime(), false);
-          }
-        }).observe(pwEl);
+          fitVideoBox();
+          renderAllFloatCards(false);
+        }).observe(sva);
       }
     }
     window.addEventListener('resize', applySplitLayout);
@@ -4016,20 +5187,20 @@ def _index_html(
 </header>
 <main class="split-view"{ann_attr}{prosody_attr}>
   <div class="player-wrap" id="player-wrap">
-    <div class="video-box">
-      <iframe id="yt-frame" title="YouTube video player"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
-    </div>
-    <div class="ov-overlay" id="ov-overlay" hidden>
-      <div class="ov-ruler-row">
-        <div class="ov-gutter" id="ov-drag-handle" title="Drag up or down to position overlay · Right-click for menu">
-          <span class="ov-grip">↕<span class="ov-grip-txt"> Move</span></span>
-          <button type="button" class="ov-fs-btn" id="ov-fs-btn" aria-pressed="false" title="Fullscreen video with overlay (F)">⛶</button>
-        </div>
-        <div class="ov-ruler" id="ov-ruler"></div>
+    <div class="stage-video-area" id="stage-video-area">
+      <div class="video-box" id="video-box">
+        <iframe id="yt-frame" title="YouTube video player"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
       </div>
-      <div class="ov-body" id="ov-body"></div>
+    </div>
+    <div class="stage-splitter" id="stage-splitter" hidden title="Drag up or down to resize video vs scrollers below"></div>
+    <div class="stage-dock" id="stage-dock" hidden></div>
+    <div class="stage-float-layer" id="stage-float-layer"></div>
+    <div class="stage-win-resize" id="stage-win-resize" title="Drag to adjust video stage height"></div>
+    <div class="fs-corner-hud" id="fs-corner-hud" hidden>
+      <button type="button" id="hud-layout-btn">Layout</button>
+      <button type="button" id="hud-exit-fs">Exit (F)</button>
     </div>
   </div>
 
@@ -4047,12 +5218,14 @@ def _index_html(
 
   <section class="viz-stage" id="viz-stage">
     <div class="speaker-lanes" id="speaker-lanes">
-      <div class="lanes-stage" id="lanes-stage">
-        <div class="lanes-ruler-row">
-          <div class="lanes-gutter"></div>
+      <div class="lanes-stage timer-bottom" id="lanes-stage">
+        <div class="lanes-body" id="lanes-body"></div>
+        <div class="lanes-ruler-row" id="lanes-ruler-row">
+          <div class="lanes-gutter" id="lanes-gutter" title="Current time — click to copy timestamp link">
+            <span class="live-clock" id="lanes-live-clock">0:00</span>
+          </div>
           <div class="lanes-ruler" id="lanes-ruler"></div>
         </div>
-        <div class="lanes-body" id="lanes-body"></div>
       </div>
       <div class="lanes-minimap-wrap" id="lanes-minimap-wrap" hidden title="Click or drag to jump anywhere">
         <canvas class="lanes-minimap" id="lanes-minimap" height="22"></canvas>
@@ -4078,18 +5251,20 @@ def _index_html(
             </select>
           </label>
           <button type="button" id="lanes-follow" aria-pressed="true" title="Keep timeline synced to playback">Follow</button>
-          <button type="button" id="open-rows-menu" title="Pick, add, remove, or group rows &amp; translation layers">Layers</button>
-          <button type="button" id="toggle-tone" aria-pressed="true"{tone_btn_hidden} title="Show or hide live pitch & loudness tone contour inside each speaker's lane (T)">Tone</button>
+          <button type="button" id="open-rows-menu" title="Speakers, subcomponents, translations &amp; analysis tracks">Layers</button>
+          <button type="button" id="open-layout-menu" title="Video aspect fit, placement below/over, separate speakers, timer &amp; handles">Layout</button>
+          <button type="button" id="toggle-tone" aria-pressed="true"{tone_btn_hidden} title="Show or hide live pitch &amp; loudness tone curve (T)">Tone</button>
+          <button type="button" id="open-labels-menu" aria-pressed="true"{tone_btn_hidden} title="Configure or hide meta-labels (loud, falsetto, pitch, pace)">Labels</button>
           <button type="button" id="toggle-furigana" aria-pressed="true"{study_hidden} title="Show or hide furigana readings over kanji">Furigana</button>
           <button type="button" id="toggle-std" aria-pressed="false" hidden title="Show or hide neutral Spanish rewrite layer">Neutral ES</button>
           <button type="button" id="toggle-gloss" aria-pressed="true"{study_hidden} title="Show or hide word-by-word meaning stream">Word-by-word</button>
           <button type="button" id="toggle-english" aria-pressed="true"{study_hidden} title="Show or hide per-speaker English stream">English</button>
-          <button type="button" id="toggle-overlay" aria-pressed="false" title="Show compact red-playhead swimlane over the video (O)">Overlay</button>
-          <button type="button" id="toggle-fullscreen" aria-pressed="false" title="Fullscreen video with overlay (F)">Fullscreen</button>
+          <button type="button" id="toggle-overlay" aria-pressed="false" title="Float speakers as independent movable &amp; resizable scrollers (O)">Float</button>
+          <button type="button" id="toggle-fullscreen" aria-pressed="false" title="Fullscreen monitor stage with video + scrollers below or floating (F)">Fullscreen</button>
           <button type="button" id="toggle-minimap" aria-pressed="false" title="Show or hide full-video overview bar">Minimap</button>
           <button type="button" id="toggle-badges" aria-pressed="false" title="Show or hide overlap duration badges and counters">Badges</button>
           <button type="button" id="toggle-annotations" aria-pressed="false"{ann_btn_hidden} title="Show or hide editable behavior annotations on timeline and page">Annotations</button>
-          <button type="button" id="toggle-split-view" aria-pressed="true" title="Toggle side-by-side or stacked layout">Split</button>
+          <button type="button" id="toggle-split-view" aria-pressed="true" title="Toggle side-by-side Split or Below-video Theater layout">Split</button>
         </div>
       </div>
     </div>
@@ -4147,6 +5322,7 @@ def _index_html(
   </section>
 </main>
 <div class="stream-ctx-menu" id="stream-ctx-menu" hidden></div>
+<div class="cfg-popover" id="cfg-popover" hidden></div>
 <script src="app.js?v={js_hash}" defer></script>
 </body>
 </html>
@@ -4181,6 +5357,71 @@ def _load_prosody(path: Path) -> dict:
     return raw
 
 
+def _load_tracks(path: Path) -> dict:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict) or not isinstance(raw.get("tracks"), list):
+        raise ValueError(f"Tracks file must be a JSON object with a 'tracks' list: {path}")
+    for i, trk in enumerate(raw["tracks"]):
+        if not isinstance(trk, dict) or not str(trk.get("id") or "").strip():
+            raise ValueError(f"Track {i} in {path} must be an object with non-empty 'id'")
+        ttype = str(trk.get("type") or "text")
+        if ttype not in ("text", "tag", "meter"):
+            raise ValueError(f"Track {trk['id']!r} has invalid type {ttype!r} (expected text, tag, or meter)")
+    segs = raw.get("segments")
+    if segs is not None and not isinstance(segs, (dict, list)):
+        raise ValueError(f"Tracks file 'segments' must be a dict or list: {path}")
+    return raw
+
+
+def _merge_tracks_into_compact(compact: dict, tracks_doc: dict) -> int:
+    """Attach extensible per-segment data/analysis tracks (translations, emotion, sarcasm, mood, status, ...)."""
+    existing = list(compact.get("tracks") or [])
+    seen_ids = {t["id"] for t in existing}
+    track_ids: list[str] = []
+    for trk in tracks_doc["tracks"]:
+        tid = str(trk["id"]).strip()
+        track_ids.append(tid)
+        if tid in seen_ids:
+            continue
+        seen_ids.add(tid)
+        entry = {
+            "id": tid,
+            "label": str(trk.get("label") or tid).strip(),
+            "short": str(trk.get("short") or trk.get("label") or tid).strip(),
+            "type": str(trk.get("type") or "text"),
+            "color": str(trk.get("color") or "#a9d6ff"),
+            "defaultOn": bool(trk.get("defaultOn", False)),
+        }
+        if trk.get("unsigned"):
+            entry["unsigned"] = True
+        existing.append(entry)
+    compact["tracks"] = existing
+
+    seg_data = tracks_doc.get("segments")
+    by_i: dict[int, dict] = {}
+    if isinstance(seg_data, dict):
+        for k, v in seg_data.items():
+            if isinstance(v, dict):
+                by_i[int(k)] = v
+    elif isinstance(seg_data, list):
+        for item in seg_data:
+            if isinstance(item, dict) and "i" in item:
+                by_i[int(item["i"])] = {k: v for k, v in item.items() if k != "i"}
+
+    valid_ids = set(track_ids)
+    for seg in compact["segments"]:
+        fields = by_i.get(int(seg["i"]))
+        if not fields:
+            continue
+        merged = dict(seg.get("f") or {})
+        for k, v in fields.items():
+            if k in valid_ids and v is not None and v != "":
+                merged[k] = v
+        if merged:
+            seg["f"] = merged
+    return len(existing)
+
+
 def _merge_study_into_compact(compact: dict, study: dict) -> None:
     """Attach language-study streams (tokens, word glosses, neutral rewrite, English, vocab, overlaps)."""
     compact["language"] = str(study.get("language") or "ja")
@@ -4212,7 +5453,6 @@ def _merge_study_into_compact(compact: dict, study: dict) -> None:
                 ]
                 for tk in toks
             ]
-            # Drop redundant w array when tk already carries exact timed tokens.
             seg["w"] = []
     compact["vocab"] = [
         {
@@ -4304,6 +5544,7 @@ def export_page(
     study: Path | None = None,
     overlaps: Path | None = None,
     prosody: Path | None = None,
+    tracks: Path | None = None,
     avatars: Path | None = None,
     clip_start: float | None = None,
     clip_end: float | None = None,
@@ -4327,6 +5568,10 @@ def export_page(
     if overlaps is not None:
         ov_doc = json.loads(overlaps.read_text(encoding="utf-8"))
         _merge_overlaps_into_compact(compact, ov_doc)
+    tracks_count = 0
+    if tracks is not None:
+        tracks_doc = _load_tracks(tracks)
+        tracks_count = _merge_tracks_into_compact(compact, tracks_doc)
     out_dir.mkdir(parents=True, exist_ok=True)
     avatar_count = 0
     if avatars is not None:
@@ -4384,6 +5629,7 @@ def export_page(
         "speakers": compact["speakers"],
         "annotations": ann_count,
         "prosody": prosody_count,
+        "tracks": tracks_count,
         "vocab": vocab_count,
         "avatars": avatar_count,
         "out_dir": str(out_dir),
@@ -4400,6 +5646,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--study", type=Path, default=None, help="Optional language-study JSON (furigana, glosses, English, vocab)")
     ap.add_argument("--overlaps", type=Path, default=None, help="Optional acoustic overlaps & vocal pulses JSON")
     ap.add_argument("--prosody", type=Path, default=None, help="Optional prosody JSON (per-segment pitch & loudness contours)")
+    ap.add_argument("--tracks", type=Path, default=None, help="Optional custom per-segment tracks JSON (translations, emotion, sarcasm, mood, status)")
     ap.add_argument("--avatars", type=Path, default=None, help="Optional directory (with avatars.json) or avatars.json mapping speakers to face icons")
     ap.add_argument("--clip-start", type=float, default=None, help="Optional focus start timestamp in seconds")
     ap.add_argument("--clip-end", type=float, default=None, help="Optional focus end timestamp in seconds")
@@ -4415,6 +5662,7 @@ def main(argv: list[str] | None = None) -> int:
         study=args.study.expanduser().resolve() if args.study else None,
         overlaps=args.overlaps.expanduser().resolve() if args.overlaps else None,
         prosody=args.prosody.expanduser().resolve() if args.prosody else None,
+        tracks=args.tracks.expanduser().resolve() if args.tracks else None,
         avatars=args.avatars.expanduser().resolve() if args.avatars else None,
         clip_start=args.clip_start,
         clip_end=args.clip_end,

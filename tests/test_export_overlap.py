@@ -296,9 +296,15 @@ class ExportOverlapPageTests(unittest.TestCase):
             self.assertIn('id="toggle-gloss" aria-pressed="true" title=', study_html)
             self.assertIn('id="toggle-english" aria-pressed="true" title=', study_html)
             self.assertIn('id="stream-ctx-menu" hidden', study_html)
+            self.assertIn('id="cfg-popover" hidden', study_html)
             self.assertIn('id="toggle-fullscreen" aria-pressed="false"', study_html)
-            self.assertIn('id="ov-drag-handle"', study_html)
-            self.assertIn('id="ov-fs-btn"', study_html)
+            self.assertIn('id="stage-dock" hidden', study_html)
+            self.assertIn('id="stage-splitter" hidden', study_html)
+            self.assertIn('id="stage-float-layer"', study_html)
+            self.assertIn('id="open-layout-menu"', study_html)
+            self.assertIn('id="lanes-stage"', study_html)
+            self.assertIn('class="lanes-stage timer-bottom"', study_html)
+            self.assertIn('id="lanes-live-clock"', study_html)
             self.assertIn('<option value="10" selected>10s</option>', study_html)
             study_tr = json.loads((out_dir_study / "transcript.json").read_text(encoding="utf-8"))
             self.assertEqual(study_tr["language"], "ja")
@@ -351,8 +357,85 @@ class ExportOverlapPageTests(unittest.TestCase):
             pr_html = (out_dir_pr / "index.html").read_text(encoding="utf-8")
             self.assertRegex(pr_html, r'data-prosody="prosody\.json\?v=[0-9a-f]{10}"')
             self.assertIn('id="toggle-tone" aria-pressed="true" title=', pr_html)
+            self.assertIn('id="open-labels-menu" aria-pressed="true" title=', pr_html)
             self.assertIn('id="tone-legend" hidden', pr_html)
             self.assertIn('id="open-rows-menu"', pr_html)
+
+            # With --tracks: exports custom translation/emotion/sarcasm/mood/status tracks.
+            tracks_src = Path(tmp) / "tracks.json"
+            tracks_src.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "tracks": [
+                            {"id": "translation", "label": "Alt Translation", "short": "Trans", "type": "text", "color": "#a9d6ff"},
+                            {"id": "emotion", "label": "Emotion", "short": "Emo", "type": "tag", "color": "#ff85a2", "defaultOn": True},
+                            {"id": "sarcasm", "label": "Sarcasm", "short": "Sarc", "type": "tag", "color": "#ffd240"},
+                            {"id": "mood", "label": "Mood", "short": "Mood", "type": "tag", "color": "#66e3d8"},
+                            {"id": "status", "label": "Status (High/Low)", "short": "Status", "type": "meter", "color": "#d2a8ff", "defaultOn": True},
+                        ],
+                        "segments": {
+                            "0": {
+                                "translation": "We might take the high route.",
+                                "emotion": {"label": "curious", "score": 0.8},
+                                "sarcasm": "none",
+                                "mood": "analytical",
+                                "status": {"value": 0.55, "label": "high (+0.55)"},
+                            },
+                            "1": {
+                                "emotion": "warm",
+                                "status": {"value": -0.35, "label": "yielding (-0.35)"},
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            out_dir_trk = Path(tmp) / "out_tracks"
+            proc_trk = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    vid,
+                    str(out_dir_trk),
+                    "--data",
+                    str(data_dir),
+                    "--prosody",
+                    str(prosody_src),
+                    "--annotations",
+                    str(ann_src),
+                    "--tracks",
+                    str(tracks_src),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            summary_trk = json.loads(proc_trk.stdout)
+            self.assertEqual(summary_trk["tracks"], 5)
+            trk_tr = json.loads((out_dir_trk / "transcript.json").read_text(encoding="utf-8"))
+            self.assertEqual([t["id"] for t in trk_tr["tracks"]], ["translation", "emotion", "sarcasm", "mood", "status"])
+            self.assertEqual(trk_tr["segments"][0]["f"]["status"]["value"], 0.55)
+            self.assertEqual(trk_tr["segments"][1]["f"]["emotion"], "warm")
+
+            # Malformed tracks file fails loudly.
+            bad_trk = Path(tmp) / "bad_tracks.json"
+            bad_trk.write_text('{"tracks": [{"id": "x", "type": "invalid"}]}', encoding="utf-8")
+            bad_trk_proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    vid,
+                    str(Path(tmp) / "out_bad_trk"),
+                    "--data",
+                    str(data_dir),
+                    "--tracks",
+                    str(bad_trk),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(bad_trk_proc.returncode, 0)
 
             # With --clip-start / --clip-end and --overlaps + Spanish study mode (es-std).
             es_study = Path(tmp) / "es_study.json"
