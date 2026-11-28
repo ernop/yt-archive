@@ -713,6 +713,49 @@ html.handles-hover .spk-float-card.is-moving .fc-rz-se { opacity: .9; }
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85); z-index: 3;
 }
 .lane-block.ov-linked { border-color: var(--gold); background: rgba(255, 210, 64, 0.3); z-index: 4; }
+.tl-strip {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 300%;
+  will-change: transform;
+}
+.jump-line {
+  position: absolute; top: 0; bottom: 0; width: 0;
+  border-left: 1.5px dashed rgba(255, 210, 64, 0.36);
+  pointer-events: none; z-index: 5; transition: border-color .18s, box-shadow .18s;
+}
+.jump-line.is-soon {
+  border-left-color: #ffd240;
+  box-shadow: 0 0 8px rgba(255, 210, 64, 0.55);
+}
+.land-line {
+  position: absolute; top: 0; bottom: 0; width: 0;
+  border-left: 1px dotted rgba(124, 196, 255, 0.28);
+  pointer-events: none; z-index: 4;
+}
+.jump-cue {
+  position: absolute; top: 1px; transform: translateX(-100%);
+  margin-left: -3px; padding: 0 .28rem; border-radius: 3px;
+  font: 800 .64rem/1.25 var(--mono); font-variant-numeric: tabular-nums;
+  color: rgba(255, 210, 64, 0.72); background: rgba(24, 18, 5, 0.78);
+  border: 1px solid rgba(255, 210, 64, 0.34);
+  pointer-events: none; z-index: 7; white-space: nowrap;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.jump-cue.is-soon {
+  color: #111; background: #ffd240; border-color: #fff;
+  box-shadow: 0 0 10px rgba(255, 210, 64, 0.55);
+}
+.land-notch {
+  position: absolute; top: 1px; margin-left: 2px; padding: 0 .2rem;
+  font: 800 .62rem/1.2 var(--mono); color: rgba(124, 196, 255, 0.65);
+  pointer-events: none; z-index: 5;
+}
+.anchor-notch {
+  position: absolute; top: 1px; transform: translateX(-50%);
+  padding: 0 .24rem; border-radius: 3px;
+  font: 800 .6rem/1.2 var(--mono); color: #7cc4ff;
+  background: rgba(10, 18, 30, 0.84); border: 1px solid rgba(124, 196, 255, 0.45);
+  pointer-events: none; z-index: 5; white-space: nowrap;
+}
 .lane-playhead {
   position: absolute; top: 0; bottom: 0; width: 2px; background: var(--red);
   box-shadow: 0 0 8px rgba(255, 71, 71, 0.7); pointer-events: none; z-index: 6;
@@ -1144,6 +1187,32 @@ APP_JS = r"""(() => {
   function saveStageCfg() {
     localStorage.setItem('ovpub.stageCfg', JSON.stringify(stageCfg));
   }
+  const DEFAULT_SCROLL_CFG = {
+    mode: 'page-slide',     // 'smooth' | 'page-slide' | 'page-snap'
+    jumpAt: 0.85,           // 0.60 .. 0.95 (Page trigger fraction)
+    landAt: 0.20,           // 0.05 .. 0.45 (Page landing / Smooth playhead anchor fraction)
+    showGuide: true,        // show jump line, landing mark & live countdown
+    slideMs: 280,           // gentle slide transition duration in page-slide mode
+  };
+  let scrollCfg = (() => {
+    const c = loadJsonStorage('ovpub.scrollCfg', DEFAULT_SCROLL_CFG);
+    if (!['smooth', 'page-slide', 'page-snap'].includes(c.mode)) c.mode = DEFAULT_SCROLL_CFG.mode;
+    c.jumpAt = Math.max(0.6, Math.min(0.95, Number(c.jumpAt) || DEFAULT_SCROLL_CFG.jumpAt));
+    c.landAt = Math.max(0.05, Math.min(0.45, Number(c.landAt) || DEFAULT_SCROLL_CFG.landAt));
+    c.showGuide = c.showGuide !== false;
+    c.slideMs = Math.max(120, Math.min(600, Number(c.slideMs) || DEFAULT_SCROLL_CFG.slideMs));
+    return c;
+  })();
+  function saveScrollCfg() {
+    localStorage.setItem('ovpub.scrollCfg', JSON.stringify(scrollCfg));
+  }
+  function syncScrollButton() {
+    const btn = document.getElementById('open-scroll-menu');
+    if (!btn) return;
+    const lbl = scrollCfg.mode === 'smooth' ? 'Smooth' : scrollCfg.mode === 'page-snap' ? 'Snap' : 'Page';
+    btn.textContent = 'Scroll: ' + lbl;
+    btn.setAttribute('aria-pressed', String(scrollCfg.mode === 'smooth'));
+  }
   function loadMetaLabels() {
     try {
       const raw = JSON.parse(localStorage.getItem('ovpub.metaLabels') || 'null');
@@ -1226,19 +1295,92 @@ APP_JS = r"""(() => {
   let lastLiveAnnId = '';
 
   let lanesWinStart = 0;
-  let renderedWinStart = -1;
+  let lanesBufStart = 0;
+  let lanesBufDur = 60;
+  let renderedBufStart = -9999;
   let renderedWinDur = -1;
   let lastLaneTrackPx = 0;
+  let stripEls = [];
   let playheadEls = [];
+  let jumpLineEls = [];
+  let jumpCueEls = [];
+  let landLineEls = [];
+  let landNotchEls = [];
+  let anchorNotchEls = [];
   let blockElsByIndex = new Map();
+  let mainPageAnim = null; // {from, to, t0, dur}
   let lastClockStr = '';
 
   // Per-floating-speaker render tracking
-  let floatRenderState = new Map(); // spk -> {winStart, winDur, trackPx, playheadEls, blockElsByIndex, clockEl}
+  let floatRenderState = new Map(); // spk -> {winStart, bufStart, bufDur, winDur, trackPx, stripEls, playheadEls, jumpLineEls, jumpCueEls, landLineEls, landNotchEls, anchorNotchEls, blockElsByIndex, clockEl, anim}
 
   let laneMeasureCtx = null;
   let laneMeasureFont = '';
   let rafId = 0;
+
+  function cancelAllPageAnims() {
+    mainPageAnim = null;
+    for (const st of floatRenderState.values()) st.anim = null;
+  }
+  function hasActivePageAnim() {
+    if (mainPageAnim) return true;
+    for (const st of floatRenderState.values()) {
+      if (st.anim) return true;
+    }
+    return false;
+  }
+  function ensureTickRunning() {
+    if (!rafId) rafId = requestAnimationFrame(tick);
+  }
+  function applyStripTransform(strips, winStart, bufStart, bufDur) {
+    if (!strips || !strips.length || !(bufDur > 0)) return;
+    const shiftPct = -((winStart - bufStart) / bufDur) * 100;
+    const tf = 'translate3d(' + shiftPct.toFixed(4) + '%,0,0)';
+    for (const el of strips) el.style.transform = tf;
+  }
+  function updateJumpGuides(els, time, winStart, winDur, followOn, animActive) {
+    if (!els) return;
+    const show = Boolean(model && scrollCfg.showGuide && followOn);
+    const isSmooth = scrollCfg.mode === 'smooth';
+    const hi = model ? Math.max(model.clipStart || 0, (model.clipEnd || model.duration) - winDur) : 0;
+    const canJumpFwd = !isSmooth && winStart < hi - 0.35;
+    const showJump = show && canJumpFwd;
+    const showLand = show && (isSmooth || canJumpFwd);
+    const showAnchor = show && isSmooth;
+    const jumpPct = (scrollCfg.jumpAt * 100).toFixed(2) + '%';
+    const landPct = (scrollCfg.landAt * 100).toFixed(2) + '%';
+    const remSec = ((winStart + scrollCfg.jumpAt * winDur) - time) / (ytRate || 1);
+    const soon = showJump && !animActive && remSec > 0 && remSec <= 3.0;
+    const cueTxt = soon ? ('↻ ' + remSec.toFixed(1) + 's') : '↻';
+
+    for (const el of (els.jumpLines || [])) {
+      el.style.display = showJump ? '' : 'none';
+      if (showJump) {
+        el.style.left = jumpPct;
+        el.classList.toggle('is-soon', soon);
+      }
+    }
+    for (const el of (els.jumpCues || [])) {
+      el.style.display = showJump ? '' : 'none';
+      if (showJump) {
+        el.style.left = jumpPct;
+        el.classList.toggle('is-soon', soon);
+        el.textContent = cueTxt;
+      }
+    }
+    for (const el of (els.landLines || [])) {
+      el.style.display = showLand ? '' : 'none';
+      if (showLand) el.style.left = landPct;
+    }
+    for (const el of (els.landNotches || [])) {
+      el.style.display = showJump ? '' : 'none';
+      if (showJump) el.style.left = landPct;
+    }
+    for (const el of (els.anchorNotches || [])) {
+      el.style.display = showAnchor ? '' : 'none';
+      if (showAnchor) el.style.left = landPct;
+    }
+  }
 
   function isPrimaryStreamKind(kind) {
     return kind === 'text' || kind === 'ja' || kind === 'ja-furi' || kind === 'es';
@@ -2089,8 +2231,85 @@ APP_JS = r"""(() => {
 
     out += '<div class="ctx-sep"></div>'
       + '<div class="ctx-inline-bar">'
+      + '<button type="button" class="ctx-chip-btn" data-lay="open-scroll">Scroll &amp; Jump…</button>'
       + '<button type="button" class="ctx-chip-btn" data-lay="toggle-fs">' + (fs ? 'Exit Fullscreen (F)' : 'Enter Fullscreen (F)') + '</button>'
       + '<button type="button" class="ctx-chip-btn" data-lay="reset-layout">Reset layout</button>'
+      + '</div>';
+
+    pop.innerHTML = out;
+    pop.dataset.anchorX = String(anchorX);
+    pop.dataset.anchorY = String(anchorY);
+    positionFixedPopover(pop, anchorX, anchorY);
+  }
+
+  // Timeline Scroll & Predictable Jump Popover
+  function renderScrollPopover(anchorX, anchorY) {
+    const pop = document.getElementById('cfg-popover');
+    if (!pop) return;
+    closeStreamMenu();
+    openPopoverKind = 'scroll';
+    const sc = scrollCfg;
+    const isSmooth = sc.mode === 'smooth';
+
+    let out = '<div class="ctx-head"><span>Scroll &amp; Jump Control</span>'
+      + '<button type="button" class="ctx-head-close" data-pop-close="1">×</button></div>';
+
+    out += '<div class="ctx-sec">Timeline Motion Mode</div>'
+      + '<div class="ctx-inline-bar">'
+      + [['page-slide', 'Page (slide)'], ['smooth', 'Smooth (no jump)'], ['page-snap', 'Page (snap)']].map(([v, lbl]) =>
+        '<button type="button" class="ctx-chip-btn' + (sc.mode === v ? ' is-on' : '') + '" data-scr="mode" data-val="' + v + '">' + lbl + '</button>'
+      ).join('') + '</div>';
+
+    const hint = isSmooth
+      ? 'Words scroll smoothly left while the red playhead stays anchored — zero page jumps.'
+      : sc.mode === 'page-slide'
+        ? 'Text stays still to read. At the gold jump line, the timeline glides smoothly to the blue landing mark.'
+        : 'Text stays still to read. Snaps immediately to the blue landing mark when playhead hits the gold jump line.';
+    out += '<div style="padding:.12rem .75rem .28rem;font-size:.74rem;color:#cbd5e1;line-height:1.35">' + hint + '</div>';
+
+    out += '<label class="ctx-check-row">'
+      + '<input type="checkbox"' + (sc.showGuide ? ' checked' : '') + ' data-scr-flag="showGuide">'
+      + '<span><strong>' + (isSmooth ? 'Show playhead anchor mark' : 'Show jump line, landing mark &amp; 3s countdown') + '</strong></span></label>';
+
+    if (!isSmooth) {
+      const jp = Math.round(sc.jumpAt * 100);
+      const lp = Math.round(sc.landAt * 100);
+      out += '<div class="ctx-sep"></div><div class="ctx-sec">Page Turn Marks</div>'
+        + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Jump at</span>'
+        + '<input type="range" min="60" max="95" step="1" value="' + jp + '" data-scr-rng="jumpAt">'
+        + '<span class="ctx-meta">' + jp + '%</span></div>'
+        + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Presets</span>'
+        + [75, 85, 92].map(v =>
+          '<button type="button" class="ctx-chip-btn' + (Math.abs(jp - v) <= 1 ? ' is-on' : '') + '" data-scr="jumpAt" data-val="' + (v / 100) + '">' + v + '%</button>'
+        ).join('') + '</div>'
+        + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Land at</span>'
+        + '<input type="range" min="5" max="45" step="1" value="' + lp + '" data-scr-rng="landAt">'
+        + '<span class="ctx-meta">' + lp + '%</span></div>'
+        + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Presets</span>'
+        + [12, 20, 30].map(v =>
+          '<button type="button" class="ctx-chip-btn' + (Math.abs(lp - v) <= 1 ? ' is-on' : '') + '" data-scr="landAt" data-val="' + (v / 100) + '">' + v + '%</button>'
+        ).join('') + '</div>';
+      if (sc.mode === 'page-slide') {
+        out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Slide</span>'
+          + [[180, 'Fast (180ms)'], [280, 'Gentle (280ms)'], [420, 'Slow (420ms)']].map(([v, lbl]) =>
+            '<button type="button" class="ctx-chip-btn' + (sc.slideMs === v ? ' is-on' : '') + '" data-scr="slideMs" data-val="' + v + '">' + lbl + '</button>'
+          ).join('') + '</div>';
+      }
+    } else {
+      const lp = Math.round(sc.landAt * 100);
+      out += '<div class="ctx-sep"></div><div class="ctx-sec">Playhead Anchor Position</div>'
+        + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Anchor</span>'
+        + '<input type="range" min="5" max="45" step="1" value="' + lp + '" data-scr-rng="landAt">'
+        + '<span class="ctx-meta">' + lp + '%</span></div>'
+        + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Presets</span>'
+        + [15, 25, 35].map(v =>
+          '<button type="button" class="ctx-chip-btn' + (Math.abs(lp - v) <= 1 ? ' is-on' : '') + '" data-scr="landAt" data-val="' + (v / 100) + '">' + v + '%</button>'
+        ).join('') + '</div>';
+    }
+
+    out += '<div class="ctx-sep"></div><div class="ctx-inline-bar">'
+      + '<button type="button" class="ctx-chip-btn" data-scr="reset">Reset scroll</button>'
+      + '<button type="button" class="ctx-chip-btn" data-scr="open-layout">Layout…</button>'
       + '</div>';
 
     pop.innerHTML = out;
@@ -2212,6 +2431,7 @@ APP_JS = r"""(() => {
 
     out += '<div class="ctx-inline-bar">'
       + '<button type="button" class="ctx-chip-btn" data-act="open-all">All Speakers…</button>'
+      + '<button type="button" class="ctx-chip-btn" data-act="open-scroll">Scroll…</button>'
       + '<button type="button" class="ctx-chip-btn" data-act="open-layout">Layout…</button>'
       + (hasProsody ? '<button type="button" class="ctx-chip-btn" data-act="open-labels">Labels…</button>' : '')
       + '</div>';
@@ -2333,6 +2553,7 @@ APP_JS = r"""(() => {
     t = Math.max(0, Number(t) || 0);
     ytTime = t;
     ytStamp = performance.now();
+    cancelAllPageAnims();
     if (!ytReady) pendingUserSeek = t;
     postYT('seekTo', [t, true]);
     postYT('playVideo', []);
@@ -2405,7 +2626,7 @@ APP_JS = r"""(() => {
           if (playing !== ytPlaying) {
             ytPlaying = playing;
             if (playing && !rafId) rafId = requestAnimationFrame(tick);
-            if (!playing && rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+            if (!playing && rafId && !hasActivePageAnim()) { cancelAnimationFrame(rafId); rafId = 0; }
           }
         }
         syncAll(false);
@@ -2413,7 +2634,7 @@ APP_JS = r"""(() => {
         const playing = msg.info === 1;
         ytPlaying = playing;
         if (playing && !rafId) rafId = requestAnimationFrame(tick);
-        if (!playing && rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+        if (!playing && rafId && !hasActivePageAnim()) { cancelAnimationFrame(rafId); rafId = 0; }
         syncAll(false);
       }
     });
@@ -3077,40 +3298,41 @@ APP_JS = r"""(() => {
     return Math.max(lo, Math.min(start, hi));
   }
 
-  function buildRulerHtml(winStart, winDur, isCompact) {
-    const winEnd = winStart + winDur;
+  function buildRulerHtml(bufStart, bufDur, winDur, isCompact) {
+    const bufEnd = bufStart + bufDur;
     const step = winDur <= 8 ? 1 : winDur <= 12 ? 2 : winDur <= 20 ? 4 : winDur <= 30 ? 5 : 10;
-    const firstTick = Math.ceil(winStart / step) * step;
+    const firstTick = Math.max(0, Math.ceil(bufStart / step) * step);
     const ticks = [];
     const gridlines = [];
-    for (let t = firstTick; t <= winEnd; t += step) {
-      const pct = ((t - winStart) / winDur) * 100;
+    for (let t = firstTick; t <= bufEnd; t += step) {
+      const pct = ((t - bufStart) / bufDur) * 100;
       ticks.push('<span class="ruler-tick" style="left:' + pct.toFixed(3) + '%">' + clock(t) + '</span>');
       gridlines.push('<span class="lane-gridline" style="left:' + pct.toFixed(3) + '%"></span>');
     }
-    const visibleOverlaps = model.overlapSpans.filter(ov => ov.end > winStart && ov.start < winEnd);
+    const visibleOverlaps = model.overlapSpans.filter(ov => ov.end > bufStart && ov.start < bufEnd);
     const pills = showBadges ? visibleOverlaps.map(ov => {
-      const left = ((Math.max(ov.start, winStart) - winStart) / winDur) * 100;
-      const right = ((Math.min(ov.end, winEnd) - winStart) / winDur) * 100;
-      const width = Math.max(0.25, right - left);
-      if (width < (isCompact ? 3.5 : 2.6)) return '';
+      const s0 = Math.max(ov.start, bufStart);
+      const s1 = Math.min(ov.end, bufEnd);
+      const left = ((s0 - bufStart) / bufDur) * 100;
+      const width = Math.max(0.1, ((s1 - s0) / bufDur) * 100);
+      if (((s1 - s0) / winDur) * 100 < (isCompact ? 3.5 : 2.6)) return '';
       const dur = Math.max(0.1, ov.end - ov.start);
       return '<span class="ruler-ov-pill" style="left:' + left.toFixed(3)
         + '%;max-width:' + width.toFixed(3) + '%">∥ ' + dur.toFixed(1) + 's</span>';
     }).join('') : '';
 
     const visAnns = visibleTimelineAnnotations();
-    const annSpans = visAnns.filter(a => a.end && a.end > a.t && a.end > winStart && a.t < winEnd).map(a => {
+    const annSpans = visAnns.filter(a => a.end && a.end > a.t && a.end > bufStart && a.t < bufEnd).map(a => {
       const ci = catInfo(a.cat);
-      const left = ((Math.max(a.t, winStart) - winStart) / winDur) * 100;
-      const right = ((Math.min(a.end, winEnd) - winStart) / winDur) * 100;
+      const left = ((Math.max(a.t, bufStart) - bufStart) / bufDur) * 100;
+      const right = ((Math.min(a.end, bufEnd) - bufStart) / bufDur) * 100;
       return '<span class="lane-ann-span" style="left:' + left.toFixed(3)
-        + '%;width:' + Math.max(0.4, right - left).toFixed(3)
+        + '%;width:' + Math.max(0.15, right - left).toFixed(3)
         + '%;--cat-color:' + ci.color + '"></span>';
     }).join('');
-    const notePins = visAnns.filter(n => n.t >= winStart && n.t <= winEnd).map(n => {
+    const notePins = visAnns.filter(n => n.t >= bufStart && n.t <= bufEnd).map(n => {
       const ci = catInfo(n.cat);
-      const pct = ((n.t - winStart) / winDur) * 100;
+      const pct = ((n.t - bufStart) / bufDur) * 100;
       const spanTxt = n.end && n.end > n.t ? clock(n.t) + '–' + clock(n.end) : clock(n.t);
       const tip = spanTxt + ' [' + ci.label + ']'
         + (n.title ? ' ' + n.title : '')
@@ -3121,14 +3343,22 @@ APP_JS = r"""(() => {
         + html(tip) + '">' + html(label) + '</span>';
     }).join('');
     const bands = visibleOverlaps.map(ov => {
-      const left = ((Math.max(ov.start, winStart) - winStart) / winDur) * 100;
-      const right = ((Math.min(ov.end, winEnd) - winStart) / winDur) * 100;
+      const left = ((Math.max(ov.start, bufStart) - bufStart) / bufDur) * 100;
+      const right = ((Math.min(ov.end, bufEnd) - bufStart) / bufDur) * 100;
       return '<div class="lane-ov-band" style="left:' + left.toFixed(3)
-        + '%;width:' + Math.max(0.25, right - left).toFixed(3) + '%"></div>';
+        + '%;width:' + Math.max(0.1, right - left).toFixed(3) + '%"></div>';
     }).join('');
 
+    const rulerOverlays =
+      '<div class="land-line"></div>'
+      + '<div class="jump-line"></div>'
+      + '<span class="land-notch" title="Page landing position">↳</span>'
+      + '<span class="anchor-notch" title="Smooth scroll playhead anchor">▼</span>'
+      + '<span class="jump-cue" title="Page jump trigger line &amp; countdown">↻</span>'
+      + '<div class="lane-playhead"></div>';
+
     return {
-      rulerHtml: ticks.join('') + pills + annSpans + notePins + '<div class="lane-playhead"></div>',
+      rulerHtml: '<div class="tl-strip">' + ticks.join('') + pills + annSpans + notePins + '</div>' + rulerOverlays,
       gridHtml: gridlines.join(''),
       bandsHtml: bands,
     };
@@ -3171,8 +3401,8 @@ APP_JS = r"""(() => {
     return out;
   }
 
-  function buildSpeakerRowsHtml(spk, spkCfg, winStart, winDur, trackPx, gridHtml, bandsHtml, isFloat) {
-    const winEnd = winStart + winDur;
+  function buildSpeakerRowsHtml(spk, spkCfg, bufStart, bufDur, winDur, trackPx, gridHtml, bandsHtml, isFloat) {
+    const bufEnd = bufStart + bufDur;
     const c = model.colorOf(spk);
     const segs = model.bySpeaker.get(spk) || [];
     const scaleMul = isFloat ? (spkCfg.scale || 1) : (spkCfg.dockScale || 1);
@@ -3202,11 +3432,11 @@ APP_JS = r"""(() => {
       if (kind === 'analysis') {
         for (const a of allAnns) {
           const aEnd = Math.max(a.end || 0, a.t + 3.0);
-          if (aEnd <= winStart || a.t >= winEnd) continue;
-          const s0 = Math.max(a.t, winStart);
-          const s1 = Math.min(aEnd, winEnd);
-          const left = ((s0 - winStart) / winDur) * 100;
-          const width = Math.max(0.8, ((s1 - s0) / winDur) * 100);
+          if (aEnd <= bufStart || a.t >= bufEnd) continue;
+          const s0 = Math.max(a.t, bufStart);
+          const s1 = Math.min(aEnd, bufEnd);
+          const left = ((s0 - bufStart) / bufDur) * 100;
+          const width = Math.max(0.28, ((s1 - s0) / bufDur) * 100);
           const ci = catInfo(a.cat);
           const label = a.title || ci.label;
           blocks.push(
@@ -3218,13 +3448,13 @@ APP_JS = r"""(() => {
         }
       } else {
         for (const seg of segs) {
-          if (seg.end <= winStart) continue;
-          if (seg.start >= winEnd) break;
-          const s0 = Math.max(seg.start, winStart);
-          const s1 = Math.min(seg.end, winEnd);
-          const left = ((s0 - winStart) / winDur) * 100;
-          const width = Math.max(0.4, ((s1 - s0) / winDur) * 100);
-          const blockPx = trackPx > 0 ? (trackPx * width) / 100 : 0;
+          if (seg.end <= bufStart) continue;
+          if (seg.start >= bufEnd) break;
+          const s0 = Math.max(seg.start, bufStart);
+          const s1 = Math.min(seg.end, bufEnd);
+          const left = ((s0 - bufStart) / bufDur) * 100;
+          const width = Math.max(0.14, ((s1 - s0) / bufDur) * 100);
+          const blockPx = trackPx > 0 ? trackPx * ((s1 - s0) / winDur) : 0;
           const info = model.infoByIndex.get(seg.index);
           const hasOv = Boolean(info && (info.partners.length || info.hasAcousticOv));
           const title = spk + ' (' + clockPrecise(seg.start) + '–' + clockPrecise(seg.end) + '): '
@@ -3311,21 +3541,21 @@ APP_JS = r"""(() => {
       }
 
       const bgAnnHtml = bg.includes('analysis') && kind !== 'analysis'
-        ? allAnns.filter(a => Math.max(a.end || 0, a.t + 3.0) > winStart && a.t < winEnd).map(a => {
+        ? allAnns.filter(a => Math.max(a.end || 0, a.t + 3.0) > bufStart && a.t < bufEnd).map(a => {
             const aEnd = Math.max(a.end || 0, a.t + 3.0);
-            const left = ((Math.max(a.t, winStart) - winStart) / winDur) * 100;
-            const width = Math.max(0.8, ((Math.min(aEnd, winEnd) - Math.max(a.t, winStart)) / winDur) * 100);
+            const left = ((Math.max(a.t, bufStart) - bufStart) / bufDur) * 100;
+            const width = Math.max(0.28, ((Math.min(aEnd, bufEnd) - Math.max(a.t, bufStart)) / bufDur) * 100);
             const ci = catInfo(a.cat);
             return '<div class="bg-ann-band" style="left:' + left.toFixed(3) + '%;width:' + width.toFixed(3)
               + '%;--cat-color:' + ci.color + '"><span class="bg-ann-tag">' + html(a.title || ci.label) + '</span></div>';
           }).join('')
         : '';
 
-      const pulses = bg.includes('pulses') ? (model.pulsesBySpeaker?.get(spk) || []).filter(p => p.end > winStart && p.start < winEnd).map(p => {
-        const p0 = Math.max(p.start, winStart);
-        const p1 = Math.min(p.end, winEnd);
-        const left = ((p0 - winStart) / winDur) * 100;
-        const width = Math.max(0.4, ((p1 - p0) / winDur) * 100);
+      const pulses = bg.includes('pulses') ? (model.pulsesBySpeaker?.get(spk) || []).filter(p => p.end > bufStart && p.start < bufEnd).map(p => {
+        const p0 = Math.max(p.start, bufStart);
+        const p1 = Math.min(p.end, bufEnd);
+        const left = ((p0 - bufStart) / bufDur) * 100;
+        const width = Math.max(0.14, ((p1 - p0) / bufDur) * 100);
         const dur = (p.end - p.start).toFixed(1);
         return '<div class="lane-pulse" data-t="' + p.start + '" style="left:' + left.toFixed(3)
           + '%;width:' + width.toFixed(3) + '%;--spk-color:' + c.fg + ';--spk-bg:' + c.bg + '"'
@@ -3352,8 +3582,8 @@ APP_JS = r"""(() => {
         + ' data-speaker="' + html(spk) + '" style="--spk-color:' + c.fg + '"'
         + ' title="' + (isFloat ? 'Right-click or ⚙ to reorder rows / combine BG' : 'Drag up/down to reorder row or speaker · Right-click or ⚙ to combine BG') + '">'
         + labelHtml + '</div>'
-        + '<div class="' + trkCls + '">' + gridHtml + bandsHtml + bgAnnHtml + pulses + blocks.join('')
-        + '<div class="lane-playhead"></div></div></div>';
+        + '<div class="' + trkCls + '"><div class="tl-strip">' + gridHtml + bandsHtml + bgAnnHtml + pulses + blocks.join('') + '</div>'
+        + '<div class="land-line"></div><div class="jump-line"></div><div class="lane-playhead"></div></div></div>';
     }).join('');
   }
 
@@ -3367,7 +3597,7 @@ APP_JS = r"""(() => {
     return map;
   }
 
-  function renderLanesWindow(force) {
+  function renderLanesWindow(force, customBufStart) {
     if (!model) return;
     const stage = document.getElementById('lanes-stage');
     const ruler = document.getElementById('lanes-ruler');
@@ -3378,16 +3608,37 @@ APP_JS = r"""(() => {
     const dockedSpks = speakerOrder.filter(s => speakerConfigs[s]?.visible && speakerConfigs[s]?.placement === 'dock');
     const winStart = clampWinStart(lanesWinStart, lanesWindow);
     const winDur = lanesWindow;
+    lanesWinStart = winStart;
     const trackPx = ruler.getBoundingClientRect().width || stage.getBoundingClientRect().width - 170 || 600;
-    if (!force && Math.abs(winStart - renderedWinStart) < 0.001 && winDur === renderedWinDur && Math.abs(trackPx - lastLaneTrackPx) < 1) {
+    const outOfBuf = renderedBufStart < -9000
+      || winStart < lanesBufStart + winDur * 0.18
+      || winStart > lanesBufStart + winDur * 1.82;
+    const needsRebuild = Boolean(
+      force
+      || customBufStart != null
+      || winDur !== renderedWinDur
+      || Math.abs(trackPx - lastLaneTrackPx) >= 1
+      || outOfBuf
+    );
+
+    if (!needsRebuild) {
+      applyStripTransform(stripEls, winStart, lanesBufStart, lanesBufDur);
+      const tNow = currentTime();
+      updatePlayheadOn(playheadEls, blockElsByIndex, tNow, lanesWinStart, lanesWindow);
+      updateJumpGuides({
+        jumpLines: jumpLineEls, jumpCues: jumpCueEls,
+        landLines: landLineEls, landNotches: landNotchEls, anchorNotches: anchorNotchEls,
+      }, tNow, lanesWinStart, lanesWindow, lanesFollow, Boolean(mainPageAnim));
       return;
     }
-    lanesWinStart = winStart;
-    renderedWinStart = winStart;
+
+    lanesBufStart = customBufStart != null ? customBufStart : (winStart - winDur);
+    lanesBufDur = winDur * 3;
+    renderedBufStart = lanesBufStart;
     renderedWinDur = winDur;
     lastLaneTrackPx = trackPx;
 
-    const rData = buildRulerHtml(winStart, winDur, false);
+    const rData = buildRulerHtml(lanesBufStart, lanesBufDur, winDur, false);
     ruler.innerHTML = rData.rulerHtml;
 
     if (!dockedSpks.length) {
@@ -3400,8 +3651,15 @@ APP_JS = r"""(() => {
         document.getElementById('lanes-ruler-row').hidden = false;
         body.innerHTML = '<div class="lanes-empty">No speakers shown — click Layers or right-click here to add speakers</div>';
       }
+      stripEls = [...stage.querySelectorAll('.tl-strip')];
       playheadEls = [...stage.querySelectorAll('.lane-playhead')];
+      jumpLineEls = [...stage.querySelectorAll('.jump-line')];
+      jumpCueEls = [...stage.querySelectorAll('.jump-cue')];
+      landLineEls = [...stage.querySelectorAll('.land-line')];
+      landNotchEls = [...stage.querySelectorAll('.land-notch')];
+      anchorNotchEls = [...stage.querySelectorAll('.anchor-notch')];
       blockElsByIndex = new Map();
+      applyStripTransform(stripEls, winStart, lanesBufStart, lanesBufDur);
       return;
     }
     stage.classList.remove('all-floating');
@@ -3416,7 +3674,7 @@ APP_JS = r"""(() => {
       const mLeft = isNarrow ? (sc.dockAlign === 'center' ? 'auto' : sc.dockAlign === 'right' ? 'auto' : '0') : '0';
       const mRight = isNarrow ? (sc.dockAlign === 'center' ? 'auto' : sc.dockAlign === 'left' ? 'auto' : '0') : '0';
       const estTrackPx = Math.max(120, fullW * (sc.dockWidth / 100) - (sc.showLabel ? 170 : 0));
-      const rowsHtml = buildSpeakerRowsHtml(spk, sc, winStart, winDur, estTrackPx, rData.gridHtml, rData.bandsHtml, false);
+      const rowsHtml = buildSpeakerRowsHtml(spk, sc, lanesBufStart, lanesBufDur, winDur, estTrackPx, rData.gridHtml, rData.bandsHtml, false);
       const miniRuler = isNarrow && stageCfg.timerPos !== 'hidden'
         ? '<div class="deck-mini-ruler"><div class="lanes-gutter"><span class="live-clock">' + clock(currentTime()) + '</span></div>'
           + '<div class="lanes-ruler">' + rData.rulerHtml + '</div></div>'
@@ -3430,9 +3688,21 @@ APP_JS = r"""(() => {
         + '</div>';
     }).join('');
 
+    stripEls = [...stage.querySelectorAll('.tl-strip')];
     playheadEls = [...stage.querySelectorAll('.lane-playhead')];
+    jumpLineEls = [...stage.querySelectorAll('.jump-line')];
+    jumpCueEls = [...stage.querySelectorAll('.jump-cue')];
+    landLineEls = [...stage.querySelectorAll('.land-line')];
+    landNotchEls = [...stage.querySelectorAll('.land-notch')];
+    anchorNotchEls = [...stage.querySelectorAll('.anchor-notch')];
     blockElsByIndex = indexLaneBlocks(body);
-    updatePlayheadOn(playheadEls, blockElsByIndex, currentTime(), lanesWinStart, lanesWindow);
+    applyStripTransform(stripEls, winStart, lanesBufStart, lanesBufDur);
+    const tNow = currentTime();
+    updatePlayheadOn(playheadEls, blockElsByIndex, tNow, lanesWinStart, lanesWindow);
+    updateJumpGuides({
+      jumpLines: jumpLineEls, jumpCues: jumpCueEls,
+      landLines: landLineEls, landNotches: landNotchEls, anchorNotches: anchorNotchEls,
+    }, tNow, lanesWinStart, lanesWindow, lanesFollow, Boolean(mainPageAnim));
   }
 
   // Independent floating per-speaker cards on #stage-float-layer
@@ -3454,6 +3724,7 @@ APP_JS = r"""(() => {
     }
 
     const t = currentTime();
+    const nowMs = performance.now();
     const stageW = layer.clientWidth || document.getElementById('player-wrap')?.clientWidth || 900;
     for (const spk of floatSpks) {
       const sc = speakerConfigs[spk];
@@ -3502,25 +3773,82 @@ APP_JS = r"""(() => {
       const prev = floatRenderState.get(spk);
       const cardPx = Math.max(170, stageW * (sc.w / 100));
       const trackPx = Math.max(100, cardPx - (sc.showLabel ? 98 : 0));
-      const outOfView = !prev || t < prev.winStart + winDur * 0.06 || t > prev.winStart + winDur * 0.84;
-      if (force || !prev || outOfView || prev.winDur !== winDur || Math.abs(trackPx - prev.trackPx) >= 6) {
-        const winStart = clampWinStart(outOfView || !prev ? t - winDur * 0.16 : prev.winStart, winDur);
-        const rData = buildRulerHtml(winStart, winDur, true);
+
+      let winStart = prev ? prev.winStart : clampWinStart(t - winDur * scrollCfg.landAt, winDur);
+      let anim = prev ? prev.anim : null;
+      let preCenterBuf = null;
+
+      if (scrollCfg.mode === 'smooth') {
+        anim = null;
+        winStart = clampWinStart(t - winDur * scrollCfg.landAt, winDur);
+      } else if (anim) {
+        const p = Math.min(1, (nowMs - anim.t0) / Math.max(40, anim.dur));
+        const ease = 1 - Math.pow(1 - p, 3);
+        winStart = anim.from + (anim.to - anim.from) * ease;
+        if (p >= 1) { winStart = anim.to; anim = null; }
+      } else {
+        const hitFwd = t >= winStart + winDur * scrollCfg.jumpAt;
+        const hitBack = t < winStart + winDur * 0.02;
+        if (!prev || hitFwd || hitBack) {
+          const target = clampWinStart(t - winDur * scrollCfg.landAt, winDur);
+          if (!prev || force || scrollCfg.mode === 'page-snap' || Math.abs(target - winStart) > winDur * 1.05) {
+            winStart = target;
+          } else if (Math.abs(target - winStart) > 0.25) {
+            if (target < prev.bufStart + winDur * 0.02 || target > prev.bufStart + winDur * 1.98) {
+              preCenterBuf = Math.min(winStart, target) - winDur * 0.5;
+            }
+            anim = {from: winStart, to: target, t0: nowMs, dur: scrollCfg.slideMs};
+            ensureTickRunning();
+          }
+        }
+      }
+
+      const outOfBuf = !prev
+        || winStart < prev.bufStart + winDur * 0.18
+        || winStart > prev.bufStart + winDur * 1.82;
+      const needsRebuild = Boolean(
+        force || !prev || preCenterBuf != null
+        || prev.winDur !== winDur || Math.abs(trackPx - prev.trackPx) >= 6
+        || (!anim && outOfBuf)
+      );
+
+      if (needsRebuild) {
+        const bufStart = preCenterBuf != null ? preCenterBuf : (winStart - winDur);
+        const bufDur = winDur * 3;
+        const rData = buildRulerHtml(bufStart, bufDur, winDur, true);
         const fcRuler = card.querySelector('.fc-ruler');
         const fcRows = card.querySelector('.fc-rows');
         fcRuler.innerHTML = rData.rulerHtml;
-        fcRows.innerHTML = buildSpeakerRowsHtml(spk, sc, winStart, winDur, trackPx, rData.gridHtml, rData.bandsHtml, true);
+        fcRows.innerHTML = buildSpeakerRowsHtml(spk, sc, bufStart, bufDur, winDur, trackPx, rData.gridHtml, rData.bandsHtml, true);
         const st = {
-          winStart, winDur, trackPx,
+          winStart, bufStart, bufDur, winDur, trackPx, anim,
+          stripEls: [...card.querySelectorAll('.tl-strip')],
           playheadEls: [...card.querySelectorAll('.lane-playhead')],
+          jumpLineEls: [...card.querySelectorAll('.jump-line')],
+          jumpCueEls: [...card.querySelectorAll('.jump-cue')],
+          landLineEls: [...card.querySelectorAll('.land-line')],
+          landNotchEls: [...card.querySelectorAll('.land-notch')],
+          anchorNotchEls: [...card.querySelectorAll('.anchor-notch')],
           blockElsByIndex: indexLaneBlocks(fcRows),
           clockEl: card.querySelector('.live-clock'),
         };
         floatRenderState.set(spk, st);
-        updatePlayheadOn(st.playheadEls, st.blockElsByIndex, t, winStart, winDur);
+        applyStripTransform(st.stripEls, st.winStart, st.bufStart, st.bufDur);
+        updatePlayheadOn(st.playheadEls, st.blockElsByIndex, t, st.winStart, st.winDur);
+        updateJumpGuides({
+          jumpLines: st.jumpLineEls, jumpCues: st.jumpCueEls,
+          landLines: st.landLineEls, landNotches: st.landNotchEls, anchorNotches: st.anchorNotchEls,
+        }, t, st.winStart, st.winDur, true, Boolean(st.anim));
         if (st.clockEl) st.clockEl.textContent = clock(t);
       } else {
+        prev.winStart = winStart;
+        prev.anim = anim;
+        applyStripTransform(prev.stripEls, prev.winStart, prev.bufStart, prev.bufDur);
         updatePlayheadOn(prev.playheadEls, prev.blockElsByIndex, t, prev.winStart, prev.winDur);
+        updateJumpGuides({
+          jumpLines: prev.jumpLineEls, jumpCues: prev.jumpCueEls,
+          landLines: prev.landLineEls, landNotches: prev.landNotchEls, anchorNotches: prev.anchorNotchEls,
+        }, t, prev.winStart, prev.winDur, true, Boolean(prev.anim));
         if (prev.clockEl) prev.clockEl.textContent = clock(t);
       }
     }
@@ -3566,15 +3894,51 @@ APP_JS = r"""(() => {
   function updateLanesPlayhead(time) {
     if (!model) return;
     updateClocks(time);
-    if (lanesFollow && (time < lanesWinStart + lanesWindow * 0.08 || time > lanesWinStart + lanesWindow * 0.85)) {
-      const targetStart = clampWinStart(time - lanesWindow * 0.25, lanesWindow);
-      if (Math.abs(targetStart - lanesWinStart) > 0.25) {
-        lanesWinStart = targetStart;
-        renderLanesWindow(true);
-        return;
+    const winDur = lanesWindow;
+
+    if (lanesFollow) {
+      if (scrollCfg.mode === 'smooth') {
+        mainPageAnim = null;
+        const target = clampWinStart(time - winDur * scrollCfg.landAt, winDur);
+        if (Math.abs(target - lanesWinStart) > 0.0005) {
+          lanesWinStart = target;
+          renderLanesWindow(false);
+        }
+      } else if (mainPageAnim) {
+        const p = Math.min(1, (performance.now() - mainPageAnim.t0) / Math.max(40, mainPageAnim.dur));
+        const ease = 1 - Math.pow(1 - p, 3);
+        lanesWinStart = mainPageAnim.from + (mainPageAnim.to - mainPageAnim.from) * ease;
+        if (p >= 1) {
+          lanesWinStart = mainPageAnim.to;
+          mainPageAnim = null;
+        }
+        applyStripTransform(stripEls, lanesWinStart, lanesBufStart, lanesBufDur);
+      } else if (time >= lanesWinStart + winDur * scrollCfg.jumpAt || time < lanesWinStart + winDur * 0.02) {
+        const target = clampWinStart(time - winDur * scrollCfg.landAt, winDur);
+        if (Math.abs(target - lanesWinStart) > 0.25) {
+          if (scrollCfg.mode === 'page-slide' && Math.abs(target - lanesWinStart) <= winDur * 1.05) {
+            if (target < lanesBufStart + winDur * 0.02 || target > lanesBufStart + winDur * 1.98
+              || lanesWinStart < lanesBufStart + winDur * 0.02 || lanesWinStart > lanesBufStart + winDur * 1.98) {
+              renderLanesWindow(true, Math.min(lanesWinStart, target) - winDur * 0.5);
+            }
+            mainPageAnim = {from: lanesWinStart, to: target, t0: performance.now(), dur: scrollCfg.slideMs};
+            ensureTickRunning();
+          } else {
+            lanesWinStart = target;
+            renderLanesWindow(false);
+          }
+        }
       }
+    } else {
+      mainPageAnim = null;
     }
+
     updatePlayheadOn(playheadEls, blockElsByIndex, time, lanesWinStart, lanesWindow);
+    updateJumpGuides({
+      jumpLines: jumpLineEls, jumpCues: jumpCueEls,
+      landLines: landLineEls, landNotches: landNotchEls, anchorNotches: anchorNotchEls,
+    }, time, lanesWinStart, lanesWindow, lanesFollow, Boolean(mainPageAnim));
+
     if (showMinimap) {
       const vp = document.getElementById('minimap-viewport');
       const mp = document.getElementById('minimap-playhead');
@@ -3827,13 +4191,14 @@ APP_JS = r"""(() => {
   }
 
   function tick() {
-    if (!ytPlaying) { rafId = 0; return; }
+    if (!ytPlaying && !hasActivePageAnim()) { rafId = 0; return; }
     const t = currentTime();
     updateLanesPlayhead(t);
     renderAllFloatCards(false);
     syncTranscript(t, false);
     updateLiveAnnotation(t, false);
-    rafId = requestAnimationFrame(tick);
+    if (ytPlaying || hasActivePageAnim()) rafId = requestAnimationFrame(tick);
+    else rafId = 0;
   }
 
   function jumpOverlap(dir) {
@@ -3848,10 +4213,11 @@ APP_JS = r"""(() => {
       }
       if (!target) target = spans[spans.length - 1];
     }
+    cancelAllPageAnims();
     lanesFollow = true;
     document.getElementById('lanes-follow').setAttribute('aria-pressed', 'true');
-    lanesWinStart = clampWinStart(target.start - lanesWindow * 0.25, lanesWindow);
-    renderLanesWindow(true);
+    lanesWinStart = clampWinStart(target.start - lanesWindow * scrollCfg.landAt, lanesWindow);
+    renderLanesWindow(false);
     seekAndPlay(Math.max(0, target.start - 0.3));
   }
 
@@ -4199,10 +4565,11 @@ APP_JS = r"""(() => {
       }
       if (!target) target = items[items.length - 1];
     }
+    cancelAllPageAnims();
     lanesFollow = true;
     document.getElementById('lanes-follow').setAttribute('aria-pressed', 'true');
-    lanesWinStart = clampWinStart(target.t - lanesWindow * 0.25, lanesWindow);
-    renderLanesWindow(true);
+    lanesWinStart = clampWinStart(target.t - lanesWindow * scrollCfg.landAt, lanesWindow);
+    renderLanesWindow(false);
     seekAndPlay(Math.max(0, target.t - 0.3));
   }
   async function exportAnnotationsJson() {
@@ -4408,6 +4775,9 @@ APP_JS = r"""(() => {
           refreshAllTimelines(true);
           renderLayoutPopover(ax, ay);
           return;
+        } else if (k === 'open-scroll') {
+          renderScrollPopover(ax, ay);
+          return;
         } else if (k === 'toggle-fs') {
           closeCfgPopover();
           togglePlayerFullscreen();
@@ -4430,6 +4800,34 @@ APP_JS = r"""(() => {
         renderLanesWindow(true);
         renderAllFloatCards(true);
         renderLayoutPopover(ax, ay);
+        return;
+      }
+
+      // Scroll & Jump popover actions
+      const scrBtn = ev.target.closest('button[data-scr]');
+      if (scrBtn) {
+        const k = scrBtn.dataset.scr;
+        const v = scrBtn.dataset.val;
+        if (k === 'open-layout') {
+          renderLayoutPopover(ax, ay);
+          return;
+        }
+        if (k === 'reset') {
+          scrollCfg = {...DEFAULT_SCROLL_CFG};
+        } else if (k === 'mode' && ['smooth', 'page-slide', 'page-snap'].includes(v)) {
+          scrollCfg.mode = v;
+        } else if (k === 'jumpAt') {
+          scrollCfg.jumpAt = clampNum(v, 0.6, 0.95, 0.85);
+        } else if (k === 'landAt') {
+          scrollCfg.landAt = clampNum(v, 0.05, 0.45, 0.20);
+        } else if (k === 'slideMs') {
+          scrollCfg.slideMs = clampNum(v, 120, 600, 280);
+        }
+        saveScrollCfg();
+        syncScrollButton();
+        cancelAllPageAnims();
+        syncAll(false);
+        renderScrollPopover(ax, ay);
         return;
       }
 
@@ -4552,6 +4950,12 @@ APP_JS = r"""(() => {
         }
         return;
       }
+      if (t.dataset.scrFlag) {
+        scrollCfg[t.dataset.scrFlag] = Boolean(t.checked);
+        saveScrollCfg();
+        syncAll(false);
+        return;
+      }
       if (t.dataset.mlFlag) {
         metaLabels[t.dataset.mlFlag] = Boolean(t.checked);
         saveMetaLabels();
@@ -4569,6 +4973,21 @@ APP_JS = r"""(() => {
       ev.stopPropagation();
       const t = ev.target;
       const metaEl = t.parentElement?.querySelector('.ctx-meta');
+      if (t.dataset.scrRng) {
+        const k = t.dataset.scrRng;
+        const raw = Number(t.value);
+        if (k === 'jumpAt') {
+          scrollCfg.jumpAt = clampNum(raw / 100, 0.6, 0.95, 0.85);
+          if (metaEl) metaEl.textContent = Math.round(scrollCfg.jumpAt * 100) + '%';
+        } else if (k === 'landAt') {
+          scrollCfg.landAt = clampNum(raw / 100, 0.05, 0.45, 0.20);
+          if (metaEl) metaEl.textContent = Math.round(scrollCfg.landAt * 100) + '%';
+        }
+        saveScrollCfg();
+        cancelAllPageAnims();
+        syncAll(false);
+        return;
+      }
       if (t.dataset.layRng === 'videoScale') {
         stageCfg.videoScale = clampNum(Number(t.value) / 100, 0.4, 1.0, 1.0);
         if (metaEl) metaEl.textContent = Math.round(stageCfg.videoScale * 100) + '%';
@@ -4934,6 +5353,7 @@ APP_JS = r"""(() => {
     paintTranscript();
     applyToneState();
     syncFloatButton();
+    syncScrollButton();
     applyMinimapState();
     applyBadgesState();
     applyAnnotationsState();
@@ -5140,12 +5560,13 @@ APP_JS = r"""(() => {
         const dx = ev.clientX - drag.startX;
         if (!drag.moved && Math.abs(dx) >= 5) {
           drag.moved = true;
+          cancelAllPageAnims();
           lanesFollow = false;
           document.getElementById('lanes-follow').setAttribute('aria-pressed', 'false');
         }
         if (drag.moved && drag.rect.width > 0) {
           lanesWinStart = clampWinStart(drag.startWin - (dx / drag.rect.width) * lanesWindow, lanesWindow);
-          renderLanesWindow(true);
+          renderLanesWindow(false);
         }
       });
       lanesStage.addEventListener('pointerup', ev => {
@@ -5163,10 +5584,11 @@ APP_JS = r"""(() => {
         if (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) || ev.shiftKey) {
           ev.preventDefault();
           const delta = Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY;
+          cancelAllPageAnims();
           lanesFollow = false;
           document.getElementById('lanes-follow').setAttribute('aria-pressed', 'false');
           lanesWinStart = clampWinStart(lanesWinStart + (delta / 300) * lanesWindow * 0.4, lanesWindow);
-          renderLanesWindow(true);
+          renderLanesWindow(false);
         }
       }, {passive: false});
     }
@@ -5185,6 +5607,7 @@ APP_JS = r"""(() => {
         const y = ctxMenuState.y;
         if (act === 'open-spk-cfg' && spk) { renderSpeakerConfigPopover(spk, x, y); return; }
         if (act === 'open-all') { renderAllSpeakersPopover(x, y); return; }
+        if (act === 'open-scroll') { renderScrollPopover(x, y); return; }
         if (act === 'open-layout') { renderLayoutPopover(x, y); return; }
         if (act === 'open-labels') { renderLabelsPopover(x, y); return; }
         if (act === 'row-up' && spk) {
@@ -5259,15 +5682,26 @@ APP_JS = r"""(() => {
     winSel.addEventListener('change', () => {
       lanesWindow = Number(winSel.value) || 20;
       localStorage.setItem('ovpub.window', String(lanesWindow));
-      lanesWinStart = clampWinStart(currentTime() - lanesWindow * 0.25, lanesWindow);
+      cancelAllPageAnims();
+      lanesWinStart = clampWinStart(currentTime() - lanesWindow * scrollCfg.landAt, lanesWindow);
       renderLanesWindow(true);
       renderAllFloatCards(true);
     });
     document.getElementById('lanes-follow').onclick = () => {
       lanesFollow = !lanesFollow;
       document.getElementById('lanes-follow').setAttribute('aria-pressed', String(lanesFollow));
-      if (lanesFollow) updateLanesPlayhead(currentTime());
+      cancelAllPageAnims();
+      updateLanesPlayhead(currentTime());
     };
+    const scrollMenuBtn = document.getElementById('open-scroll-menu');
+    if (scrollMenuBtn) {
+      scrollMenuBtn.onclick = ev => {
+        ev.stopPropagation();
+        if (openPopoverKind === 'scroll') { closeCfgPopover(); return; }
+        const r = scrollMenuBtn.getBoundingClientRect();
+        renderScrollPopover(r.left, Math.max(12, r.top - 360));
+      };
+    }
     document.getElementById('prev-overlap').onclick = () => jumpOverlap(-1);
     document.getElementById('next-overlap').onclick = () => jumpOverlap(1);
 
@@ -5544,10 +5978,11 @@ APP_JS = r"""(() => {
       const c0 = model.clipStart || 0;
       const cSpan = Math.max(1, (model.clipEnd || model.duration) - c0);
       const t = c0 + Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width)) * cSpan;
+      cancelAllPageAnims();
       lanesFollow = true;
       document.getElementById('lanes-follow').setAttribute('aria-pressed', 'true');
-      lanesWinStart = clampWinStart(t - lanesWindow * 0.25, lanesWindow);
-      renderLanesWindow(true);
+      lanesWinStart = clampWinStart(t - lanesWindow * scrollCfg.landAt, lanesWindow);
+      renderLanesWindow(false);
       seekAndPlay(t);
     };
     minimapWrap.addEventListener('pointerdown', ev => {
@@ -5682,6 +6117,7 @@ def _index_html(
             </select>
           </label>
           <button type="button" id="lanes-follow" aria-pressed="true" title="Keep timeline synced to playback">Follow</button>
+          <button type="button" id="open-scroll-menu" aria-pressed="false" title="Control smooth continuous scroll vs predictable page jump, jump line &amp; countdown">Scroll: Page</button>
           <button type="button" id="open-rows-menu" title="Per-speaker rows, free row order, combined BG layers &amp; all-speaker presets">Layers</button>
           <button type="button" id="open-layout-menu" title="Video aspect fit, placement below/over, separate speakers, timer &amp; handles">Layout</button>
           <button type="button" id="toggle-tone" aria-pressed="true"{tone_btn_hidden} title="Show or hide live pitch &amp; loudness tone curve (T)">Tone</button>
