@@ -82,7 +82,7 @@ def _compact_transcript(data_dir: Path, video_id: str) -> dict:
                 "w": words,
             }
         )
-    return {
+    compact = {
         "v": 1,
         "video_id": video_id,
         "title": info.get("title") or video_id,
@@ -94,6 +94,9 @@ def _compact_transcript(data_dir: Path, video_id: str) -> dict:
         "speakers": speakers,
         "segments": segments,
     }
+    if doc.get("language"):
+        compact["language"] = str(doc["language"])
+    return compact
 
 
 APP_CSS = r"""* { box-sizing: border-box; }
@@ -595,8 +598,22 @@ html.handles-hover .spk-float-card.is-moving .fc-rz-se { opacity: .9; }
   top: 3px; bottom: 3px; border: 1px dashed var(--spk-color, #7cc4ff);
   background: var(--spk-bg, rgba(124, 196, 255, 0.16));
   font-size: calc(.77rem * var(--spk-scale, 1)); font-weight: 600;
+  line-height: 1.15;
 }
-.lane-block.lb-ww .lane-word { color: #fff; font-weight: 600; }
+.lane-block.lb-ww .lane-word {
+  color: #fff; font-weight: 600;
+  display: inline-flex; flex-direction: column; justify-content: center;
+  padding: 0 2px;
+}
+.lane-block.lb-ww .ww-g { display: block; line-height: 1.15; }
+.lane-block.lb-ww .ww-c {
+  display: block; font-size: .72em; font-weight: 700; line-height: 1.1;
+  color: #fde68a; opacity: .92; margin-top: 1px;
+}
+.lane-block.lb-ww .lane-word.has-nuance .ww-g {
+  text-decoration: underline dotted rgba(253, 230, 138, 0.65);
+  text-underline-offset: 2px;
+}
 .lane-block.lb-ww.now { border-style: solid; border-color: #fff; background: var(--spk-bg-hi, rgba(124, 196, 255, 0.36)); }
 .lane-block.lb-ww .lane-word.lw-now { color: #fff; background: rgba(255, 255, 255, 0.32); }
 .lane-block.lb-en {
@@ -792,106 +809,122 @@ html.handles-hover .spk-float-card.is-moving .fc-rz-se { opacity: .9; }
   pointer-events: none;
 }
 
-/* Context menu & Config popovers (Layout, Labels, Per-speaker settings) */
+/* Context menu & Config popovers (spacious, readable, plain-English) */
 .stream-ctx-menu, .cfg-popover {
-  position: fixed; z-index: 260; min-width: 17.5rem; max-width: 24rem;
-  max-height: calc(100vh - 16px); overflow-y: auto;
-  background: #10141c; border: 1px solid #49566b; border-radius: 8px;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.75); padding: .36rem 0;
-  color: #fff; font-size: .83rem; user-select: none;
+  position: fixed; z-index: 260; min-width: 21.5rem; max-width: 27.5rem;
+  max-height: calc(100vh - 20px); overflow-y: auto;
+  background: #10151f; border: 1px solid #425066; border-radius: 10px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.78); padding: .5rem 0;
+  color: #f8fafc; font-size: .9rem; line-height: 1.38; user-select: none;
 }
 .ctx-head {
-  display: flex; align-items: center; gap: .4rem; padding: .3rem .75rem .36rem;
-  font-size: .8rem; font-weight: 800; color: #a9d6ff; border-bottom: 1px solid #232a36;
+  display: flex; align-items: center; gap: .55rem; padding: .45rem 1rem .6rem;
+  font-size: .95rem; font-weight: 800; color: #e2efff; border-bottom: 1px solid #222b3a;
 }
 .ctx-head-close {
-  margin-left: auto; padding: .04rem .36rem; font-size: .78rem;
-  border: 1px solid #334155; background: transparent; color: #cbd5e1;
+  margin-left: auto; padding: .1rem .48rem; font-size: .9rem; line-height: 1.25;
+  border: 1px solid #334155; border-radius: 6px; background: transparent; color: #cbd5e1;
 }
+.ctx-head-close:hover { background: #1e293b; color: #fff; border-color: #64748b; }
 .ctx-sec {
-  padding: .34rem .75rem .14rem; font-size: .69rem; font-weight: 800;
-  text-transform: uppercase; letter-spacing: .04em; color: #94a3b8;
+  padding: .62rem 1rem .26rem; font-size: .72rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .06em; color: #94a3b8;
 }
-.ctx-sep { height: 1px; background: #232a36; margin: .28rem 0; }
+.ctx-sep { height: 1px; background: #222b3a; margin: .48rem 0; }
 .ctx-item {
-  display: flex; align-items: center; gap: .45rem; width: 100%; border: 0;
-  border-radius: 0; background: transparent; color: #fff; text-align: left;
-  padding: .3rem .75rem; font-size: .82rem; cursor: pointer;
+  display: flex; align-items: center; gap: .6rem; width: 100%; border: 0;
+  border-radius: 0; background: transparent; color: #f8fafc; text-align: left;
+  padding: .52rem 1rem; font-size: .88rem; cursor: pointer;
 }
-.ctx-item:hover { background: #1c2433; }
+.ctx-item:hover { background: #1b2436; }
 .ctx-item.ctx-danger { color: #fca5a5; }
 .ctx-item .ctx-act {
-  margin-left: auto; font: 700 .7rem/1.2 var(--mono); padding: .04rem .3rem;
-  border-radius: 3px; border: 1px solid #3c4657; color: #cbd5e1;
+  margin-left: auto; font: 700 .74rem/1.2 var(--mono); padding: .1rem .42rem;
+  border-radius: 4px; border: 1px solid #3c4657; color: #cbd5e1;
 }
 .ctx-item.is-on .ctx-act { border-color: #68c77b; color: #7ee787; background: #112416; }
 .ctx-item.is-off .ctx-act { border-color: #7cc4ff; color: #7cc4ff; background: #0f1c2e; }
 .ctx-inline-bar {
-  display: flex; flex-wrap: wrap; align-items: center; gap: .26rem;
-  padding: .2rem .75rem .28rem;
+  display: flex; flex-wrap: wrap; align-items: center; gap: .42rem;
+  padding: .34rem 1rem .44rem;
 }
+.ctx-opt-row {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: .45rem .7rem; padding: .42rem 1rem;
+}
+.ctx-opt-lbl { font-size: .86rem; font-weight: 600; color: #e2e8f0; }
+.ctx-opt-btns { display: inline-flex; flex-wrap: wrap; gap: .32rem; }
 .ctx-inline-lbl {
-  font-size: .74rem; font-weight: 700; color: #cbd5e1; margin-right: .15rem;
-  min-width: 3.4rem;
+  font-size: .82rem; font-weight: 700; color: #cbd5e1; margin-right: .2rem;
+  min-width: 5.2rem;
 }
 .ctx-meta {
-  margin-left: auto; font: 700 .72rem/1.2 var(--mono); color: #94a3b8;
+  margin-left: auto; font: 700 .8rem/1.2 var(--mono); color: #cbd5e1; min-width: 2.6rem; text-align: right;
 }
 .ctx-chip-btn {
-  padding: .15rem .42rem; font-size: .75rem; font-weight: 700;
-  border-radius: 4px; border: 1px solid #3c4657; background: #161c27; color: #fff;
+  padding: .28rem .64rem; font-size: .82rem; font-weight: 700;
+  border-radius: 6px; border: 1px solid #3a4659; background: #161d2b; color: #f1f5f9;
   cursor: pointer;
 }
-.ctx-chip-btn:hover:not(:disabled) { background: #222c3e; border-color: #7cc4ff; }
-.ctx-chip-btn.is-on { border-color: #68c77b; background: #132818; color: #7ee787; }
-.ctx-chip-btn.is-off { border-color: #7cc4ff; background: #102036; color: #a9d6ff; }
+.ctx-chip-btn:hover:not(:disabled) { background: #222e44; border-color: #7cc4ff; color: #fff; }
+.ctx-chip-btn.is-on { border-color: #68c77b; background: #132c1a; color: #86efac; }
+.ctx-chip-btn.is-off { border-color: #4b5c74; background: #131926; color: #cbd5e1; }
 .ctx-slider-row {
-  display: flex; align-items: center; gap: .45rem; padding: .2rem .75rem .26rem;
+  display: flex; align-items: center; gap: .65rem; padding: .42rem 1rem;
 }
-.ctx-slider-row input[type="range"] { flex: 1 1 6rem; min-width: 5rem; }
+.ctx-slider-row input[type="range"] { flex: 1 1 7rem; min-width: 6rem; }
 .ctx-check-row {
-  display: flex; align-items: center; gap: .45rem; padding: .22rem .75rem;
-  cursor: pointer; font-size: .81rem;
+  display: flex; align-items: flex-start; gap: .68rem; padding: .48rem 1rem;
+  cursor: pointer; font-size: .88rem;
 }
-.ctx-check-row:hover { background: #182030; }
-.ctx-check-row input[type="checkbox"] { margin: 0; width: 14px; height: 14px; cursor: pointer; }
-.ctx-check-hint { margin-left: auto; font-size: .7rem; color: #94a3b8; font-family: var(--mono); }
+.ctx-check-row:hover { background: #182235; }
+.ctx-check-row input[type="checkbox"] {
+  margin: .14rem 0 0; width: 16px; height: 16px; flex: 0 0 auto;
+  accent-color: #7cc4ff; cursor: pointer;
+}
+.ctx-check-txt { flex: 1 1 auto; min-width: 0; }
+.ctx-check-main { display: block; font-weight: 600; color: #fff; }
+.ctx-sub { display: block; font-size: .76rem; color: #94a3b8; margin-top: 1px; line-height: 1.3; }
+.ctx-check-hint { margin-left: auto; font-size: .74rem; color: #94a3b8; font-family: var(--mono); }
+.ctx-check-actions { display: inline-flex; align-items: center; gap: .25rem; margin-left: auto; flex: 0 0 auto; }
 .ctx-tabs {
-  display: flex; flex-wrap: wrap; gap: .22rem; padding: .3rem .65rem;
-  border-bottom: 1px solid #232a36; background: #0c1017;
+  display: flex; flex-wrap: wrap; gap: .38rem; padding: .52rem .9rem;
+  border-bottom: 1px solid #222b3a; background: #0c1018;
 }
 .ctx-tab {
-  display: inline-flex; align-items: center; gap: .26rem;
-  padding: .16rem .46rem; font-size: .75rem; font-weight: 700;
-  border-radius: 5px; border: 1px solid #323c4e; background: #141a24; color: #cbd5e1;
+  display: inline-flex; align-items: center; gap: .36rem;
+  padding: .28rem .66rem; font-size: .84rem; font-weight: 700;
+  border-radius: 6px; border: 1px solid #334155; background: #141b28; color: #cbd5e1;
 }
 .ctx-tab:hover { border-color: #7cc4ff; color: #fff; }
-.ctx-tab.is-on { border-color: var(--spk-color, #7cc4ff); background: #182538; color: #fff; }
-.rc-list { display: flex; flex-direction: column; gap: .32rem; padding: .24rem .65rem .32rem; }
-.rc-card {
-  border: 1px solid #283244; border-left: 3px solid var(--spk-color, #7cc4ff);
-  border-radius: 5px; background: #131823; padding: .26rem .38rem;
+.ctx-tab.is-on { border-color: var(--spk-color, #7cc4ff); background: #19283e; color: #fff; }
+.ctx-mode-list { display: flex; flex-direction: column; gap: .42rem; padding: .35rem .9rem .45rem; }
+.ctx-mode-card {
+  display: block; width: 100%; text-align: left; padding: .55rem .75rem;
+  border-radius: 8px; border: 1px solid #334155; background: #141b28; color: #f1f5f9;
+  cursor: pointer;
 }
-.rc-head { display: flex; align-items: center; gap: .24rem; }
-.rc-idx { font: 700 .68rem/1 var(--mono); color: #94a3b8; min-width: 1.1rem; }
-.rc-name { font-size: .8rem; font-weight: 800; color: #fff; margin-right: auto; }
+.ctx-mode-card:hover { border-color: #7cc4ff; background: #1a2436; }
+.ctx-mode-card.is-on { border-color: #68c77b; background: #122819; }
+.ctx-mode-title { display: block; font-size: .88rem; font-weight: 800; color: #fff; }
+.ctx-mode-card.is-on .ctx-mode-title { color: #86efac; }
+.ctx-mode-desc { display: block; font-size: .76rem; color: #cbd5e1; margin-top: 2px; line-height: 1.32; }
+.ctx-more { border-top: 1px solid #222b3a; margin-top: .38rem; }
+.ctx-more > summary {
+  padding: .55rem 1rem; font-size: .82rem; font-weight: 700; color: #9ec5fe;
+  cursor: pointer; list-style: none; display: flex; align-items: center; gap: .4rem;
+}
+.ctx-more > summary::-webkit-details-marker { display: none; }
+.ctx-more > summary::before { content: "▸"; font-size: .78rem; transition: transform .15s; }
+.ctx-more[open] > summary::before { transform: rotate(90deg); }
+.ctx-more > summary:hover { background: #172030; color: #fff; }
+.ctx-more-body { padding: .15rem 0 .4rem; }
 .rc-mini-btn {
-  padding: .05rem .3rem; font-size: .7rem; font-weight: 700; line-height: 1.25;
-  border-radius: 3px; border: 1px solid #394558; background: #18202e; color: #e2e8f0;
+  padding: .16rem .46rem; font-size: .78rem; font-weight: 700; line-height: 1.25;
+  border-radius: 5px; border: 1px solid #3a4659; background: #182130; color: #e2e8f0;
 }
 .rc-mini-btn:hover:not(:disabled) { border-color: #7cc4ff; color: #fff; background: #223047; }
 .rc-mini-btn.rc-del { color: #fca5a5; }
-.rc-bgs {
-  display: flex; flex-wrap: wrap; align-items: center; gap: .2rem;
-  margin-top: .22rem; padding-top: .2rem; border-top: 1px dashed #252f40;
-}
-.rc-bg-lbl { font-size: .67rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-right: .1rem; }
-.rc-bg-chip {
-  padding: .06rem .32rem; font-size: .69rem; font-weight: 700; border-radius: 3px;
-  border: 1px solid #354154; background: #10151f; color: #94a3b8;
-}
-.rc-bg-chip:hover { border-color: #7cc4ff; color: #fff; }
-.rc-bg-chip.is-on { border-color: #68c77b; background: #132818; color: #7ee787; }
 
 .lane-pulse {
   position: absolute; top: 8px; bottom: 8px; min-width: 6px; border-radius: 4px;
@@ -1243,8 +1276,8 @@ APP_JS = r"""(() => {
   let inspectedVocabId = null;
 
   const DIFF_LABELS = {
-    mtg: 'MTG', slang: 'Slang', n1: 'N1', n2: 'N2', n3: 'N3', basic: 'Basic',
-    ar: 'AR / Rioplatense', econ: 'Econ / Pol', c1: 'C1–C2', b2: 'B2', b1: 'B1',
+    mtg: 'Game term', slang: 'Slang', n1: 'Advanced (N1)', n2: 'Upper-Int (N2)', n3: 'Intermediate (N3)', basic: 'Basic',
+    ar: 'Argentinian', econ: 'Politics / Econ', c1: 'Advanced (C1)', b2: 'Upper-Int (B2)', b1: 'Intermediate (B1)',
   };
   const DIFF_ORDER = {
     mtg: 5, ar: 5, slang: 4, econ: 4, n1: 3, c1: 3, n2: 2, b2: 2, n3: 1, b1: 1, basic: 0,
@@ -1261,7 +1294,8 @@ APP_JS = r"""(() => {
   let speakerOrder = [];
   let speakerConfigs = {};
   let ctxMenuState = null;
-  let openPopoverKind = ''; // '' | 'layout' | 'labels' | 'speaker:<name>'
+  let openPopoverKind = ''; // '' | 'layout' | 'labels' | 'scroll' | 'all-speakers' | 'speaker:<name>'
+  const openMoreSections = new Set();
 
   let hasProsody = false;
   let prosodyDt = 0.06;
@@ -1382,6 +1416,11 @@ APP_JS = r"""(() => {
     }
   }
 
+  function spkDisplay(spk) {
+    if (!spk) return 'Unassigned';
+    const mapped = doc && doc.speaker_names && doc.speaker_names[spk];
+    return mapped || spk;
+  }
   function isPrimaryStreamKind(kind) {
     return kind === 'text' || kind === 'ja' || kind === 'ja-furi' || kind === 'es';
   }
@@ -1395,31 +1434,72 @@ APP_JS = r"""(() => {
   function buildStreamRegistry() {
     const list = [];
     if (hasStudy && doc && doc.language === 'es') {
-      const origLbl = doc.dialect === 'ar' ? 'Original Spanish (AR)' : 'Original Spanish';
-      const origShort = doc.dialect === 'ar' ? 'ES (AR)' : 'ES';
-      list.push({id: 'es', label: origLbl, short: origShort, group: 'speech', baseRem: 2.9});
+      const origLbl = doc.dialect === 'ar' ? 'Argentinian Spanish (original)' : 'Spanish (original)';
+      list.push({
+        id: 'es', label: origLbl, short: 'Spanish',
+        desc: 'What the speaker actually said', group: 'speech', baseRem: 2.9,
+      });
       if (doc.segments.some(s => s.std)) {
-        list.push({id: 'es-std', label: 'Neutral Spanish', short: 'Neutral', group: 'study', baseRem: 2.05});
+        list.push({
+          id: 'es-std', label: 'Standard Spanish (neutral wording)', short: 'Standard Spanish',
+          desc: 'Rewritten without regional slang', group: 'study', baseRem: 2.1,
+        });
       }
       if (doc.segments.some(s => s.tokens.length && s.tokens.some(t => t.gloss))) {
-        list.push({id: 'literal', label: 'Word-by-word English', short: 'literal', group: 'study', baseRem: 2.0});
+        list.push({
+          id: 'literal', label: 'Word-by-word English (grammar & nuances)', short: 'Word-by-word',
+          desc: 'Literal word meanings with grammar & connotation cues', group: 'study', baseRem: 2.5,
+        });
       }
       if (doc.segments.some(s => s.en)) {
-        list.push({id: 'en', label: 'Natural English', short: 'English', group: 'study', baseRem: 2.1});
+        list.push({
+          id: 'en', label: 'Translated English', short: 'English',
+          desc: 'Natural full-sentence English translation', group: 'study', baseRem: 2.15,
+        });
       }
     } else if (hasStudy && isCjk) {
-      list.push({id: 'ja-furi', label: 'Japanese + Furigana', short: 'JP+furi', group: 'speech', baseRem: 3.45});
-      list.push({id: 'ja', label: 'Native Japanese', short: 'JP', group: 'speech', baseRem: 2.9});
+      const isZh = doc && doc.language === 'zh';
+      list.push({
+        id: 'ja-furi',
+        label: isZh ? 'Mandarin (with pinyin guides)' : 'Japanese (with pronunciation guides)',
+        short: isZh ? 'Mandarin + pinyin' : 'Japanese + guides',
+        desc: isZh ? 'Characters with pinyin readings above' : 'Japanese with pronunciation readings above characters',
+        group: 'speech', baseRem: 3.45,
+      });
+      list.push({
+        id: 'ja',
+        label: isZh ? 'Mandarin (characters only)' : 'Japanese (no pronunciation guides)',
+        short: isZh ? 'Mandarin' : 'Japanese',
+        desc: 'Original script without readings above',
+        group: 'speech', baseRem: 2.9,
+      });
       if (doc.segments.some(s => s.tokens.length && s.tokens.some(t => t.gloss))) {
-        list.push({id: 'literal', label: 'English literal (word-by-word)', short: 'literal', group: 'study', baseRem: 2.0});
+        list.push({
+          id: 'literal', label: 'Word-by-word English (grammar & nuances)', short: 'Word-by-word',
+          desc: 'Literal word meanings with grammar & connotation cues', group: 'study', baseRem: 2.5,
+        });
       }
       if (doc.segments.some(s => s.en)) {
-        list.push({id: 'en', label: 'English translation', short: 'English', group: 'study', baseRem: 2.1});
+        list.push({
+          id: 'en', label: 'Translated English', short: 'English',
+          desc: 'Natural full-sentence English translation', group: 'study', baseRem: 2.15,
+        });
       }
     } else {
-      list.push({id: 'text', label: 'Transcript', short: 'Text', group: 'speech', baseRem: 2.9});
+      const langNames = {es: 'Spanish', ja: 'Japanese', zh: 'Mandarin', fr: 'French', de: 'German', ko: 'Korean'};
+      const langName = doc && langNames[doc.language] ? langNames[doc.language] : '';
+      list.push({
+        id: 'text',
+        label: langName ? (langName + ' speech (original)') : 'Spoken words',
+        short: langName || 'Words',
+        desc: 'Timed spoken words synced to audio',
+        group: 'speech', baseRem: 2.9,
+      });
       if (doc && doc.segments.some(s => s.en)) {
-        list.push({id: 'en', label: 'English translation', short: 'English', group: 'study', baseRem: 2.1});
+        list.push({
+          id: 'en', label: 'Translated English', short: 'English',
+          desc: 'Natural English translation', group: 'study', baseRem: 2.15,
+        });
       }
     }
 
@@ -1440,6 +1520,7 @@ APP_JS = r"""(() => {
         trackId: trk.id,
         label: trk.label,
         short: trk.short,
+        desc: '',
         group: 'custom',
         trackType: trk.type,
         color: trk.color,
@@ -1448,22 +1529,25 @@ APP_JS = r"""(() => {
       });
     }
 
-    // Built-in analytical & acoustic subcomponent rows when annotations or prosody are present
+    // Built-in analytical & voice rows when annotations or prosody are present
     if (hasProsody) {
       list.push({
-        id: 'tone', label: 'Pitch & Loudness Wave (own row)', short: 'Tone',
+        id: 'tone', label: 'Voice pitch & volume wave (separate row)', short: 'Voice wave',
+        desc: 'Shows voice height and loudness on its own row',
         group: 'analysis', baseRem: 2.55,
       });
     }
     if (seedAnnotations.length || (annState.added && annState.added.length)) {
       list.push({
-        id: 'analysis', label: 'Analysis / Annotations', short: 'Analysis',
-        group: 'analysis', baseRem: 1.9,
+        id: 'analysis', label: 'Interaction & language notes', short: 'Notes',
+        desc: 'Communication patterns and explanations',
+        group: 'analysis', baseRem: 1.95,
       });
     }
     if (hasProsody) {
       list.push({
-        id: 'delivery', label: 'Delivery Metrics (pitch/vol/pace)', short: 'Delivery',
+        id: 'delivery', label: 'Voice speed & pitch numbers', short: 'Voice stats',
+        desc: 'Exact pitch, volume, and speaking pace numbers',
         group: 'analysis', baseRem: 1.85,
       });
     }
@@ -1476,14 +1560,14 @@ APP_JS = r"""(() => {
   function combinableBgLayers(spk) {
     const out = [];
     if (hasProsody) {
-      out.push({id: 'tone', label: 'Tone wave', short: 'Tone'});
-      out.push({id: 'badges', label: 'Meta-labels', short: 'Labels'});
+      out.push({id: 'tone', label: 'Voice pitch & volume curve', short: 'Voice curve'});
+      out.push({id: 'badges', label: 'Emphasis labels (loud, high, fast…)', short: 'Emphasis labels'});
     }
     if (spk && (model?.pulsesBySpeaker?.get(spk) || []).length) {
-      out.push({id: 'pulses', label: 'Vocal pulses', short: 'Pulses'});
+      out.push({id: 'pulses', label: 'Short vocal reactions & backchannels', short: 'Vocal reactions'});
     }
     if (seedAnnotations.length || (annState.added && annState.added.length)) {
-      out.push({id: 'analysis', label: 'Analysis bands', short: 'Analysis'});
+      out.push({id: 'analysis', label: 'Interaction note highlights', short: 'Note highlights'});
     }
     for (const trk of CUSTOM_TRACKS) {
       out.push({id: 'track:' + trk.id, label: trk.label, short: trk.short});
@@ -1826,7 +1910,7 @@ APP_JS = r"""(() => {
     const url = doc && doc.avatars && doc.avatars[spk];
     if (!url) return '';
     return '<img class="spk-avatar' + (sizeCls ? ' ' + sizeCls : '') + '" src="' + html(url)
-      + '" alt="' + html(spk) + '" loading="lazy">';
+      + '" alt="' + html(spkDisplay(spk)) + '" loading="lazy">';
   }
 
   function syncStudyToolbarButtons() {
@@ -1994,13 +2078,16 @@ APP_JS = r"""(() => {
         const c = model.colorOf(s);
         return '<button type="button" class="ctx-tab' + (activeTab === s ? ' is-on' : '')
           + '" style="--spk-color:' + c.fg + '" data-tab-spk="' + html(s) + '">'
-          + avatarHtml(s, 'av-xs') + '<span style="color:' + c.fg + '">' + html(s) + '</span></button>';
+          + avatarHtml(s, 'av-xs') + '<span style="color:' + c.fg + '">' + html(spkDisplay(s)) + '</span></button>';
       }).join('')
       + '<button type="button" class="ctx-tab' + (activeTab === '__all__' ? ' is-on' : '')
-      + '" data-tab-spk="__all__">All</button></div>';
+      + '" data-tab-spk="__all__">All Speakers</button></div>';
+  }
+  function moreOpenAttr(key) {
+    return openMoreSections.has(key) ? ' open' : '';
   }
 
-  // Tabbed All-Speakers overview (shared with Per-Speaker Row Composer!)
+  // All-Speakers overview: spacious, plain-English checklist
   function renderAllSpeakersPopover(anchorX, anchorY) {
     const pop = document.getElementById('cfg-popover');
     if (!pop || !model) return;
@@ -2009,39 +2096,41 @@ APP_JS = r"""(() => {
     const visSpks = speakerOrder.filter(s => speakerConfigs[s]?.visible);
     const targets = visSpks.length ? visSpks : speakerOrder;
 
-    let out = '<div class="ctx-head"><span>Speakers &amp; Layers</span>'
+    let out = '<div class="ctx-head"><span>Rows &amp; Speakers</span>'
       + '<button type="button" class="ctx-head-close" data-pop-close="1">×</button></div>'
       + buildSpeakerTabsHtml('__all__');
 
-    out += '<div class="ctx-sec">Speakers (order, visibility &amp; mode)</div>';
+    out += '<div class="ctx-sec">Show / Hide Rows for All Speakers</div>';
+    for (const st of AVAILABLE_STREAMS) {
+      const allHave = targets.length > 0 && targets.every(s => speakerHasKind(speakerConfigs[s], st.id));
+      out += '<label class="ctx-check-row">'
+        + '<input type="checkbox"' + (allHave ? ' checked' : '') + ' data-all-row="' + html(st.id) + '">'
+        + '<span class="ctx-check-txt"><span class="ctx-check-main">' + html(st.label) + '</span>'
+        + (st.desc ? '<span class="ctx-sub">' + html(st.desc) + '</span>' : '')
+        + '</span></label>';
+    }
+
+    out += '<details class="ctx-more" data-more-key="all-speakers"' + moreOpenAttr('all-speakers') + '>'
+      + '<summary>Speakers order &amp; placement</summary><div class="ctx-more-body">';
     speakerOrder.forEach((spk, i) => {
       const sc = speakerConfigs[spk];
       const c = model.colorOf(spk);
-      out += '<div class="ctx-inline-bar" style="padding:.16rem .65rem">'
-        + avatarHtml(spk, 'av-xs')
-        + '<span style="color:' + c.fg + ';font-weight:800;margin-right:auto">' + html(spk) + '</span>'
-        + '<button type="button" class="rc-mini-btn" data-sc="order-up" data-spk="' + html(spk) + '" data-stay="all"' + (i <= 0 ? ' disabled' : '') + '>↑</button>'
-        + '<button type="button" class="rc-mini-btn" data-sc="order-dn" data-spk="' + html(spk) + '" data-stay="all"' + (i >= speakerOrder.length - 1 ? ' disabled' : '') + '>↓</button>'
+      const name = spkDisplay(spk);
+      out += '<div class="ctx-opt-row">'
+        + '<span style="display:inline-flex;align-items:center;gap:.4rem;font-weight:700;color:' + c.fg + '">'
+        + avatarHtml(spk, 'av-xs') + html(name) + '</span>'
+        + '<span class="ctx-opt-btns">'
+        + '<button type="button" class="rc-mini-btn" data-sc="order-up" data-spk="' + html(spk) + '" data-stay="all"' + (i <= 0 ? ' disabled' : '') + ' title="Move speaker up">↑</button>'
+        + '<button type="button" class="rc-mini-btn" data-sc="order-dn" data-spk="' + html(spk) + '" data-stay="all"' + (i >= speakerOrder.length - 1 ? ' disabled' : '') + ' title="Move speaker down">↓</button>'
         + '<button type="button" class="ctx-chip-btn' + (sc.visible ? ' is-on' : ' is-off') + '" data-all-act="vis" data-spk="' + html(spk) + '">'
-        + (sc.visible ? 'On' : 'Off') + '</button>'
+        + (sc.visible ? 'Shown' : 'Hidden') + '</button>'
         + '<button type="button" class="ctx-chip-btn' + (sc.placement === 'float' ? ' is-on' : '') + '" data-all-act="float" data-spk="' + html(spk) + '">'
-        + (sc.placement === 'float' ? 'Float' : 'Dock') + '</button>'
-        + '<button type="button" class="ctx-chip-btn" data-tab-spk="' + html(spk) + '" title="Edit rows, order &amp; combined BG for ' + html(spk) + '">Rows ▸</button>'
-        + '</div>';
+        + (sc.placement === 'float' ? 'Floating' : 'Below') + '</button>'
+        + '</span></div>';
     });
-
-    out += '<div class="ctx-sep"></div><div class="ctx-sec">Bulk add/remove row for all active speakers</div>';
-    for (const st of AVAILABLE_STREAMS) {
-      const allHave = targets.length > 0 && targets.every(s => speakerHasKind(speakerConfigs[s], st.id));
-      out += '<button type="button" class="ctx-item ' + (allHave ? 'is-on' : 'is-off')
-        + '" data-all-kind="' + html(st.id) + '">'
-        + '<span>' + html(st.label) + '</span>'
-        + '<span class="ctx-act">' + (allHave ? '✓ Remove' : '+ Add all') + '</span></button>';
-    }
-
-    out += '<div class="ctx-sep"></div><div class="ctx-inline-bar">'
+    out += '<div class="ctx-inline-bar" style="padding-top:.45rem">'
       + '<button type="button" class="ctx-chip-btn" data-all-act="reset-all">Reset all speakers</button>'
-      + '</div>';
+      + '</div></div></details>';
 
     pop.innerHTML = out;
     pop.dataset.anchorX = String(anchorX);
@@ -2049,7 +2138,7 @@ APP_JS = r"""(() => {
     positionFixedPopover(pop, anchorX, anchorY);
   }
 
-  // Per-speaker Row Composer & Config Popover (free row ordering + combining BG layers + independent sizing!)
+  // Per-speaker settings: spacious show/hide checklist + collapsible overlays & size options
   function renderSpeakerConfigPopover(spk, anchorX, anchorY) {
     const pop = document.getElementById('cfg-popover');
     const cfg = speakerConfigs[spk];
@@ -2057,113 +2146,122 @@ APP_JS = r"""(() => {
     closeStreamMenu();
     openPopoverKind = 'speaker:' + spk;
     const c = model.colorOf(spk);
+    const name = spkDisplay(spk);
     const idx = speakerOrder.indexOf(spk);
     const isFloat = cfg.placement === 'float';
     const bgOpts = combinableBgLayers(spk);
 
     let out = '<div class="ctx-head">'
       + avatarHtml(spk, 'av-xs')
-      + '<span style="color:' + c.fg + '">' + html(spk) + ' — Rows &amp; Style</span>'
+      + '<span style="color:' + c.fg + '">' + html(name) + ' — Rows &amp; Settings</span>'
       + '<button type="button" class="ctx-head-close" data-pop-close="1">×</button></div>'
       + buildSpeakerTabsHtml(spk);
 
-    // 1) Ordered rows for THIS speaker + per-row BG combine chips
-    out += '<div class="ctx-sec">Rows for ' + html(spk) + ' (free order · combine as BG)</div>'
-      + '<div class="rc-list" style="--spk-color:' + c.fg + '">';
+    // 1) Active rows first (in current order, with simple ↑/↓), then unchecked rows below
+    out += '<div class="ctx-sec">Show / Hide Rows for ' + html(name) + '</div>';
+    const shownKinds = new Set(cfg.rows.map(r => r.kind));
     cfg.rows.forEach((row, ri) => {
       const st = STREAM_MAP.get(row.kind);
       const lbl = st ? st.label : row.kind;
-      const canMerge = ri > 0 && canMergeAsBg(row.kind) && row.kind !== cfg.rows[ri - 1].kind;
-      const availBgs = bgOpts.filter(b => b.id !== row.kind);
-      out += '<div class="rc-card"><div class="rc-head">'
-        + '<span class="rc-idx">' + (ri + 1) + '.</span>'
-        + '<span class="rc-name">' + html(lbl) + '</span>'
-        + '<button type="button" class="rc-mini-btn" data-rc="up" data-spk="' + html(spk) + '" data-ri="' + ri + '"' + (ri <= 0 ? ' disabled' : '') + ' title="Move row up">↑</button>'
-        + '<button type="button" class="rc-mini-btn" data-rc="dn" data-spk="' + html(spk) + '" data-ri="' + ri + '"' + (ri >= cfg.rows.length - 1 ? ' disabled' : '') + ' title="Move row down">↓</button>'
-        + (canMerge
-          ? '<button type="button" class="rc-mini-btn" data-rc="merge" data-spk="' + html(spk) + '" data-ri="' + ri + '" title="Combine onto row above as background">Merge ↑</button>'
+      const desc = st ? st.desc : '';
+      out += '<div class="ctx-check-row">'
+        + '<label style="display:flex;align-items:flex-start;gap:.68rem;flex:1 1 auto;min-width:0;cursor:pointer">'
+        + '<input type="checkbox" checked data-sc-row="' + html(row.kind) + '" data-spk="' + html(spk) + '">'
+        + '<span class="ctx-check-txt"><span class="ctx-check-main">' + html(lbl) + '</span>'
+        + (desc ? '<span class="ctx-sub">' + html(desc) + '</span>' : '')
+        + '</span></label>'
+        + (cfg.rows.length > 1
+          ? '<span class="ctx-check-actions">'
+            + '<button type="button" class="rc-mini-btn" data-rc="up" data-spk="' + html(spk) + '" data-ri="' + ri + '"' + (ri <= 0 ? ' disabled' : '') + ' title="Move row up">↑</button>'
+            + '<button type="button" class="rc-mini-btn" data-rc="dn" data-spk="' + html(spk) + '" data-ri="' + ri + '"' + (ri >= cfg.rows.length - 1 ? ' disabled' : '') + ' title="Move row down">↓</button>'
+            + '</span>'
           : '')
-        + '<button type="button" class="rc-mini-btn rc-del" data-rc="rm" data-spk="' + html(spk) + '" data-ri="' + ri + '" title="Remove row">×</button>'
         + '</div>';
-      if (availBgs.length) {
-        out += '<div class="rc-bgs"><span class="rc-bg-lbl">BG:</span>'
-          + availBgs.map(b => {
-            const on = row.bg.includes(b.id);
-            const canSplit = on && STREAM_MAP.has(b.id) && !speakerHasKind(cfg, b.id);
-            return '<button type="button" class="rc-bg-chip' + (on ? ' is-on' : '') + '" data-rc="bg" data-spk="'
-              + html(spk) + '" data-ri="' + ri + '" data-bg="' + html(b.id) + '" title="'
-              + html((on ? 'Remove ' : 'Combine ') + b.label + ' as background on this row') + '">'
-              + (on ? '✓ ' : '+ ') + html(b.short) + '</button>'
-              + (canSplit
-                ? '<button type="button" class="rc-mini-btn" data-rc="split" data-spk="' + html(spk)
-                  + '" data-ri="' + ri + '" data-bg="' + html(b.id) + '" title="Pop ' + html(b.short) + ' out into its own row">↗</button>'
-                : '');
-          }).join('') + '</div>';
-      }
-      out += '</div>';
     });
-    out += '</div>';
-
-    // Add missing rows to THIS speaker
-    const missing = AVAILABLE_STREAMS.filter(s => !speakerHasKind(cfg, s.id));
-    if (missing.length) {
-      out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">+ Row</span>'
-        + missing.map(st =>
-          '<button type="button" class="ctx-chip-btn is-off" data-rc="add" data-spk="' + html(spk)
-          + '" data-kind="' + html(st.id) + '" title="Add ' + html(st.label) + ' to ' + html(spk) + '">+ ' + html(st.short) + '</button>'
-        ).join('') + '</div>';
+    for (const st of AVAILABLE_STREAMS) {
+      if (shownKinds.has(st.id)) continue;
+      out += '<label class="ctx-check-row">'
+        + '<input type="checkbox" data-sc-row="' + html(st.id) + '" data-spk="' + html(spk) + '">'
+        + '<span class="ctx-check-txt"><span class="ctx-check-main">' + html(st.label) + '</span>'
+        + (st.desc ? '<span class="ctx-sub">' + html(st.desc) + '</span>' : '')
+        + '</span></label>';
     }
 
-    // 2) Placement & Speaker order
-    out += '<div class="ctx-sep"></div><div class="ctx-sec">Position &amp; Size (' + (isFloat ? 'Floating' : 'Docked') + ')</div>'
-      + '<div class="ctx-inline-bar">'
-      + '<button type="button" class="ctx-chip-btn' + (!isFloat ? ' is-on' : '') + '" data-sc="place" data-spk="' + html(spk) + '" data-val="dock">Dock below</button>'
-      + '<button type="button" class="ctx-chip-btn' + (isFloat ? ' is-on' : '') + '" data-sc="place" data-spk="' + html(spk) + '" data-val="float">Float separate</button>'
-      + '<button type="button" class="ctx-chip-btn" data-sc="order-up" data-spk="' + html(spk) + '"' + (idx <= 0 ? ' disabled' : '') + ' title="Move speaker deck up">Spk ↑</button>'
-      + '<button type="button" class="ctx-chip-btn" data-sc="order-dn" data-spk="' + html(spk) + '"' + (idx >= speakerOrder.length - 1 ? ' disabled' : '') + ' title="Move speaker deck down">Spk ↓</button>'
-      + '</div>';
+    // 2) Placement & main size control
+    out += '<div class="ctx-sep"></div>'
+      + '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Placement</span><span class="ctx-opt-btns">'
+      + '<button type="button" class="ctx-chip-btn' + (!isFloat ? ' is-on' : '') + '" data-sc="place" data-spk="' + html(spk) + '" data-val="dock">Below video</button>'
+      + '<button type="button" class="ctx-chip-btn' + (isFloat ? ' is-on' : '') + '" data-sc="place" data-spk="' + html(spk) + '" data-val="float">Floating card</button>'
+      + '</span></div>';
 
     if (isFloat) {
-      out += '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Width</span>'
+      out += '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Card width</span>'
         + '<input type="range" min="18" max="100" step="1" value="' + Math.round(cfg.w) + '" data-sc-rng="w" data-spk="' + html(spk) + '">'
         + '<span class="ctx-meta">' + Math.round(cfg.w) + '%</span></div>'
-        + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Scale</span>'
+        + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Text size</span>'
         + '<input type="range" min="60" max="180" step="5" value="' + Math.round(cfg.scale * 100) + '" data-sc-rng="scale" data-spk="' + html(spk) + '">'
-        + '<span class="ctx-meta">' + Math.round(cfg.scale * 100) + '%</span></div>'
-        + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">BG</span>'
-        + '<input type="range" min="45" max="98" step="2" value="' + Math.round(cfg.alpha * 100) + '" data-sc-rng="alpha" data-spk="' + html(spk) + '">'
-        + '<span class="ctx-meta">' + Math.round(cfg.alpha * 100) + '%</span></div>';
+        + '<span class="ctx-meta">' + Math.round(cfg.scale * 100) + '%</span></div>';
     } else {
-      out += '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Height</span>'
+      out += '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Row height</span>'
         + '<input type="range" min="65" max="200" step="5" value="' + Math.round(cfg.dockScale * 100) + '" data-sc-rng="dockScale" data-spk="' + html(spk) + '">'
-        + '<span class="ctx-meta">' + Math.round(cfg.dockScale * 100) + '%</span></div>'
-        + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Width</span>'
+        + '<span class="ctx-meta">' + Math.round(cfg.dockScale * 100) + '%</span></div>';
+    }
+
+    // 3) Collapsible overlays behind rows (tone wave, emphasis labels, note highlights)
+    if (bgOpts.length && cfg.rows.length) {
+      out += '<details class="ctx-more" data-more-key="spk-bg"' + moreOpenAttr('spk-bg') + '>'
+        + '<summary>Overlays behind rows (voice curve, emphasis labels…)</summary><div class="ctx-more-body">';
+      cfg.rows.forEach((row, ri) => {
+        const availBgs = bgOpts.filter(b => b.id !== row.kind);
+        if (!availBgs.length) return;
+        const rowLbl = STREAM_MAP.get(row.kind)?.short || row.kind;
+        out += '<div class="ctx-sec">Behind ' + html(rowLbl) + '</div>';
+        for (const b of availBgs) {
+          const on = row.bg.includes(b.id);
+          out += '<label class="ctx-check-row">'
+            + '<input type="checkbox"' + (on ? ' checked' : '')
+            + ' data-sc-bg="' + html(b.id) + '" data-spk="' + html(spk) + '" data-ri="' + ri + '">'
+            + '<span class="ctx-check-txt"><span class="ctx-check-main">' + html(b.label) + '</span></span></label>';
+        }
+      });
+      out += '</div></details>';
+    }
+
+    // 4) Collapsible secondary speaker options
+    out += '<details class="ctx-more" data-more-key="spk-more"' + moreOpenAttr('spk-more') + '>'
+      + '<summary>More options for ' + html(name) + '</summary><div class="ctx-more-body">'
+      + '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Speaker order</span><span class="ctx-opt-btns">'
+      + '<button type="button" class="ctx-chip-btn" data-sc="order-up" data-spk="' + html(spk) + '"' + (idx <= 0 ? ' disabled' : '') + '>↑ Move up</button>'
+      + '<button type="button" class="ctx-chip-btn" data-sc="order-dn" data-spk="' + html(spk) + '"' + (idx >= speakerOrder.length - 1 ? ' disabled' : '') + '>↓ Move down</button>'
+      + '</span></div>';
+
+    if (isFloat) {
+      out += '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Background</span>'
+        + '<input type="range" min="45" max="98" step="2" value="' + Math.round(cfg.alpha * 100) + '" data-sc-rng="alpha" data-spk="' + html(spk) + '">'
+        + '<span class="ctx-meta">' + Math.round(cfg.alpha * 100) + '%</span></div>'
+        + '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Timer bar</span><span class="ctx-opt-btns">'
+        + [['inherit', 'Auto'], ['bottom', 'Bottom'], ['top', 'Top'], ['hidden', 'Hidden']].map(([v, lbl]) =>
+          '<button type="button" class="ctx-chip-btn' + (cfg.timerPos === v ? ' is-on' : '') + '" data-sc="timerPos" data-spk="' + html(spk) + '" data-val="' + v + '">' + lbl + '</button>'
+        ).join('') + '</span></div>';
+    } else {
+      out += '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Row width</span>'
         + '<input type="range" min="35" max="100" step="5" value="' + Math.round(cfg.dockWidth) + '" data-sc-rng="dockWidth" data-spk="' + html(spk) + '">'
         + '<span class="ctx-meta">' + Math.round(cfg.dockWidth) + '%</span></div>';
       if (cfg.dockWidth < 100) {
-        out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Align</span>'
-          + ['left', 'center', 'right'].map(a =>
-            '<button type="button" class="ctx-chip-btn' + (cfg.dockAlign === a ? ' is-on' : '') + '" data-sc="dockAlign" data-spk="' + html(spk) + '" data-val="' + a + '">' + a + '</button>'
-          ).join('') + '</div>';
+        out += '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Horizontal align</span><span class="ctx-opt-btns">'
+          + [['left', 'Left'], ['center', 'Center'], ['right', 'Right']].map(([a, lbl]) =>
+            '<button type="button" class="ctx-chip-btn' + (cfg.dockAlign === a ? ' is-on' : '') + '" data-sc="dockAlign" data-spk="' + html(spk) + '" data-val="' + a + '">' + lbl + '</button>'
+          ).join('') + '</span></div>';
       }
     }
 
     out += '<label class="ctx-check-row">'
       + '<input type="checkbox"' + (cfg.showLabel ? ' checked' : '') + ' data-sc-flag="showLabel" data-spk="' + html(spk) + '">'
-      + '<span>Speaker name &amp; avatar column</span><span class="ctx-check-hint">gutter</span></label>';
-
-    if (isFloat) {
-      out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Timer</span>'
-        + [['inherit', 'Auto'], ['bottom', 'Bottom'], ['top', 'Top'], ['hidden', 'Off']].map(([v, lbl]) =>
-          '<button type="button" class="ctx-chip-btn' + (cfg.timerPos === v ? ' is-on' : '') + '" data-sc="timerPos" data-spk="' + html(spk) + '" data-val="' + v + '">' + lbl + '</button>'
-        ).join('') + '</div>';
-    }
-
-    out += '<div class="ctx-sep"></div>'
-      + '<div class="ctx-inline-bar">'
-      + '<button type="button" class="ctx-chip-btn" data-sc="reset-spk" data-spk="' + html(spk) + '">Reset ' + html(spk) + '</button>'
+      + '<span class="ctx-check-txt"><span class="ctx-check-main">Show speaker name &amp; photo column</span></span></label>'
+      + '<div class="ctx-inline-bar" style="padding-top:.4rem">'
+      + '<button type="button" class="ctx-chip-btn" data-sc="reset-spk" data-spk="' + html(spk) + '">Reset ' + html(name) + '</button>'
       + '<button type="button" class="ctx-chip-btn" style="color:#fca5a5" data-sc="hide-spk" data-spk="' + html(spk) + '">Hide speaker</button>'
-      + '</div>';
+      + '</div></div></details>';
 
     pop.innerHTML = out;
     pop.dataset.anchorX = String(anchorX);
@@ -2171,7 +2269,7 @@ APP_JS = r"""(() => {
     positionFixedPopover(pop, anchorX, anchorY);
   }
 
-  // Monitor & Video Layout Popover (Issues 1, 5, 6)
+  // Screen & Video Layout Popover (clean primary controls + collapsible advanced details)
   function renderLayoutPopover(anchorX, anchorY) {
     const pop = document.getElementById('cfg-popover');
     if (!pop || !model) return;
@@ -2179,61 +2277,54 @@ APP_JS = r"""(() => {
     openPopoverKind = 'layout';
     const fs = isPlayerFullscreen();
 
-    let out = '<div class="ctx-head"><span>Monitor &amp; Stage Layout</span>'
+    let out = '<div class="ctx-head"><span>Screen &amp; Video Layout</span>'
       + '<button type="button" class="ctx-head-close" data-pop-close="1">×</button></div>';
 
-    out += '<div class="ctx-sec">Video Frame (strict aspect fit — no overzoom)</div>'
-      + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Scale</span>'
+    out += '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Page layout</span><span class="ctx-opt-btns">'
+      + '<button type="button" class="ctx-chip-btn' + (splitView ? ' is-on' : '') + '" data-lay="split" data-val="true">Side-by-side</button>'
+      + '<button type="button" class="ctx-chip-btn' + (!splitView ? ' is-on' : '') + '" data-lay="split" data-val="false">Full width</button>'
+      + '</span></div>'
+      + '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Speaker rows</span><span class="ctx-opt-btns">'
+      + '<button type="button" class="ctx-chip-btn' + (!anyFloatingSpeakers() ? ' is-on' : '') + '" data-lay="all-dock">Below video</button>'
+      + '<button type="button" class="ctx-chip-btn' + (anyFloatingSpeakers() && !anyDockedSpeakers() ? ' is-on' : '') + '" data-lay="all-float">Floating</button>'
+      + '<button type="button" class="ctx-chip-btn" data-lay="matte-float" title="Shrink video to the top and float speakers in the dark space below">Video top + Float</button>'
+      + '</span></div>'
+      + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Video size</span>'
       + '<input type="range" min="40" max="100" step="2" value="' + Math.round(stageCfg.videoScale * 100) + '" data-lay-rng="videoScale">'
       + '<span class="ctx-meta">' + Math.round(stageCfg.videoScale * 100) + '%</span></div>'
-      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Presets</span>'
-      + [0.6, 0.75, 0.85, 1.0].map(v =>
-        '<button type="button" class="ctx-chip-btn' + (Math.abs(stageCfg.videoScale - v) < 0.02 ? ' is-on' : '')
-        + '" data-lay="videoScale" data-val="' + v + '">' + (v === 1 ? 'Fit 100%' : Math.round(v * 100) + '%') + '</button>'
-      ).join('') + '</div>'
-      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Horiz</span>'
-      + [['left', 'Left'], ['center', 'Center'], ['right', 'Right']].map(([v, lbl]) =>
-        '<button type="button" class="ctx-chip-btn' + (stageCfg.videoAlignX === v ? ' is-on' : '') + '" data-lay="videoAlignX" data-val="' + v + '">' + lbl + '</button>'
-      ).join('') + '</div>'
-      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Vert</span>'
-      + [['top', 'Top'], ['center', 'Center'], ['bottom', 'Bottom']].map(([v, lbl]) =>
-        '<button type="button" class="ctx-chip-btn' + (stageCfg.videoAlignY === v ? ' is-on' : '') + '" data-lay="videoAlignY" data-val="' + v + '">' + lbl + '</button>'
-      ).join('') + '</div>'
-      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Aspect</span>'
-      + ['16:9', '4:3', '21:9'].map(v =>
-        '<button type="button" class="ctx-chip-btn' + (stageCfg.videoAspect === v ? ' is-on' : '') + '" data-lay="videoAspect" data-val="' + v + '">' + v + '</button>'
-      ).join('') + '</div>';
-
-    out += '<div class="ctx-sep"></div><div class="ctx-sec">Scrollers Placement</div>'
-      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Page</span>'
-      + '<button type="button" class="ctx-chip-btn' + (splitView ? ' is-on' : '') + '" data-lay="split" data-val="true">Split + Transcript</button>'
-      + '<button type="button" class="ctx-chip-btn' + (!splitView ? ' is-on' : '') + '" data-lay="split" data-val="false">Below video</button>'
-      + '</div>'
-      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Fullscr</span>'
-      + [['bottom', 'Dock below'], ['top', 'Dock above'], ['off', 'Float only']].map(([v, lbl]) =>
-        '<button type="button" class="ctx-chip-btn' + (stageCfg.fsDock === v ? ' is-on' : '') + '" data-lay="fsDock" data-val="' + v + '">' + lbl + '</button>'
-      ).join('') + '</div>'
-      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Speakers</span>'
-      + '<button type="button" class="ctx-chip-btn' + (!anyFloatingSpeakers() ? ' is-on' : '') + '" data-lay="all-dock">Dock all below</button>'
-      + '<button type="button" class="ctx-chip-btn' + (anyFloatingSpeakers() && !anyDockedSpeakers() ? ' is-on' : '') + '" data-lay="all-float">Float separately</button>'
-      + '<button type="button" class="ctx-chip-btn" data-lay="matte-float" title="Pin video to top at 76% and float speakers in the clean black band below it">Matte below + Float</button>'
-      + '</div>';
-
-    out += '<div class="ctx-sep"></div><div class="ctx-sec">Timer &amp; Move / Resize Handles</div>'
-      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Timer</span>'
+      + '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Timer bar</span><span class="ctx-opt-btns">'
       + [['bottom', 'Bottom'], ['top', 'Top'], ['hidden', 'Hidden']].map(([v, lbl]) =>
         '<button type="button" class="ctx-chip-btn' + (stageCfg.timerPos === v ? ' is-on' : '') + '" data-lay="timerPos" data-val="' + v + '">' + lbl + '</button>'
-      ).join('') + '</div>'
-      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Handles</span>'
-      + [['hover', 'Hover'], ['show', 'Show'], ['hidden', 'Locked']].map(([v, lbl]) =>
-        '<button type="button" class="ctx-chip-btn' + (stageCfg.handlesMode === v ? ' is-on' : '') + '" data-lay="handlesMode" data-val="' + v + '">' + lbl + '</button>'
-      ).join('') + '</div>';
+      ).join('') + '</span></div>';
 
-    out += '<div class="ctx-sep"></div>'
-      + '<div class="ctx-inline-bar">'
-      + '<button type="button" class="ctx-chip-btn" data-lay="open-scroll">Scroll &amp; Jump…</button>'
+    out += '<details class="ctx-more" data-more-key="layout-adv"' + moreOpenAttr('layout-adv') + '>'
+      + '<summary>Alignment, fullscreen &amp; drag handles</summary><div class="ctx-more-body">'
+      + '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Horizontal</span><span class="ctx-opt-btns">'
+      + [['left', 'Left'], ['center', 'Center'], ['right', 'Right']].map(([v, lbl]) =>
+        '<button type="button" class="ctx-chip-btn' + (stageCfg.videoAlignX === v ? ' is-on' : '') + '" data-lay="videoAlignX" data-val="' + v + '">' + lbl + '</button>'
+      ).join('') + '</span></div>'
+      + '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Vertical</span><span class="ctx-opt-btns">'
+      + [['top', 'Top'], ['center', 'Center'], ['bottom', 'Bottom']].map(([v, lbl]) =>
+        '<button type="button" class="ctx-chip-btn' + (stageCfg.videoAlignY === v ? ' is-on' : '') + '" data-lay="videoAlignY" data-val="' + v + '">' + lbl + '</button>'
+      ).join('') + '</span></div>'
+      + '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Video shape</span><span class="ctx-opt-btns">'
+      + ['16:9', '4:3', '21:9'].map(v =>
+        '<button type="button" class="ctx-chip-btn' + (stageCfg.videoAspect === v ? ' is-on' : '') + '" data-lay="videoAspect" data-val="' + v + '">' + v + '</button>'
+      ).join('') + '</span></div>'
+      + '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Fullscreen rows</span><span class="ctx-opt-btns">'
+      + [['bottom', 'Below'], ['top', 'Above'], ['off', 'Float only']].map(([v, lbl]) =>
+        '<button type="button" class="ctx-chip-btn' + (stageCfg.fsDock === v ? ' is-on' : '') + '" data-lay="fsDock" data-val="' + v + '">' + lbl + '</button>'
+      ).join('') + '</span></div>'
+      + '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Move handles</span><span class="ctx-opt-btns">'
+      + [['hover', 'On hover'], ['show', 'Always'], ['hidden', 'Locked']].map(([v, lbl]) =>
+        '<button type="button" class="ctx-chip-btn' + (stageCfg.handlesMode === v ? ' is-on' : '') + '" data-lay="handlesMode" data-val="' + v + '">' + lbl + '</button>'
+      ).join('') + '</span></div>'
+      + '</div></details>';
+
+    out += '<div class="ctx-sep"></div><div class="ctx-inline-bar">'
       + '<button type="button" class="ctx-chip-btn" data-lay="toggle-fs">' + (fs ? 'Exit Fullscreen (F)' : 'Enter Fullscreen (F)') + '</button>'
-      + '<button type="button" class="ctx-chip-btn" data-lay="reset-layout">Reset layout</button>'
+      + '<button type="button" class="ctx-chip-btn" data-lay="open-scroll">Scroll &amp; Jump…</button>'
+      + '<button type="button" class="ctx-chip-btn" data-lay="reset-layout">Reset</button>'
       + '</div>';
 
     pop.innerHTML = out;
@@ -2251,66 +2342,63 @@ APP_JS = r"""(() => {
     const sc = scrollCfg;
     const isSmooth = sc.mode === 'smooth';
 
-    let out = '<div class="ctx-head"><span>Scroll &amp; Jump Control</span>'
+    let out = '<div class="ctx-head"><span>Timeline Scrolling</span>'
       + '<button type="button" class="ctx-head-close" data-pop-close="1">×</button></div>';
 
-    out += '<div class="ctx-sec">Timeline Motion Mode</div>'
-      + '<div class="ctx-inline-bar">'
-      + [['page-slide', 'Page (slide)'], ['smooth', 'Smooth (no jump)'], ['page-snap', 'Page (snap)']].map(([v, lbl]) =>
-        '<button type="button" class="ctx-chip-btn' + (sc.mode === v ? ' is-on' : '') + '" data-scr="mode" data-val="' + v + '">' + lbl + '</button>'
-      ).join('') + '</div>';
-
-    const hint = isSmooth
-      ? 'Words scroll smoothly left while the red playhead stays anchored — zero page jumps.'
-      : sc.mode === 'page-slide'
-        ? 'Text stays still to read. At the gold jump line, the timeline glides smoothly to the blue landing mark.'
-        : 'Text stays still to read. Snaps immediately to the blue landing mark when playhead hits the gold jump line.';
-    out += '<div style="padding:.12rem .75rem .28rem;font-size:.74rem;color:#cbd5e1;line-height:1.35">' + hint + '</div>';
+    out += '<div class="ctx-mode-list">'
+      + [
+          ['page-slide', 'Page turn (smooth glide)', 'Words stay still to read, then glide gently when playback reaches the gold line.'],
+          ['smooth', 'Continuous scroll (no jump)', 'Words move smoothly left while the red playhead stays in one spot.'],
+          ['page-snap', 'Page turn (instant)', 'Words stay still to read, then snap immediately at the gold line.'],
+        ].map(([v, title, desc]) =>
+          '<button type="button" class="ctx-mode-card' + (sc.mode === v ? ' is-on' : '') + '" data-scr="mode" data-val="' + v + '">'
+          + '<span class="ctx-mode-title">' + (sc.mode === v ? '✓ ' : '') + title + '</span>'
+          + '<span class="ctx-mode-desc">' + desc + '</span></button>'
+        ).join('')
+      + '</div>';
 
     out += '<label class="ctx-check-row">'
       + '<input type="checkbox"' + (sc.showGuide ? ' checked' : '') + ' data-scr-flag="showGuide">'
-      + '<span><strong>' + (isSmooth ? 'Show playhead anchor mark' : 'Show jump line, landing mark &amp; 3s countdown') + '</strong></span></label>';
+      + '<span class="ctx-check-txt"><span class="ctx-check-main">'
+      + (isSmooth ? 'Show playhead anchor mark' : 'Show jump line, landing mark &amp; 3-second countdown')
+      + '</span></span></label>';
 
+    const jp = Math.round(sc.jumpAt * 100);
+    const lp = Math.round(sc.landAt * 100);
     if (!isSmooth) {
-      const jp = Math.round(sc.jumpAt * 100);
-      const lp = Math.round(sc.landAt * 100);
-      out += '<div class="ctx-sep"></div><div class="ctx-sec">Page Turn Marks</div>'
-        + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Jump at</span>'
+      out += '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Jump line</span>'
         + '<input type="range" min="60" max="95" step="1" value="' + jp + '" data-scr-rng="jumpAt">'
         + '<span class="ctx-meta">' + jp + '%</span></div>'
-        + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Presets</span>'
-        + [75, 85, 92].map(v =>
-          '<button type="button" class="ctx-chip-btn' + (Math.abs(jp - v) <= 1 ? ' is-on' : '') + '" data-scr="jumpAt" data-val="' + (v / 100) + '">' + v + '%</button>'
-        ).join('') + '</div>'
-        + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Land at</span>'
+        + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Landing spot</span>'
         + '<input type="range" min="5" max="45" step="1" value="' + lp + '" data-scr-rng="landAt">'
-        + '<span class="ctx-meta">' + lp + '%</span></div>'
-        + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Presets</span>'
-        + [12, 20, 30].map(v =>
-          '<button type="button" class="ctx-chip-btn' + (Math.abs(lp - v) <= 1 ? ' is-on' : '') + '" data-scr="landAt" data-val="' + (v / 100) + '">' + v + '%</button>'
-        ).join('') + '</div>';
-      if (sc.mode === 'page-slide') {
-        out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Slide</span>'
-          + [[180, 'Fast (180ms)'], [280, 'Gentle (280ms)'], [420, 'Slow (420ms)']].map(([v, lbl]) =>
-            '<button type="button" class="ctx-chip-btn' + (sc.slideMs === v ? ' is-on' : '') + '" data-scr="slideMs" data-val="' + v + '">' + lbl + '</button>'
-          ).join('') + '</div>';
-      }
+        + '<span class="ctx-meta">' + lp + '%</span></div>';
     } else {
-      const lp = Math.round(sc.landAt * 100);
-      out += '<div class="ctx-sep"></div><div class="ctx-sec">Playhead Anchor Position</div>'
-        + '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Anchor</span>'
+      out += '<div class="ctx-slider-row"><span class="ctx-inline-lbl">Playhead spot</span>'
         + '<input type="range" min="5" max="45" step="1" value="' + lp + '" data-scr-rng="landAt">'
-        + '<span class="ctx-meta">' + lp + '%</span></div>'
-        + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Presets</span>'
-        + [15, 25, 35].map(v =>
-          '<button type="button" class="ctx-chip-btn' + (Math.abs(lp - v) <= 1 ? ' is-on' : '') + '" data-scr="landAt" data-val="' + (v / 100) + '">' + v + '%</button>'
-        ).join('') + '</div>';
+        + '<span class="ctx-meta">' + lp + '%</span></div>';
     }
 
-    out += '<div class="ctx-sep"></div><div class="ctx-inline-bar">'
-      + '<button type="button" class="ctx-chip-btn" data-scr="reset">Reset scroll</button>'
-      + '<button type="button" class="ctx-chip-btn" data-scr="open-layout">Layout…</button>'
-      + '</div>';
+    out += '<details class="ctx-more" data-more-key="scroll-adv"' + moreOpenAttr('scroll-adv') + '>'
+      + '<summary>Glide speed &amp; presets</summary><div class="ctx-more-body">';
+    if (sc.mode === 'page-slide') {
+      out += '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Glide speed</span><span class="ctx-opt-btns">'
+        + [[180, 'Fast'], [280, 'Gentle'], [420, 'Slow']].map(([v, lbl]) =>
+          '<button type="button" class="ctx-chip-btn' + (sc.slideMs === v ? ' is-on' : '') + '" data-scr="slideMs" data-val="' + v + '">' + lbl + '</button>'
+        ).join('') + '</span></div>';
+    }
+    if (!isSmooth) {
+      out += '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Jump presets</span><span class="ctx-opt-btns">'
+        + [75, 85, 92].map(v =>
+          '<button type="button" class="ctx-chip-btn' + (Math.abs(jp - v) <= 1 ? ' is-on' : '') + '" data-scr="jumpAt" data-val="' + (v / 100) + '">' + v + '%</button>'
+        ).join('') + '</span></div>'
+        + '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Landing presets</span><span class="ctx-opt-btns">'
+        + [12, 20, 30].map(v =>
+          '<button type="button" class="ctx-chip-btn' + (Math.abs(lp - v) <= 1 ? ' is-on' : '') + '" data-scr="landAt" data-val="' + (v / 100) + '">' + v + '%</button>'
+        ).join('') + '</span></div>';
+    }
+    out += '<div class="ctx-inline-bar" style="padding-top:.35rem">'
+      + '<button type="button" class="ctx-chip-btn" data-scr="reset">Reset to default</button>'
+      + '</div></div></details>';
 
     pop.innerHTML = out;
     pop.dataset.anchorX = String(anchorX);
@@ -2318,7 +2406,7 @@ APP_JS = r"""(() => {
     positionFixedPopover(pop, anchorX, anchorY);
   }
 
-  // Meta-labels config popover (Issue 4: toggle & explain 'loud' + pitch/pace badges)
+  // Voice Emphasis Labels popover (plain English, clean disclosure for details)
   function renderLabelsPopover(anchorX, anchorY) {
     const pop = document.getElementById('cfg-popover');
     if (!pop) return;
@@ -2326,45 +2414,50 @@ APP_JS = r"""(() => {
     openPopoverKind = 'labels';
     const ml = metaLabels;
 
-    let out = '<div class="ctx-head"><span>Meta-Labels Config</span>'
+    let out = '<div class="ctx-head"><span>Voice Emphasis Labels</span>'
       + '<button type="button" class="ctx-head-close" data-pop-close="1">×</button></div>';
 
     out += '<label class="ctx-check-row">'
       + '<input type="checkbox"' + (ml.enabled ? ' checked' : '') + ' data-ml-flag="enabled">'
-      + '<span><strong>Show meta-labels on turns</strong></span></label>';
+      + '<span class="ctx-check-txt"><span class="ctx-check-main">Show emphasis labels on speech</span>'
+      + '<span class="ctx-sub">Marks moments that are louder, faster, or higher-pitched than normal</span></span></label>';
 
-    out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Style</span>'
-      + [['words', 'Plain words'], ['numeric', 'Numeric'], ['both', 'Both']].map(([v, lbl]) =>
+    out += '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Label style</span><span class="ctx-opt-btns">'
+      + [['words', 'Plain words'], ['numeric', 'Numbers'], ['both', 'Both']].map(([v, lbl]) =>
         '<button type="button" class="ctx-chip-btn' + (ml.format === v ? ' is-on' : '') + '" data-ml="format" data-val="' + v + '">' + lbl + '</button>'
-      ).join('') + '</div>'
-      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Corner</span>'
-      + [['br', 'Bot-right'], ['tr', 'Top-right'], ['tl', 'Top-left']].map(([v, lbl]) =>
-        '<button type="button" class="ctx-chip-btn' + (ml.position === v ? ' is-on' : '') + '" data-ml="position" data-val="' + v + '">' + lbl + '</button>'
-      ).join('') + '</div>'
-      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Trigger</span>'
-      + [['strict', 'Major only'], ['normal', 'Normal'], ['all', 'Sensitive']].map(([v, lbl]) =>
+      ).join('') + '</span></div>'
+      + '<div class="ctx-opt-row"><span class="ctx-opt-lbl">How often</span><span class="ctx-opt-btns">'
+      + [['strict', 'Major only'], ['normal', 'Normal'], ['all', 'More']].map(([v, lbl]) =>
         '<button type="button" class="ctx-chip-btn' + (ml.sensitivity === v ? ' is-on' : '') + '" data-ml="sensitivity" data-val="' + v + '">' + lbl + '</button>'
-      ).join('') + '</div>'
-      + '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Max/turn</span>'
+      ).join('') + '</span></div>';
+
+    out += '<details class="ctx-more" data-more-key="labels-adv"' + moreOpenAttr('labels-adv') + '>'
+      + '<summary>Choose label types &amp; corner</summary><div class="ctx-more-body">'
+      + '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Corner</span><span class="ctx-opt-btns">'
+      + [['br', 'Bottom-right'], ['tr', 'Top-right'], ['tl', 'Top-left']].map(([v, lbl]) =>
+        '<button type="button" class="ctx-chip-btn' + (ml.position === v ? ' is-on' : '') + '" data-ml="position" data-val="' + v + '">' + lbl + '</button>'
+      ).join('') + '</span></div>'
+      + '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Max per turn</span><span class="ctx-opt-btns">'
       + [1, 2].map(v =>
         '<button type="button" class="ctx-chip-btn' + (ml.maxPerBlock === v ? ' is-on' : '') + '" data-ml="maxPerBlock" data-val="' + v + '">' + v + '</button>'
-      ).join('') + '</div>';
+      ).join('') + '</span></div>'
+      + '<div class="ctx-sep"></div>';
 
-    out += '<div class="ctx-sep"></div><div class="ctx-sec">Label types (vs speaker baseline)</div>';
     const defs = [
-      ['falsetto', 'Falsetto / high pitch peak', '+9.5st+ (semitones)'],
-      ['high', 'Rising / elevated pitch', '+6st rising'],
-      ['low', 'Low pitch drop', '−3.5st+'],
-      ['loud', 'Loud volume spike', '+7.5dB peak'],
-      ['quiet', 'Quiet / soft voice', '−6.5dB'],
-      ['fast', 'Fast speaking pace', '1.45×+ speed'],
-      ['slow', 'Slow / drawn-out pace', '≤0.62× speed'],
+      ['falsetto', 'Falsetto / very high pitch', '9.5+ semitones above normal'],
+      ['high', 'Rising / high pitch', '6+ semitones rising'],
+      ['low', 'Low pitch drop', '3.5+ semitones below normal'],
+      ['loud', 'Loud voice spike', '7.5+ dB louder than normal'],
+      ['quiet', 'Quiet / soft voice', '6.5+ dB softer than normal'],
+      ['fast', 'Fast speaking pace', '1.45× normal speed or faster'],
+      ['slow', 'Slow / drawn-out pace', '0.62× normal speed or slower'],
     ];
-    for (const [k, lbl, hint] of defs) {
-      out += '<label class="ctx-check-row">'
+    for (const [k, lbl, tip] of defs) {
+      out += '<label class="ctx-check-row" title="' + html(tip) + '">'
         + '<input type="checkbox"' + (ml.kinds[k] ? ' checked' : '') + ' data-ml-kind="' + k + '">'
-        + '<span>' + lbl + '</span><span class="ctx-check-hint">' + hint + '</span></label>';
+        + '<span class="ctx-check-txt"><span class="ctx-check-main">' + lbl + '</span></span></label>';
     }
+    out += '</div></details>';
 
     pop.innerHTML = out;
     pop.dataset.anchorX = String(anchorX);
@@ -2372,69 +2465,78 @@ APP_JS = r"""(() => {
     positionFixedPopover(pop, anchorX, anchorY);
   }
 
-  // Right-click menu on any specific row or speaker
+  // Right-click menu on rows: simple, plain-English Show / Hide checklist
   function renderStreamMenu(anchorX, anchorY) {
     const menu = document.getElementById('stream-ctx-menu');
     if (!menu || !ctxMenuState || !model) return;
     closeCfgPopover();
     const {hitSpk, hitKind} = ctxMenuState;
     const sc = hitSpk ? speakerConfigs[hitSpk] : null;
+    const spkName = hitSpk ? spkDisplay(hitSpk) : '';
     const hitRi = sc && hitKind ? sc.rows.findIndex(r => r.kind === hitKind) : -1;
     ctxMenuState.hitRi = hitRi;
 
     let out = '<div class="ctx-head">'
       + (hitSpk ? avatarHtml(hitSpk, 'av-xs') : '')
-      + '<span>' + html(hitSpk && hitRi >= 0
-        ? hitSpk + ' · ' + (STREAM_MAP.get(hitKind)?.short || hitKind)
-        : (hitSpk || 'Speakers & Layers')) + '</span></div>';
-
-    if (sc && hitRi >= 0) {
-      const row = sc.rows[hitRi];
-      const bgOpts = combinableBgLayers(hitSpk).filter(b => b.id !== row.kind);
-      const canMerge = hitRi > 0 && canMergeAsBg(row.kind) && row.kind !== sc.rows[hitRi - 1].kind;
-      out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">Row</span>'
-        + '<button type="button" class="ctx-chip-btn" data-act="row-up" data-spk="' + html(hitSpk) + '" data-ri="' + hitRi + '"' + (hitRi <= 0 ? ' disabled' : '') + '>↑ Up</button>'
-        + '<button type="button" class="ctx-chip-btn" data-act="row-dn" data-spk="' + html(hitSpk) + '" data-ri="' + hitRi + '"' + (hitRi >= sc.rows.length - 1 ? ' disabled' : '') + '>↓ Down</button>'
-        + (canMerge ? '<button type="button" class="ctx-chip-btn" data-act="row-merge" data-spk="' + html(hitSpk) + '" data-ri="' + hitRi + '">Merge ↑</button>' : '')
-        + '</div>';
-      if (bgOpts.length) {
-        out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">BG</span>'
-          + bgOpts.map(b => {
-            const on = row.bg.includes(b.id);
-            return '<button type="button" class="ctx-chip-btn' + (on ? ' is-on' : '') + '" data-act="row-bg" data-spk="'
-              + html(hitSpk) + '" data-ri="' + hitRi + '" data-bg="' + html(b.id) + '">'
-              + (on ? '✓ ' : '+ ') + html(b.short) + '</button>';
-          }).join('') + '</div>';
-      }
-      if (sc.rows.length > 1) {
-        out += '<button type="button" class="ctx-item ctx-danger" data-act="rm-one" data-spk="'
-          + html(hitSpk) + '" data-ri="' + hitRi + '"><span>Remove this row from ' + html(hitSpk) + '</span></button>';
-      }
-      out += '<div class="ctx-sep"></div>';
-    }
+      + '<span>' + html(hitSpk ? (spkName + ' — Show / Hide Rows') : 'Show / Hide Rows (All Speakers)') + '</span>'
+      + '<button type="button" class="ctx-head-close" data-act="close-menu">×</button></div>';
 
     if (sc) {
-      const missing = AVAILABLE_STREAMS.filter(s => !speakerHasKind(sc, s.id));
-      if (missing.length) {
-        out += '<div class="ctx-inline-bar"><span class="ctx-inline-lbl">+ Row</span>'
-          + missing.map(st =>
-            '<button type="button" class="ctx-chip-btn is-off" data-act="add-one" data-spk="'
-            + html(hitSpk) + '" data-kind="' + html(st.id) + '">+ ' + html(st.short) + '</button>'
-          ).join('') + '</div>';
+      for (const st of AVAILABLE_STREAMS) {
+        const checked = speakerHasKind(sc, st.id);
+        out += '<label class="ctx-check-row">'
+          + '<input type="checkbox"' + (checked ? ' checked' : '')
+          + ' data-ctx-row="' + html(st.id) + '" data-spk="' + html(hitSpk) + '">'
+          + '<span class="ctx-check-txt"><span class="ctx-check-main">' + html(st.label) + '</span>'
+          + (st.desc ? '<span class="ctx-sub">' + html(st.desc) + '</span>' : '')
+          + '</span></label>';
       }
-      out += '<button type="button" class="ctx-item" data-act="open-spk-cfg" data-spk="' + html(hitSpk) + '">'
-        + '<span>⚙ ' + html(hitSpk) + ' Row Composer &amp; Size…</span></button>';
-      out += '<button type="button" class="ctx-item" data-act="toggle-spk-float" data-spk="' + html(hitSpk) + '">'
-        + '<span>' + (sc.placement === 'float' ? 'Dock ' + html(hitSpk) + ' below video' : 'Float ' + html(hitSpk) + ' independently') + '</span></button>';
-      out += '<div class="ctx-sep"></div>';
-    }
 
-    out += '<div class="ctx-inline-bar">'
-      + '<button type="button" class="ctx-chip-btn" data-act="open-all">All Speakers…</button>'
-      + '<button type="button" class="ctx-chip-btn" data-act="open-scroll">Scroll…</button>'
-      + '<button type="button" class="ctx-chip-btn" data-act="open-layout">Layout…</button>'
-      + (hasProsody ? '<button type="button" class="ctx-chip-btn" data-act="open-labels">Labels…</button>' : '')
-      + '</div>';
+      if (hitRi >= 0) {
+        const row = sc.rows[hitRi];
+        const rowLabel = STREAM_MAP.get(row.kind)?.short || row.kind;
+        const bgOpts = combinableBgLayers(hitSpk).filter(b => b.id !== row.kind);
+        if (bgOpts.length) {
+          out += '<div class="ctx-sep"></div>'
+            + '<div class="ctx-sec">Show behind ' + html(rowLabel) + '</div>';
+          for (const b of bgOpts) {
+            const on = row.bg.includes(b.id);
+            out += '<label class="ctx-check-row">'
+              + '<input type="checkbox"' + (on ? ' checked' : '')
+              + ' data-ctx-bg="' + html(b.id) + '" data-spk="' + html(hitSpk) + '" data-ri="' + hitRi + '">'
+              + '<span class="ctx-check-txt"><span class="ctx-check-main">' + html(b.label) + '</span></span></label>';
+          }
+        }
+        if (sc.rows.length > 1) {
+          out += '<div class="ctx-sep"></div>'
+            + '<div class="ctx-opt-row"><span class="ctx-opt-lbl">Move ' + html(rowLabel) + '</span>'
+            + '<span class="ctx-opt-btns">'
+            + '<button type="button" class="ctx-chip-btn" data-act="row-up" data-spk="' + html(hitSpk) + '" data-ri="' + hitRi + '"' + (hitRi <= 0 ? ' disabled' : '') + '>↑ Up</button>'
+            + '<button type="button" class="ctx-chip-btn" data-act="row-dn" data-spk="' + html(hitSpk) + '" data-ri="' + hitRi + '"' + (hitRi >= sc.rows.length - 1 ? ' disabled' : '') + '>↓ Down</button>'
+            + '</span></div>';
+        }
+      }
+
+      out += '<div class="ctx-sep"></div>'
+        + '<button type="button" class="ctx-item" data-act="toggle-spk-float" data-spk="' + html(hitSpk) + '">'
+        + '<span>' + (sc.placement === 'float' ? 'Dock ' + html(spkName) + ' below video' : 'Float ' + html(spkName) + ' over video') + '</span></button>'
+        + '<button type="button" class="ctx-item" data-act="open-spk-cfg" data-spk="' + html(hitSpk) + '">'
+        + '<span>More settings (size, all speakers, layout)…</span></button>';
+    } else {
+      const visSpks = speakerOrder.filter(s => speakerConfigs[s]?.visible);
+      const targets = visSpks.length ? visSpks : speakerOrder;
+      for (const st of AVAILABLE_STREAMS) {
+        const allHave = targets.length > 0 && targets.every(s => speakerHasKind(speakerConfigs[s], st.id));
+        out += '<label class="ctx-check-row">'
+          + '<input type="checkbox"' + (allHave ? ' checked' : '')
+          + ' data-ctx-all-row="' + html(st.id) + '">'
+          + '<span class="ctx-check-txt"><span class="ctx-check-main">' + html(st.label) + '</span>'
+          + (st.desc ? '<span class="ctx-sub">' + html(st.desc) + '</span>' : '')
+          + '</span></label>';
+      }
+      out += '<div class="ctx-sep"></div>'
+        + '<button type="button" class="ctx-item" data-act="open-all"><span>More settings (speakers, size, layout)…</span></button>';
+    }
 
     menu.innerHTML = out;
     const pos = positionFixedPopover(menu, anchorX, anchorY);
@@ -2704,6 +2806,7 @@ APP_JS = r"""(() => {
       clip_end: raw.clip_end != null ? Number(raw.clip_end) : null,
       chapters: raw.chapters || [],
       avatars: raw.avatars && typeof raw.avatars === 'object' ? raw.avatars : {},
+      speaker_names: raw.speaker_names && typeof raw.speaker_names === 'object' ? raw.speaker_names : {},
       tracks: Array.isArray(raw.tracks) ? raw.tracks : [],
       segments,
       vocab,
@@ -2929,6 +3032,43 @@ APP_JS = r"""(() => {
     return '';
   }
 
+  function shortGrammarCue(v) {
+    if (!v) return '';
+    const r = String(v.role || '').toLowerCase();
+    const n = String(v.note || '').toLowerCase();
+    if (r.startsWith('particle')) {
+      const sub = r.replace(/^particle\s*[:,-]?\s*/, '').trim();
+      return sub ? sub.split(/[,/]/)[0].trim().slice(0, 14) : 'particle';
+    }
+    if (r.includes('humble') || n.includes('humble')) return 'humble';
+    if (r.includes('honorific') || r.includes('respectful')) return 'respectful';
+    if (r.includes('polite past')) return 'polite past';
+    if (r.includes('polite request')) return 'polite req';
+    if (r.includes('polite')) return 'polite';
+    if (r.includes('voseo')) return 'AR voseo';
+    if (r.includes('humorous') || r.includes('ironic') || n.includes('joking')) return 'humorous';
+    if (r.includes('metaphor') || r.includes('figurative')) return 'figurative';
+    if (r.includes('discourse') || r.includes('filler') || r.includes('hedge') || n.includes('filler')) return 'filler / hedge';
+    if (r.includes('slang') || v.diff === 'slang') return 'slang';
+    if (r.includes('rioplatense') || r.includes('idiom') || v.diff === 'ar') return 'local idiom';
+    if (r.includes('colloquial') || r.includes('spoken') || r.includes('contraction')) return 'casual';
+    if (r.includes('conjecture')) return 'guess';
+    if (r.includes('question')) return 'question';
+    if (r.includes('passive')) return 'passive';
+    if (r.includes('potential')) return 'can / able';
+    if (v.diff === 'mtg') return 'game term';
+    if (v.diff === 'econ') return 'econ / pol';
+    return '';
+  }
+  function wordTooltipText(tok) {
+    const v = tok && tok.vid >= 0 ? vocabById.get(tok.vid) : null;
+    if (!tok || (!tok.gloss && !v)) return '';
+    const parts = [tok.word + (tok.gloss ? ' = ' + tok.gloss : '')];
+    if (v && v.role) parts.push('[' + v.role + ']');
+    if (v && v.note) parts.push('— ' + v.note);
+    return parts.join(' ');
+  }
+
   function buildLaneBlockContent(seg, s0, s1, blockPx, info, ctx, withFuri) {
     const pad = 6;
     const innerPx = blockPx - pad * 2;
@@ -2973,7 +3113,8 @@ APP_JS = r"""(() => {
       const ovColor = wordOverlapColor(tok, info);
       const leftPct = ((pad + xs[i]) / blockPx) * 100;
       const vAttr = tok.vid >= 0 ? ' data-v="' + tok.vid + '"' : '';
-      const tipAttr = tok.gloss ? ' title="' + html(tok.word + ' — ' + tok.gloss) + '"' : '';
+      const tipStr = wordTooltipText(tok);
+      const tipAttr = tipStr ? ' title="' + html(tipStr) + '"' : '';
       const innerTxt = useFuri && tok.ruby ? rubyHtml(tok.ruby, tok.word) : html(tok.word);
       spans.push(
         '<span class="lane-word' + (ovColor ? ' lw-ov' : '') + (tok.vid >= 0 ? ' has-vocab' : '') + '"'
@@ -2998,9 +3139,18 @@ APP_JS = r"""(() => {
     if (!ctx || innerPx < 28) {
       return {cls: '', inner: html(allTokens.map(t => t.gloss).join(' · '))};
     }
-    const spacePx = 7;
+    const spacePx = 8;
+    const cueFor = t => {
+      const v = t.vid >= 0 ? vocabById.get(t.vid) : null;
+      return shortGrammarCue(v);
+    };
     const measureList = list => {
-      const ws = list.map(t => Math.ceil(ctx.measureText(t.gloss).width));
+      const ws = list.map(t => {
+        const gw = Math.ceil(ctx.measureText(t.gloss).width);
+        const cue = cueFor(t);
+        const cw = cue ? Math.ceil(ctx.measureText(cue).width * 0.78) : 0;
+        return Math.max(gw, cw) + 4;
+      });
       return {ws, total: ws.reduce((a, b) => a + b, 0) + Math.max(0, list.length - 1) * spacePx};
     };
     let tokens = allTokens;
@@ -3037,13 +3187,19 @@ APP_JS = r"""(() => {
     for (let i = 0; i < tokens.length; i++) {
       if (clipped && xs[i] >= innerPx) break;
       const tok = tokens[i];
+      const v = tok.vid >= 0 ? vocabById.get(tok.vid) : null;
+      const cue = shortGrammarCue(v);
+      const hasNuance = Boolean(v && v.note);
+      const tipStr = wordTooltipText(tok) || (tok.word + ' = ' + tok.gloss);
       const leftPct = ((pad + xs[i]) / blockPx) * 100;
       const vAttr = tok.vid >= 0 ? ' data-v="' + tok.vid + '"' : '';
       spans.push(
-        '<span class="lane-word' + (tok.vid >= 0 ? ' has-vocab' : '') + '"'
+        '<span class="lane-word' + (tok.vid >= 0 ? ' has-vocab' : '') + (hasNuance ? ' has-nuance' : '') + '"'
         + ' data-t="' + tok.start + '" data-e="' + tok.end + '"' + vAttr
-        + ' style="left:' + leftPct.toFixed(3) + '%" title="' + html(tok.word + ' = ' + tok.gloss) + '">'
-        + html(tok.gloss) + '</span>'
+        + ' style="left:' + leftPct.toFixed(3) + '%" title="' + html(tipStr) + '">'
+        + '<span class="ww-g">' + html(tok.gloss) + '</span>'
+        + (cue ? '<span class="ww-c">' + html(cue) + '</span>' : '')
+        + '</span>'
       );
     }
     return {
@@ -3270,7 +3426,7 @@ APP_JS = r"""(() => {
       if (active) {
         const spkNotes = Object.entries(prosodySpeakers || {}).map(([s, st]) => {
           const c = model ? model.colorOf(s).fg : '#fff';
-          return '<span class="tl-spk" style="color:' + c + '">' + html(s) + ' '
+          return '<span class="tl-spk" style="color:' + c + '">' + html(spkDisplay(s)) + ' '
             + Math.round(st.median_f0_hz || 0) + 'Hz · ' + (st.median_sps || 0).toFixed(1) + 'syl/s</span>';
         }).join('');
         leg.innerHTML =
@@ -3562,16 +3718,17 @@ APP_JS = r"""(() => {
           + ' title="' + html(spk + ' vocal overlap / backchannel (' + dur + 's)') + '"></div>';
       }).join('') : '';
 
+      const spkName = spkDisplay(spk);
       const av = avatarHtml(spk, isFloat ? 'av-sm' : (sameAsPrev ? 'av-sm' : ''));
       const kindShort = STREAM_MAP.get(kind)?.short || kind;
       const bgExtras = bg.filter(b => b !== 'pulses' && !(isPrimaryStreamKind(kind) && (b === 'tone' || b === 'badges')));
-      const kindBadge = kindShort + (bgExtras.length ? '+' + bgExtras.map(b => b === 'tone' ? 'tone' : b === 'badges' ? 'lbl' : b.replace(/^track:/, '')).join('+') : '');
+      const kindBadge = kindShort + (bgExtras.length ? ' + ' + bgExtras.map(b => b === 'tone' ? 'curve' : b === 'badges' ? 'labels' : b.replace(/^track:/, '')).join(', ') : '');
       const grip = !isFloat ? '<span class="lbl-grip" aria-hidden="true">⋮</span>' : '';
       const cfgBtn = !sameAsPrev
-        ? '<button type="button" class="lbl-cfg-btn" data-cfg-spk="' + html(spk) + '" title="Configure ' + html(spk) + ' rows, order, BG layers &amp; size">⚙</button>'
+        ? '<button type="button" class="lbl-cfg-btn" data-cfg-spk="' + html(spk) + '" title="Customize ' + html(spkName) + ' rows and size">⚙</button>'
         : '';
       const labelHtml = !sameAsPrev
-        ? grip + av + '<span class="lbl-txt">' + html(spk) + '</span>'
+        ? grip + av + '<span class="lbl-txt">' + html(spkName) + '</span>'
           + (rows.length > 1 || !isPrimaryStreamKind(kind) || bgExtras.length ? '<span class="lbl-kind">' + html(kindBadge) + '</span>' : '')
           + cfgBtn
         : grip + av + '<span class="lbl-txt">' + html(kindBadge) + '</span>';
@@ -3580,7 +3737,7 @@ APP_JS = r"""(() => {
         + ' data-row-spk="' + html(spk) + '" data-row-kind="' + html(kind) + '" data-row-idx="' + ri + '">'
         + '<div class="' + lblCls + (av ? ' has-avatar' : '') + (sameAsPrev ? ' sub-lbl' : '') + (isFiltered ? ' filtered' : '') + '"'
         + ' data-speaker="' + html(spk) + '" style="--spk-color:' + c.fg + '"'
-        + ' title="' + (isFloat ? 'Right-click or ⚙ to reorder rows / combine BG' : 'Drag up/down to reorder row or speaker · Right-click or ⚙ to combine BG') + '">'
+        + ' title="' + html(spkName + (spkName !== spk ? ' (' + spk + ')' : '') + ' — right-click to show/hide rows') + '">'
         + labelHtml + '</div>'
         + '<div class="' + trkCls + '"><div class="tl-strip">' + gridHtml + bandsHtml + bgAnnHtml + pulses + blocks.join('') + '</div>'
         + '<div class="land-line"></div><div class="jump-line"></div><div class="lane-playhead"></div></div></div>';
@@ -3735,13 +3892,14 @@ APP_JS = r"""(() => {
         card.className = 'spk-float-card';
         card.setAttribute('data-spk', spk);
         card.dataset.spk = spk;
+        const spkName = spkDisplay(spk);
         card.innerHTML =
-          '<div class="fc-bar" data-move-spk="' + html(spk) + '" title="Drag to move ' + html(spk) + ' anywhere on stage">'
+          '<div class="fc-bar" data-move-spk="' + html(spk) + '" title="Drag to move ' + html(spkName) + ' anywhere on stage">'
           + '<span class="fc-bar-grip">⋮⋮</span>'
           + avatarHtml(spk, 'av-xs')
-          + '<span class="fc-bar-name">' + html(spk) + '</span>'
+          + '<span class="fc-bar-name">' + html(spkName) + '</span>'
           + '<span class="fc-bar-btns">'
-          + '<button type="button" class="fc-bar-btn" data-fc-act="cfg" data-spk="' + html(spk) + '" title="Subcomponents &amp; size">⚙</button>'
+          + '<button type="button" class="fc-bar-btn" data-fc-act="cfg" data-spk="' + html(spk) + '" title="Show/hide rows and size">⚙</button>'
           + '<button type="button" class="fc-bar-btn" data-fc-act="dock" data-spk="' + html(spk) + '" title="Dock below video">⊟</button>'
           + '<button type="button" class="fc-bar-btn" data-fc-act="hide" data-spk="' + html(spk) + '" title="Hide speaker">×</button>'
           + '</span></div>'
@@ -3965,7 +4123,7 @@ APP_JS = r"""(() => {
     if (ovIdx !== -1) {
       const ov = model.overlapSpans[ovIdx];
       const dur = Math.max(0.1, ov.end - ov.start);
-      const who = [...ov.speakers].map(s => '<strong style="color:' + model.colorOf(s).fg + '">' + html(s) + '</strong>').join(' + ');
+      const who = [...ov.speakers].map(s => '<strong style="color:' + model.colorOf(s).fg + '">' + html(spkDisplay(s)) + '</strong>').join(' + ');
       status.innerHTML = '<span class="ov-badge">∥ ' + (ovIdx + 1) + '/' + model.overlapSpans.length + ' · ' + dur.toFixed(1) + 's</span>' + who;
       return;
     }
@@ -4034,7 +4192,7 @@ APP_JS = r"""(() => {
   }
 
   function chipHtml(chip) {
-    const spk = chip.other.speaker || 'Other';
+    const spk = spkDisplay(chip.other.speaker);
     return ' <span class="ov-chip" data-target="' + chip.other.index + '" style="--ov-color:' + chip.color + '"'
       + ' title="' + html(spk + ': ' + chip.other.text) + '">∥ <strong>' + html(spk) + '</strong>: “'
       + html(clipText(chip.other.text, 40)) + '”</span>';
@@ -4103,10 +4261,16 @@ APP_JS = r"""(() => {
         extraHtml += '<div class="segment-std" title="Neutral Spanish equivalent">→ ' + html(seg.std) + '</div>';
       }
       if (hasStudy && showGloss && seg.tokens.length) {
-        const pairs = seg.tokens.filter(tk => tk.gloss).map(tk =>
-          '<span class="ww-pair" data-t="' + tk.start + '"' + (tk.vid >= 0 ? ' data-v="' + tk.vid + '"' : '') + '>'
-          + '<span class="ww-ja"' + (doc.language ? ' lang="' + html(doc.language) + '"' : '') + '>' + html(tk.word) + '</span>' + html(tk.gloss) + '</span>'
-        ).join('');
+        const pairs = seg.tokens.filter(tk => tk.gloss).map(tk => {
+          const v = tk.vid >= 0 ? vocabById.get(tk.vid) : null;
+          const cue = shortGrammarCue(v);
+          const tip = wordTooltipText(tk);
+          return '<span class="ww-pair" data-t="' + tk.start + '"' + (tk.vid >= 0 ? ' data-v="' + tk.vid + '"' : '')
+            + (tip ? ' title="' + html(tip) + '"' : '') + '>'
+            + '<span class="ww-ja"' + (doc.language ? ' lang="' + html(doc.language) + '"' : '') + '>' + html(tk.word) + '</span>'
+            + html(tk.gloss) + (cue ? ' <span style="color:#fde68a;font-size:.86em">(' + html(cue) + ')</span>' : '')
+            + '</span>';
+        }).join('');
         if (pairs) extraHtml += '<div class="segment-ww">' + pairs + '</div>';
       }
       if (hasStudy && showEnglish && seg.en) {
@@ -4133,7 +4297,7 @@ APP_JS = r"""(() => {
         + ' data-index="' + seg.index + '" data-start="' + seg.start + '" data-end="' + seg.end + '"'
         + (partnerIds ? ' data-partners="' + partnerIds + '"' : '') + '>'
         + '<span class="segment-time">' + clock(seg.start) + ovMark + '</span>'
-        + '<span class="segment-speaker">' + avatarHtml(seg.speaker, 'av-xs') + '<span>' + html(seg.speaker || 'Unassigned') + '</span></span>'
+        + '<span class="segment-speaker">' + avatarHtml(seg.speaker, 'av-xs') + '<span>' + html(spkDisplay(seg.speaker)) + '</span></span>'
         + '<div class="segment-text"><div' + (isCjk ? ' class="segment-ja"' : '') + segLang + '>' + body + '</div>'
         + extraHtml + '</div></div>';
     }).join('');
@@ -4294,7 +4458,7 @@ APP_JS = r"""(() => {
     if (status && showBadges && hoveredIndices && hoveredIndices.size) {
       const segs = [...hoveredIndices].map(i => model.byIndex.get(i)).filter(Boolean).sort((a, b) => a.start - b.start);
       status.innerHTML = segs.map(s =>
-        '<strong style="color:' + model.colorOf(s.speaker).fg + '">' + html(s.speaker) + '</strong>: “' + html(clipText(s.text, 48)) + '”'
+        '<strong style="color:' + model.colorOf(s.speaker).fg + '">' + html(spkDisplay(s.speaker)) + '</strong>: “' + html(clipText(s.text, 48)) + '”'
       ).join(' <span style="color:var(--gold)">∥</span> ');
     } else {
       paintLanesStatus();
@@ -4933,13 +5097,35 @@ APP_JS = r"""(() => {
       }
     });
 
+    pop.addEventListener('toggle', ev => {
+      const det = ev.target;
+      if (det && det.dataset && det.dataset.moreKey) {
+        if (det.open) openMoreSections.add(det.dataset.moreKey);
+        else openMoreSections.delete(det.dataset.moreKey);
+      }
+    }, true);
+
     pop.addEventListener('change', ev => {
       ev.stopPropagation();
       const t = ev.target;
+      const ax = Number(pop.dataset.anchorX) || 120;
+      const ay = Number(pop.dataset.anchorY) || 120;
       if (t.dataset.scRow) {
         const spk = t.dataset.spk;
         if (t.checked) addRowToSpeaker(spk, t.dataset.scRow);
         else removeRowFromSpeaker(spk, t.dataset.scRow);
+        renderSpeakerConfigPopover(spk, ax, ay);
+        return;
+      }
+      if (t.dataset.scBg) {
+        const spk = t.dataset.spk;
+        toggleBgOnRow(spk, Number(t.dataset.ri), t.dataset.scBg);
+        renderSpeakerConfigPopover(spk, ax, ay);
+        return;
+      }
+      if (t.dataset.allRow) {
+        toggleRowForAllSpeakers(t.dataset.allRow);
+        renderAllSpeakersPopover(ax, ay);
         return;
       }
       if (t.dataset.scFlag) {
@@ -5311,7 +5497,7 @@ APP_JS = r"""(() => {
     const filterSel = document.getElementById('transcript-filter');
     filterSel.innerHTML = '<option value="all">all</option>'
       + '<option value="overlaps">overlaps (' + model.overlapSpans.length + ')</option>'
-      + model.speakers.map(s => '<option value="spk:' + html(s) + '">' + html(s) + ' (' + model.speakerCounts.get(s) + ')</option>').join('');
+      + model.speakers.map(s => '<option value="spk:' + html(s) + '">' + html(spkDisplay(s)) + ' (' + model.speakerCounts.get(s) + ')</option>').join('');
 
     const winSel = document.getElementById('lanes-window');
     if (hasStudy && !localStorage.getItem('ovpub.window')) lanesWindow = isCjk ? 10 : 12;
@@ -5333,11 +5519,11 @@ APP_JS = r"""(() => {
       if (vDiffSel) {
         if (doc.language === 'es') {
           vDiffSel.innerHTML =
-            '<option value="b2+">AR slang · Econ · C1–B2 (hide basic)</option>'
-            + '<option value="c1+">AR slang · Econ · C1 only</option>'
-            + '<option value="ar">Rioplatense / Argentinian idioms</option>'
-            + '<option value="econ">Politics &amp; economics jargon</option>'
-            + '<option value="all">All words (incl. basic)</option>';
+            '<option value="b2+">Argentinian slang · Politics · Intermediate+ (hide basic)</option>'
+            + '<option value="c1+">Argentinian slang · Politics · Advanced only</option>'
+            + '<option value="ar">Argentinian idioms &amp; slang</option>'
+            + '<option value="econ">Politics &amp; economics terms</option>'
+            + '<option value="all">All words (including basic)</option>';
           const saved = localStorage.getItem('ovpub.vocabDiff.' + doc.language);
           vocabDiff = saved && [...vDiffSel.options].some(o => o.value === saved) ? saved : 'b2+';
         }
@@ -5596,6 +5782,29 @@ APP_JS = r"""(() => {
     // Right-click row/speaker context menu actions
     const ctxMenu = document.getElementById('stream-ctx-menu');
     if (ctxMenu) {
+      ctxMenu.addEventListener('change', ev => {
+        ev.stopPropagation();
+        if (!ctxMenuState) return;
+        const t = ev.target;
+        const x = ctxMenuState.x;
+        const y = ctxMenuState.y;
+        if (t.dataset.ctxRow) {
+          const spk = t.dataset.spk;
+          if (t.checked) addRowToSpeaker(spk, t.dataset.ctxRow);
+          else removeRowFromSpeaker(spk, t.dataset.ctxRow);
+          renderStreamMenu(x, y);
+          return;
+        }
+        if (t.dataset.ctxAllRow) {
+          toggleRowForAllSpeakers(t.dataset.ctxAllRow);
+          renderStreamMenu(x, y);
+          return;
+        }
+        if (t.dataset.ctxBg) {
+          toggleBgOnRow(t.dataset.spk, Number(t.dataset.ri), t.dataset.ctxBg);
+          renderStreamMenu(x, y);
+        }
+      });
       ctxMenu.addEventListener('click', ev => {
         ev.stopPropagation();
         const btn = ev.target.closest('button[data-act]');
@@ -5605,6 +5814,7 @@ APP_JS = r"""(() => {
         const ri = Number(btn.dataset.ri);
         const x = ctxMenuState.x;
         const y = ctxMenuState.y;
+        if (act === 'close-menu') { closeStreamMenu(); return; }
         if (act === 'open-spk-cfg' && spk) { renderSpeakerConfigPopover(spk, x, y); return; }
         if (act === 'open-all') { renderAllSpeakersPopover(x, y); return; }
         if (act === 'open-scroll') { renderScrollPopover(x, y); return; }
@@ -5620,31 +5830,11 @@ APP_JS = r"""(() => {
           renderStreamMenu(x, y);
           return;
         }
-        if (act === 'row-merge' && spk) {
-          mergeRowIntoAbove(spk, ri);
-          closeStreamMenu();
-          return;
-        }
-        if (act === 'row-bg' && spk) {
-          toggleBgOnRow(spk, ri, btn.dataset.bg);
-          renderStreamMenu(x, y);
-          return;
-        }
-        if (act === 'add-one' && spk) {
-          addRowToSpeaker(spk, btn.dataset.kind);
-          renderStreamMenu(x, y);
-          return;
-        }
         if (act === 'toggle-spk-float' && spk && speakerConfigs[spk]) {
           speakerConfigs[spk].placement = speakerConfigs[spk].placement === 'float' ? 'dock' : 'float';
           speakerConfigs[spk].visible = true;
           refreshAllTimelines(true);
           renderStreamMenu(x, y);
-          return;
-        }
-        if (act === 'rm-one' && spk) {
-          removeRowFromSpeaker(spk, Number.isInteger(ri) ? ri : btn.dataset.kind);
-          closeStreamMenu();
         }
       });
       ctxMenu.addEventListener('contextmenu', ev => ev.preventDefault());
@@ -6122,10 +6312,10 @@ def _index_html(
           <button type="button" id="open-layout-menu" title="Video aspect fit, placement below/over, separate speakers, timer &amp; handles">Layout</button>
           <button type="button" id="toggle-tone" aria-pressed="true"{tone_btn_hidden} title="Show or hide live pitch &amp; loudness tone curve (T)">Tone</button>
           <button type="button" id="open-labels-menu" aria-pressed="true"{tone_btn_hidden} title="Configure or hide meta-labels (loud, falsetto, pitch, pace)">Labels</button>
-          <button type="button" id="toggle-furigana" aria-pressed="true"{study_hidden} title="Show or hide furigana readings over kanji">Furigana</button>
-          <button type="button" id="toggle-std" aria-pressed="false" hidden title="Show or hide neutral Spanish rewrite layer">Neutral ES</button>
-          <button type="button" id="toggle-gloss" aria-pressed="true"{study_hidden} title="Show or hide word-by-word meaning stream">Word-by-word</button>
-          <button type="button" id="toggle-english" aria-pressed="true"{study_hidden} title="Show or hide per-speaker English stream">English</button>
+          <button type="button" id="toggle-furigana" aria-pressed="true"{study_hidden} title="Show or hide pronunciation guides above characters">Readings</button>
+          <button type="button" id="toggle-std" aria-pressed="false" hidden title="Show or hide standard Spanish wording">Standard Spanish</button>
+          <button type="button" id="toggle-gloss" aria-pressed="true"{study_hidden} title="Show or hide word-by-word English with grammar and nuances">Word-by-word</button>
+          <button type="button" id="toggle-english" aria-pressed="true"{study_hidden} title="Show or hide translated English">English</button>
           <button type="button" id="toggle-overlay" aria-pressed="false" title="Float speakers as independent movable &amp; resizable scrollers (O)">Float</button>
           <button type="button" id="toggle-fullscreen" aria-pressed="false" title="Fullscreen monitor stage with video + scrollers below or floating (F)">Fullscreen</button>
           <button type="button" id="toggle-minimap" aria-pressed="false" title="Show or hide full-video overview bar">Minimap</button>
@@ -6155,15 +6345,15 @@ def _index_html(
       <span class="vocab-count" id="vocab-count"></span>
       <label>Difficulty
         <select id="vocab-diff">
-          <option value="n3+" selected>N3+ · Slang · MTG (hide basic)</option>
-          <option value="n2+">N2+ · Slang · MTG</option>
-          <option value="n1+">N1 · Slang · MTG only</option>
-          <option value="mtg">MTG / domain jargon only</option>
-          <option value="slang">Slang &amp; spoken only</option>
-          <option value="all">All words (incl. N5–N4 basic)</option>
+          <option value="n3+" selected>Intermediate+ · Slang · Game terms (hide basic)</option>
+          <option value="n2+">Upper-intermediate+ · Slang · Game terms</option>
+          <option value="n1+">Advanced · Slang · Game terms only</option>
+          <option value="mtg">Game / domain terms only</option>
+          <option value="slang">Slang &amp; casual speech only</option>
+          <option value="all">All words (including basic)</option>
         </select>
       </label>
-      <input type="search" id="vocab-search" placeholder="search word, kana, meaning…" autocomplete="off">
+      <input type="search" id="vocab-search" placeholder="search word, reading, meaning…" autocomplete="off">
       <label>Sort
         <select id="vocab-sort">
           <option value="first" selected>First appearance</option>
@@ -6413,6 +6603,19 @@ def _merge_overlaps_into_compact(compact: dict, ov_doc: dict) -> None:
         ]
 
 
+def _load_speaker_names(spec: str) -> dict[str, str]:
+    raw_txt = spec.strip()
+    if not raw_txt:
+        return {}
+    if raw_txt.startswith("{"):
+        parsed = json.loads(raw_txt)
+    else:
+        parsed = json.loads(Path(raw_txt).expanduser().resolve().read_text(encoding="utf-8"))
+    if not isinstance(parsed, dict):
+        raise ValueError(f"speaker names must be a JSON object mapping raw speaker -> English name: {spec!r}")
+    return {str(k): str(v).strip() for k, v in parsed.items() if str(v).strip()}
+
+
 def export_page(
     data_dir: Path,
     video_id: str,
@@ -6425,6 +6628,7 @@ def export_page(
     prosody: Path | None = None,
     tracks: Path | None = None,
     avatars: Path | None = None,
+    speaker_names: dict[str, str] | None = None,
     clip_start: float | None = None,
     clip_end: float | None = None,
     back_url: str = "",
@@ -6440,10 +6644,21 @@ def export_page(
     if clip_end is not None and clip_end > 0:
         compact["clip_end"] = round(float(clip_end), 2)
     vocab_count = 0
+    merged_names: dict[str, str] = {}
     if study is not None:
         study_doc = _load_study(study)
         _merge_study_into_compact(compact, study_doc)
+        if isinstance(study_doc.get("speaker_names"), dict):
+            for k, v in study_doc["speaker_names"].items():
+                if str(v).strip():
+                    merged_names[str(k)] = str(v).strip()
         vocab_count = len(compact.get("vocab") or [])
+    if speaker_names:
+        for k, v in speaker_names.items():
+            if str(v).strip():
+                merged_names[str(k)] = str(v).strip()
+    if merged_names:
+        compact["speaker_names"] = merged_names
     if overlaps is not None:
         ov_doc = json.loads(overlaps.read_text(encoding="utf-8"))
         _merge_overlaps_into_compact(compact, ov_doc)
@@ -6527,6 +6742,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--prosody", type=Path, default=None, help="Optional prosody JSON (per-segment pitch & loudness contours)")
     ap.add_argument("--tracks", type=Path, default=None, help="Optional custom per-segment tracks JSON (translations, emotion, sarcasm, mood, status)")
     ap.add_argument("--avatars", type=Path, default=None, help="Optional directory (with avatars.json) or avatars.json mapping speakers to face icons")
+    ap.add_argument("--speaker-names", default="", help="Optional JSON object or file path mapping raw speaker IDs to English display names")
     ap.add_argument("--clip-start", type=float, default=None, help="Optional focus start timestamp in seconds")
     ap.add_argument("--clip-end", type=float, default=None, help="Optional focus end timestamp in seconds")
     ap.add_argument("--back-url", default="")
@@ -6543,6 +6759,7 @@ def main(argv: list[str] | None = None) -> int:
         prosody=args.prosody.expanduser().resolve() if args.prosody else None,
         tracks=args.tracks.expanduser().resolve() if args.tracks else None,
         avatars=args.avatars.expanduser().resolve() if args.avatars else None,
+        speaker_names=_load_speaker_names(args.speaker_names) if args.speaker_names else None,
         clip_start=args.clip_start,
         clip_end=args.clip_end,
         back_url=args.back_url,

@@ -497,6 +497,8 @@ class ExportOverlapPageTests(unittest.TestCase):
                     "1.0",
                     "--clip-end",
                     "10.0",
+                    "--speaker-names",
+                    json.dumps({"Speaker A": "Host A", "Speaker B": "Guest B"}),
                 ],
                 check=True,
                 capture_output=True,
@@ -507,8 +509,14 @@ class ExportOverlapPageTests(unittest.TestCase):
             self.assertEqual(es_tr["dialect"], "ar")
             self.assertEqual(es_tr["clip_start"], 1.0)
             self.assertEqual(es_tr["clip_end"], 10.0)
+            self.assertEqual(es_tr["speaker_names"], {"Speaker A": "Host A", "Speaker B": "Guest B"})
             self.assertEqual(es_tr["segments"][0]["std"], "Tú sabes cómo es.")
             self.assertEqual(len(es_tr["overlaps"]), 1)
+            es_js = (out_dir_es / "app.js").read_text(encoding="utf-8")
+            self.assertIn("Word-by-word English (grammar & nuances)", es_js)
+            self.assertIn("Translated English", es_js)
+            self.assertIn("shortGrammarCue", es_js)
+            self.assertIn("spkDisplay", es_js)
 
     def test_extract_prosody_yin_tracks_pitch_and_loudness(self):
         import importlib.util
